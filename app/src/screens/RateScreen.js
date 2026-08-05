@@ -46,7 +46,7 @@ export default function RateScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 14 }}>
               {[1, 2, 3, 4, 5].map((n) => (
                 <Pressable key={n} onPress={() => setStarsValue(n)} hitSlop={6}>
-                  <Text style={{ fontSize: 40, marginHorizontal: 6, color: n <= starsValue ? '#f5a623' : '#d9d9d9' }}>
+                  <Text style={{ fontSize: 40, marginHorizontal: 6, color: n <= starsValue ? colors.gold : '#2a3350' }}>
                     ★
                   </Text>
                 </Pressable>

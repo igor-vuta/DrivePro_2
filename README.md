@@ -98,6 +98,16 @@ path. Any Node 18+ host works the same way - the server has no dependencies.
 **Point the phone (Expo Go) app at a hosted server:** set `MANUAL_SERVER`
 in `app/src/config.js` to the full URL, e.g. `'https://your-app.up.railway.app'`.
 
+## The movement (L1-L5)
+
+- Fair matching: driver order feed sorted by requester points + wait-time aging (nobody starves), riders earn slowly (+1/ride, +1/rating).
+- Route mode: a driver sets their destination, picks a corridor (200 m - 2 km) and only sees requests along their path, direction-aware.
+- Neon trails: finished rides glow on everyone's map for 24h and fade.
+- Weekly recap: once a week the app shows your stats, the city's totals and the drivers of the week.
+- Cyberpunk-luxury UI: dark night surfaces, neon cyan/magenta/gold, dark map tiles.
+
+Git rule: all commits are authored by the repo owner and SSH-signed (key in `_keys/`, never committed).
+
 ## Milestones
 
 1. **Foundation** — accounts (phone + password), profiles, driver car details,

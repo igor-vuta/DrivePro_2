@@ -154,7 +154,7 @@ export default function ProfileScreen({ goBack, openHistory }) {
             <Text style={{ fontWeight: '700', marginBottom: 8, color: colors.text }}>{t('profile.say')}</Text>
             {comments.map((c, i) => (
               <View key={i} style={{ marginBottom: 8 }}>
-                <Text style={{ color: '#f5a623', fontSize: 13 }}>{'★'.repeat(c.stars)}</Text>
+                <Text style={{ color: colors.gold, fontSize: 13 }}>{'★'.repeat(c.stars)}</Text>
                 <Text style={{ color: colors.text }}>{c.comment}</Text>
               </View>
             ))}

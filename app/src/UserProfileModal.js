@@ -36,7 +36,7 @@ export default function UserProfileModal({ userId, onClose }) {
   return (
     <Modal visible={!!userId} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 }}>
-        <Pressable onPress={() => {}} style={{ backgroundColor: colors.bg, borderRadius: 16, padding: 16, maxHeight: '75%' }}>
+        <Pressable onPress={() => {}} style={{ backgroundColor: colors.card, borderRadius: 16, padding: 16, maxHeight: '75%' }}>
           {!profile && !error ? (
             <ActivityIndicator color={colors.text} style={{ marginVertical: 30 }} />
           ) : error ? (
@@ -71,7 +71,7 @@ export default function UserProfileModal({ userId, onClose }) {
                   <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 6 }}>{t('modal.say')}</Text>
                   {profile.recentComments.map((c, i) => (
                     <View key={i} style={{ marginBottom: 8 }}>
-                      <Text style={{ color: '#f5a623', fontSize: 13 }}>{'★'.repeat(c.stars)}</Text>
+                      <Text style={{ color: colors.gold, fontSize: 13 }}>{'★'.repeat(c.stars)}</Text>
                       <Text style={{ color: colors.text }}>{c.comment}</Text>
                     </View>
                   ))}

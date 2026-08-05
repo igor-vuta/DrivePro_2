@@ -67,20 +67,22 @@ export function DialogHost() {
               key={x.id}
               onPress={() => dismiss(x.id)}
               style={{
-                backgroundColor: colors.text,
+                backgroundColor: '#101728',
+                borderWidth: 1,
+                borderColor: '#254a63',
                 borderRadius: 14,
                 paddingVertical: 12,
                 paddingHorizontal: 16,
                 marginBottom: 8,
-                shadowColor: '#000',
+                shadowColor: '#00e5ff',
                 shadowOpacity: 0.25,
                 shadowRadius: 10,
                 shadowOffset: { width: 0, height: 4 },
                 elevation: 6,
               }}
             >
-              <Text style={{ color: colors.bg, fontWeight: '700', fontSize: 15 }}>{x.title}</Text>
-              {x.message ? <Text style={{ color: colors.bg, opacity: 0.85, marginTop: 2 }}>{x.message}</Text> : null}
+              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>{x.title}</Text>
+              {x.message ? <Text style={{ color: colors.sub, marginTop: 2 }}>{x.message}</Text> : null}
             </Pressable>
           ))}
         </View>
@@ -104,7 +106,7 @@ export function DialogHost() {
                   }}
                   style={{ paddingVertical: 10, paddingHorizontal: 16 }}
                 >
-                  <Text style={{ color: confirm.destructive === false ? colors.text : '#d33', fontWeight: '700' }}>
+                  <Text style={{ color: confirm.destructive === false ? colors.primary : colors.danger, fontWeight: '700' }}>
                     {confirm.okLabel}
                   </Text>
                 </Pressable>

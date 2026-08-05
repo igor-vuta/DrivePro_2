@@ -397,7 +397,7 @@ export default function DriveTab({ openProfile }) {
                       {o.rider ? o.rider.name : ''}{' '}
                       <Text style={{ color: colors.sub, fontWeight: '400', fontSize: 13 }}>{stars(o.rider)}</Text>
                       {o.rider && o.rider.points >= 100 ? (
-                        <Text style={{ color: '#b8860b', fontWeight: '700', fontSize: 13 }}>  ⚡{o.rider.points}</Text>
+                        <Text style={{ color: colors.gold, fontWeight: '700', fontSize: 13 }}>  ⚡{o.rider.points}</Text>
                       ) : null}
                     </Text>
                   </Row>

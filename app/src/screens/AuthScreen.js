@@ -54,7 +54,7 @@ export default function AuthScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-          <Title style={{ fontSize: 34, textAlign: 'center' }}>DrivePro</Title>
+          <Title glow style={{ fontSize: 38, textAlign: 'center', letterSpacing: 2 }}>DRIVEPRO</Title>
           <Sub style={{ textAlign: 'center', marginBottom: 24 }}>{t('auth.tagline')}</Sub>
 
           <Segmented

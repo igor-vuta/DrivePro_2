@@ -335,7 +335,7 @@ export default function RideTab() {
         {step !== 'confirm' ? (
           <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
             <View style={{ alignItems: 'center', marginBottom: 34 }}>
-              <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: pinColor, borderWidth: 3, borderColor: '#fff', elevation: 4, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } }} />
+              <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: pinColor, borderWidth: 3, borderColor: '#e9f2ff', elevation: 6, shadowColor: pinColor, shadowOpacity: 0.9, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } }} />
               <View style={{ width: 3, height: 14, backgroundColor: pinColor }} />
             </View>
           </View>

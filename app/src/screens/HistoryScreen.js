@@ -91,7 +91,7 @@ export default function HistoryScreen({ goBack }) {
                 </Sub>
                 {r.status === 'finished' && r.counterpartId ? (
                   r.myRating ? (
-                    <Text style={{ color: '#f5a623' }}>{'★'.repeat(r.myRating.stars)}</Text>
+                    <Text style={{ color: colors.gold }}>{'★'.repeat(r.myRating.stars)}</Text>
                   ) : (
                     <Pressable onPress={() => rateRide(r)}>
                       <Text style={{ color: colors.text, fontWeight: '700' }}>{t('history.rate')}</Text>

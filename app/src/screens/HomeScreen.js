@@ -23,7 +23,7 @@ export default function HomeScreen({ openProfile }) {
     <Screen>
       <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
         <View>
-          <Title style={{ marginBottom: 0 }}>DrivePro</Title>
+          <Title glow style={{ marginBottom: 0, letterSpacing: 1.5 }}>DRIVEPRO</Title>
           <StatusDot
             on={wsConnected}
             labelOn={t('home.connected', { host: SERVER_HOST })}
