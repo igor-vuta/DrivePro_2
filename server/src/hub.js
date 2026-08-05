@@ -1,10 +1,14 @@
 import { isFiniteNum } from './util.js';
+import { publicUser, rideCounterpart } from './views.js';
 
 // Realtime hub: tracks connected users, online (active) drivers and routes
 // websocket messages. Ride matching events plug in here in later milestones.
 
 const HEARTBEAT_MS = 30_000;
 const DRIVER_GRACE_MS = 60_000; // keep a driver online this long after disconnect
+const MAP_PUSH_MS = 3_000; // how often nearby-driver positions are pushed to watching riders
+const MAP_RADIUS_M = 15_000;
+const MAP_MAX_DRIVERS = 20;
 
 export class Hub {
   constructor(store) {
@@ -12,12 +16,15 @@ export class Hub {
     this.conns = new Map(); // userId -> Set<WsConnection>
     this.drivers = new Map(); // userId -> { lat, lng, updatedAt }
     this.driverDropTimers = new Map(); // userId -> Timeout
+    this.mapWatchers = new Map(); // userId -> { lat, lng }
     this.handlers = new Map(); // type -> (user, msg, conn) => void
 
     this._registerCoreHandlers();
 
     this.heartbeat = setInterval(() => this._checkHeartbeats(), HEARTBEAT_MS);
     if (this.heartbeat.unref) this.heartbeat.unref();
+    this.mapPush = setInterval(() => this._pushMapDrivers(), MAP_PUSH_MS);
+    if (this.mapPush.unref) this.mapPush.unref();
   }
 
   // ------------------------------------------------------------ wiring ---
@@ -67,16 +74,25 @@ export class Hub {
         s.delete(conn);
         if (!s.size) {
           this.conns.delete(user.id);
+          this.mapWatchers.delete(user.id);
           this._scheduleDriverDrop(user.id);
         }
       }
     };
 
+    const activeRide = this.store.findActiveRideForUser(user.id);
+    const driverLoc = activeRide && activeRide.driverId ? this.drivers.get(activeRide.driverId) : null;
     conn.send({
       type: 'hello',
       user: publicUser(this.store, user.id),
       driverActive: this.drivers.has(user.id),
+      activeRide,
+      counterpart: rideCounterpart(this.store, activeRide, user.id),
+      driverLocation: driverLoc ? { lat: driverLoc.lat, lng: driverLoc.lng } : null,
     });
+
+    // Online driver reconnecting: replay any open orders they may have missed.
+    if (this.drivers.has(user.id) && this.onDriverReady) this.onDriverReady(user.id, conn);
   }
 
   on(type, handler) {
@@ -121,6 +137,7 @@ export class Hub {
       }
       this.drivers.set(user.id, { lat: msg.lat, lng: msg.lng, updatedAt: Date.now() });
       conn.send({ type: 'driver:status', active: true, reqId: msg.reqId });
+      if (this.onDriverReady) this.onDriverReady(user.id, conn);
     });
 
     this.on('driver:deactivate', (user, msg, conn) => {
@@ -140,6 +157,17 @@ export class Hub {
       // (wired up in the ride module).
       if (this.onDriverLocation) this.onDriverLocation(user.id, msg.lat, msg.lng);
     });
+
+    // Riders watching the map get periodic nearby-driver positions.
+    this.on('map:watch', (user, msg) => {
+      if (!isFiniteNum(msg.lat) || !isFiniteNum(msg.lng)) return;
+      this.mapWatchers.set(user.id, { lat: msg.lat, lng: msg.lng });
+      this._pushMapDriversTo(user.id);
+    });
+
+    this.on('map:unwatch', (user) => {
+      this.mapWatchers.delete(user.id);
+    });
   }
 
   // --------------------------------------------------------- internals ---
@@ -156,6 +184,25 @@ export class Hub {
     this.driverDropTimers.set(userId, t);
   }
 
+  _pushMapDrivers() {
+    for (const userId of this.mapWatchers.keys()) this._pushMapDriversTo(userId);
+  }
+
+  _pushMapDriversTo(userId) {
+    const watch = this.mapWatchers.get(userId);
+    if (!watch) return;
+    const list = [];
+    for (const [driverId, loc] of this.drivers) {
+      if (driverId === userId) continue;
+      const dx = (loc.lat - watch.lat) * 111_000;
+      const dy = (loc.lng - watch.lng) * 111_000 * Math.cos((watch.lat * Math.PI) / 180);
+      if (dx * dx + dy * dy > MAP_RADIUS_M * MAP_RADIUS_M) continue;
+      list.push({ id: driverId, lat: loc.lat, lng: loc.lng });
+      if (list.length >= MAP_MAX_DRIVERS) break;
+    }
+    this.sendTo(userId, { type: 'map:drivers', drivers: list });
+  }
+
   _checkHeartbeats() {
     for (const set of this.conns.values()) {
       for (const conn of set) {
@@ -170,22 +217,3 @@ export class Hub {
   }
 }
 
-export function publicUser(store, userId) {
-  const u = store.getUser(userId);
-  if (!u) return null;
-  const rating = store.ratingSummary(userId);
-  const driver = store.getDriverProfile(userId);
-  return {
-    id: u.id,
-    name: u.name,
-    phone: u.phone,
-    createdAt: u.createdAt,
-    rating: rating.avg,
-    ratingCount: rating.count,
-    ridesCount: store.countFinishedRides(userId),
-    isDriver: !!driver,
-    car: driver
-      ? { make: driver.carMake, model: driver.carModel, color: driver.carColor, plate: driver.plate }
-      : null,
-  };
-}

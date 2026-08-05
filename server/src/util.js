@@ -3,21 +3,30 @@ import crypto from 'node:crypto';
 export const id = () => crypto.randomUUID();
 export const now = () => Date.now();
 
-export function readBody(req, limit = 256 * 1024) {
+export function readBody(req, limit = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
-    req.on('data', (c) => {
+    let done = false;
+    const onData = (c) => {
+      if (done) return;
       size += c.length;
       if (size > limit) {
-        reject(new Error('body too large'));
-        req.destroy();
+        done = true;
+        req.removeListener('data', onData);
+        req.resume(); // drain the rest so a clean HTTP response can go out
+        reject(httpError(413, 'Request body is too large.', 'body_too_large'));
         return;
       }
       chunks.push(c);
+    };
+    req.on('data', onData);
+    req.on('end', () => {
+      if (!done) resolve(Buffer.concat(chunks));
     });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
+    req.on('error', (e) => {
+      if (!done) reject(e);
+    });
   });
 }
 
@@ -43,8 +52,8 @@ export function sendJson(res, status, obj) {
   res.end(body);
 }
 
-export function httpError(status, message) {
-  return Object.assign(new Error(message), { status });
+export function httpError(status, message, code) {
+  return Object.assign(new Error(message), { status, code });
 }
 
 // Phone normalization: keep leading + and digits only.
@@ -64,6 +73,32 @@ export function cleanStr(v, max = 200) {
 
 export function isFiniteNum(n) {
   return typeof n === 'number' && Number.isFinite(n);
+}
+
+export function isLat(n) {
+  return isFiniteNum(n) && n >= -90 && n <= 90;
+}
+
+export function isLng(n) {
+  return isFiniteNum(n) && n >= -180 && n <= 180;
+}
+
+export function isValidEmail(s) {
+  return typeof s === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
+}
+
+// Address detail block: { entrance, apartment, floor, intercom, note } - all
+// optional short strings. Returns a cleaned object or null if empty/absent.
+export function cleanAddressDetails(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const out = {};
+  for (const key of ['entrance', 'apartment', 'floor', 'intercom']) {
+    const v = cleanStr(raw[key], 20);
+    if (v) out[key] = v;
+  }
+  const note = cleanStr(raw.note, 200);
+  if (note) out.note = note;
+  return Object.keys(out).length ? out : null;
 }
 
 export function haversineMeters(lat1, lng1, lat2, lng2) {

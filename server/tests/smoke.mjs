@@ -76,22 +76,29 @@ const driverPhone = `+44701${suffix}`;
   console.log(`      storage backend: ${r.json.storage}`);
 }
 
-// --- register rider + driver
+// --- register rider + driver (phone verification flow)
 let rider, driver;
 {
   const r = await api('POST', '/api/register', { phone: riderPhone, password: 'test1234', name: 'Rita Rider' });
-  check('register rider', r.status === 201 && r.json.token && r.json.user.name === 'Rita Rider', JSON.stringify(r.json));
-  rider = r.json;
+  check('register asks for verification', r.status === 201 && r.json.needsVerification && r.json.devCode, JSON.stringify(r.json));
 
-  const dup = await api('POST', '/api/register', { phone: riderPhone, password: 'x1234', name: 'Dup' });
+  const v = await api('POST', '/api/verify', { phone: riderPhone, code: r.json.devCode });
+  check('verify issues session', v.status === 200 && v.json.token && v.json.user.name === 'Rita Rider', JSON.stringify(v.json));
+  rider = v.json;
+
+  const dup = await api('POST', '/api/register', { phone: riderPhone, password: 'x12345', name: 'Dup' });
   check('duplicate phone rejected', dup.status === 409);
 
   const bad = await api('POST', '/api/register', { phone: '12', password: 'test1234', name: 'X Y' });
   check('bad phone rejected', bad.status === 400);
 
+  const shortPw = await api('POST', '/api/register', { phone: '+15559990000', password: 'abc', name: 'Shorty' });
+  check('short password rejected', shortPw.status === 400 && shortPw.json.code === 'password_short');
+
   const d = await api('POST', '/api/register', { phone: driverPhone, password: 'test1234', name: 'Dave Driver' });
-  check('register driver', d.status === 201 && d.json.token, JSON.stringify(d.json));
-  driver = d.json;
+  const dv = await api('POST', '/api/verify', { phone: driverPhone, code: d.json.devCode });
+  check('register driver', dv.status === 200 && dv.json.token, JSON.stringify(dv.json));
+  driver = dv.json;
 }
 
 // --- login

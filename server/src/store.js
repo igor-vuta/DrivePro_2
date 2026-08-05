@@ -34,7 +34,17 @@ class SqliteBackend {
         phone TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         name TEXT NOT NULL,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        verified INTEGER DEFAULT 0,
+        otp_code TEXT,
+        otp_expires INTEGER,
+        otp_sent_at INTEGER,
+        avatar TEXT,
+        about TEXT,
+        email TEXT,
+        city TEXT,
+        places TEXT,
+        points INTEGER DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS driver_profiles (
         user_id TEXT PRIMARY KEY,
@@ -65,7 +75,9 @@ class SqliteBackend {
         started_at INTEGER,
         finished_at INTEGER,
         cancelled_at INTEGER,
-        cancelled_by TEXT
+        cancelled_by TEXT,
+        pickup_details TEXT,
+        dest_details TEXT
       );
       CREATE TABLE IF NOT EXISTS ratings (
         id TEXT PRIMARY KEY,
@@ -81,13 +93,51 @@ class SqliteBackend {
       CREATE INDEX IF NOT EXISTS idx_rides_driver ON rides (driver_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_ratings_ratee ON ratings (ratee_id);
     `);
+    this._migrate();
+  }
+
+  // Add columns introduced after the first release to pre-existing databases.
+  _migrate() {
+    const addMissing = (table, defs) => {
+      const have = this.db.prepare(`PRAGMA table_info(${table})`).all().map((r) => r.name);
+      const added = [];
+      for (const [col, decl] of defs) {
+        if (!have.includes(col)) {
+          this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
+          added.push(col);
+        }
+      }
+      return added;
+    };
+    const addedUsers = addMissing('users', [
+      ['verified', 'INTEGER DEFAULT 0'],
+      ['otp_code', 'TEXT'],
+      ['otp_expires', 'INTEGER'],
+      ['otp_sent_at', 'INTEGER'],
+      ['avatar', 'TEXT'],
+      ['about', 'TEXT'],
+      ['email', 'TEXT'],
+      ['city', 'TEXT'],
+      ['places', 'TEXT'],
+      ['points', 'INTEGER DEFAULT 0'],
+    ]);
+    // Accounts created before verification existed stay usable.
+    if (addedUsers.includes('verified')) {
+      this.db.exec('UPDATE users SET verified = 1');
+    }
+    addMissing('rides', [
+      ['pickup_details', 'TEXT'],
+      ['dest_details', 'TEXT'],
+    ]);
   }
 
   // users
   insertUser(u) {
     this.db
-      .prepare('INSERT INTO users (id, phone, password_hash, name, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(u.id, u.phone, u.passwordHash, u.name, u.createdAt);
+      .prepare(
+        'INSERT INTO users (id, phone, password_hash, name, created_at, verified, otp_code, otp_expires, otp_sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      )
+      .run(u.id, u.phone, u.passwordHash, u.name, u.createdAt, u.verified ? 1 : 0, u.otpCode ?? null, u.otpExpires ?? null, u.otpSentAt ?? null);
   }
   userByPhone(phone) {
     return rowToUser(this.db.prepare('SELECT * FROM users WHERE phone = ?').get(phone));
@@ -95,8 +145,24 @@ class SqliteBackend {
   userById(uid) {
     return rowToUser(this.db.prepare('SELECT * FROM users WHERE id = ?').get(uid));
   }
-  updateUserName(uid, name) {
-    this.db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, uid);
+  updateUserFields(uid, patch) {
+    const map = {
+      name: 'name', verified: 'verified', otpCode: 'otp_code', otpExpires: 'otp_expires',
+      otpSentAt: 'otp_sent_at', avatar: 'avatar', about: 'about', email: 'email', city: 'city', places: 'places',
+    };
+    const cols = [];
+    const vals = [];
+    for (const [k, v] of Object.entries(patch)) {
+      if (!(k in map)) continue;
+      cols.push(`${map[k]} = ?`);
+      vals.push(k === 'verified' ? (v ? 1 : 0) : k === 'places' && v != null ? JSON.stringify(v) : v);
+    }
+    if (!cols.length) return;
+    vals.push(uid);
+    this.db.prepare(`UPDATE users SET ${cols.join(', ')} WHERE id = ?`).run(...vals);
+  }
+  addPoints(uid, n) {
+    this.db.prepare('UPDATE users SET points = COALESCE(points, 0) + ? WHERE id = ?').run(n, uid);
   }
 
   // driver profiles
@@ -120,13 +186,16 @@ class SqliteBackend {
     this.db
       .prepare(
         `INSERT INTO rides (id, rider_id, driver_id, status, pickup_lat, pickup_lng, pickup_address,
-          dest_lat, dest_lng, dest_address, comment, distance_m, duration_s, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          dest_lat, dest_lng, dest_address, comment, distance_m, duration_s, created_at,
+          pickup_details, dest_details)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         r.id, r.riderId, r.driverId ?? null, r.status, r.pickupLat, r.pickupLng, r.pickupAddress ?? null,
         r.destLat ?? null, r.destLng ?? null, r.destAddress ?? null, r.comment ?? null,
-        r.distanceM ?? null, r.durationS ?? null, r.createdAt
+        r.distanceM ?? null, r.durationS ?? null, r.createdAt,
+        r.pickupDetails ? JSON.stringify(r.pickupDetails) : null,
+        r.destDetails ? JSON.stringify(r.destDetails) : null
       );
   }
   rideById(rid) {
@@ -172,6 +241,12 @@ class SqliteBackend {
       .get(uid, uid);
     return row ? Number(row.n) : 0;
   }
+  requestedRides(maxAgeMs) {
+    return this.db
+      .prepare(`SELECT * FROM rides WHERE status = 'requested' AND created_at > ? ORDER BY created_at DESC`)
+      .all(Date.now() - maxAgeMs)
+      .map(rowToRide);
+  }
 
   // ratings
   insertRating(r) {
@@ -187,12 +262,41 @@ class SqliteBackend {
     const row = this.db.prepare('SELECT AVG(stars) AS avg, COUNT(*) AS n FROM ratings WHERE ratee_id = ?').get(uid);
     return { avg: row && row.n ? Math.round(Number(row.avg) * 100) / 100 : null, count: row ? Number(row.n) : 0 };
   }
+  ratingComments(uid, limit = 5) {
+    return this.db
+      .prepare(
+        `SELECT stars, comment, created_at FROM ratings
+         WHERE ratee_id = ? AND comment IS NOT NULL AND comment != ''
+         ORDER BY created_at DESC LIMIT ?`
+      )
+      .all(uid, limit)
+      .map((r) => ({ stars: Number(r.stars), comment: r.comment, createdAt: Number(r.created_at) }));
+  }
 }
 
 function rowToUser(row) {
-  return row
-    ? { id: row.id, phone: row.phone, passwordHash: row.password_hash, name: row.name, createdAt: Number(row.created_at) }
-    : null;
+  if (!row) return null;
+  let places = null;
+  try {
+    places = row.places ? JSON.parse(row.places) : null;
+  } catch {}
+  return {
+    id: row.id,
+    phone: row.phone,
+    passwordHash: row.password_hash,
+    name: row.name,
+    createdAt: Number(row.created_at),
+    verified: !!Number(row.verified),
+    otpCode: row.otp_code ?? null,
+    otpExpires: row.otp_expires == null ? null : Number(row.otp_expires),
+    otpSentAt: row.otp_sent_at == null ? null : Number(row.otp_sent_at),
+    avatar: row.avatar ?? null,
+    about: row.about ?? null,
+    email: row.email ?? null,
+    city: row.city ?? null,
+    points: row.points != null ? Number(row.points) : 0,
+    places,
+  };
 }
 function rowToDriver(row) {
   return row
@@ -201,6 +305,13 @@ function rowToDriver(row) {
 }
 function rowToRide(row) {
   if (!row) return null;
+  const parse = (v) => {
+    try {
+      return v ? JSON.parse(v) : null;
+    } catch {
+      return null;
+    }
+  };
   return {
     id: row.id, riderId: row.rider_id, driverId: row.driver_id, status: row.status,
     pickupLat: row.pickup_lat, pickupLng: row.pickup_lng, pickupAddress: row.pickup_address,
@@ -209,6 +320,8 @@ function rowToRide(row) {
     createdAt: num(row.created_at), acceptedAt: num(row.accepted_at), arrivedAt: num(row.arrived_at),
     startedAt: num(row.started_at), finishedAt: num(row.finished_at), cancelledAt: num(row.cancelled_at),
     cancelledBy: row.cancelled_by,
+    pickupDetails: parse(row.pickup_details),
+    destDetails: parse(row.dest_details),
   };
 }
 const num = (v) => (v == null ? null : Number(v));
@@ -249,10 +362,20 @@ class JsonBackend {
   userById(uid) {
     return this.data.users.find((u) => u.id === uid) || null;
   }
-  updateUserName(uid, name) {
+  updateUserFields(uid, patch) {
     const u = this.userById(uid);
     if (u) {
-      u.name = name;
+      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places'];
+      for (const k of allowed) {
+        if (k in patch) u[k] = patch[k];
+      }
+      this.save();
+    }
+  }
+  addPoints(uid, n) {
+    const u = this.userById(uid);
+    if (u) {
+      u.points = (u.points || 0) + n;
       this.save();
     }
   }
@@ -297,6 +420,12 @@ class JsonBackend {
   countFinishedRides(uid) {
     return this.data.rides.filter((r) => r.status === 'finished' && (r.riderId === uid || r.driverId === uid)).length;
   }
+  requestedRides(maxAgeMs) {
+    const cutoff = Date.now() - maxAgeMs;
+    return [...this.data.rides]
+      .filter((r) => r.status === 'requested' && r.createdAt > cutoff)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }
 
   insertRating(r) {
     if (this.data.ratings.some((x) => x.rideId === r.rideId && x.raterId === r.raterId)) {
@@ -314,6 +443,13 @@ class JsonBackend {
     const avg = rs.reduce((s, x) => s + x.stars, 0) / rs.length;
     return { avg: Math.round(avg * 100) / 100, count: rs.length };
   }
+  ratingComments(uid, limit = 5) {
+    return this.data.ratings
+      .filter((x) => x.rateeId === uid && x.comment)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit)
+      .map((r) => ({ stars: r.stars, comment: r.comment, createdAt: r.createdAt }));
+  }
 }
 
 // ------------------------------------------------------------ Repository ---
@@ -325,8 +461,8 @@ export class Store {
     this.b = sqlite ? new SqliteBackend(dataDir, sqlite) : new JsonBackend(dataDir);
   }
 
-  createUser({ phone, passwordHash, name }) {
-    const u = { id: id(), phone, passwordHash, name, createdAt: now() };
+  createUser({ phone, passwordHash, name, verified = false, otpCode = null, otpExpires = null, otpSentAt = null }) {
+    const u = { id: id(), phone, passwordHash, name, createdAt: now(), verified, otpCode, otpExpires, otpSentAt };
     this.b.insertUser(u);
     return u;
   }
@@ -336,8 +472,12 @@ export class Store {
   getUser(uid) {
     return this.b.userById(uid);
   }
-  updateUserName(uid, name) {
-    this.b.updateUserName(uid, name);
+  updateUser(uid, patch) {
+    this.b.updateUserFields(uid, patch);
+    return this.getUser(uid);
+  }
+  addPoints(uid, n) {
+    if (Number.isFinite(n) && n > 0) this.b.addPoints(uid, Math.round(n));
     return this.getUser(uid);
   }
 
@@ -375,6 +515,9 @@ export class Store {
   countFinishedRides(uid) {
     return this.b.countFinishedRides(uid);
   }
+  listRequestedRides(maxAgeMs = 30 * 60 * 1000) {
+    return this.b.requestedRides(maxAgeMs);
+  }
 
   addRating({ rideId, raterId, rateeId, stars, comment }) {
     const r = { id: id(), rideId, raterId, rateeId, stars, comment: comment || null, createdAt: now() };
@@ -386,5 +529,8 @@ export class Store {
   }
   ratingSummary(uid) {
     return this.b.ratingSummary(uid);
+  }
+  ratingComments(uid, limit) {
+    return this.b.ratingComments(uid, limit);
   }
 }

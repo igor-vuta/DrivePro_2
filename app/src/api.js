@@ -1,4 +1,5 @@
 import { API_URL } from './config';
+import { t } from './i18n';
 
 export async function api(method, path, body, token) {
   let res;
@@ -12,7 +13,7 @@ export async function api(method, path, body, token) {
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch (e) {
-    throw new Error(`Can't reach the server at ${API_URL}. Is it running?`);
+    throw Object.assign(new Error(t('err.network', { url: API_URL })), { code: 'network' });
   }
   let json = null;
   try {
@@ -21,7 +22,11 @@ export async function api(method, path, body, token) {
     // non-JSON response
   }
   if (!res.ok) {
-    throw new Error((json && json.error) || `Request failed (${res.status})`);
+    const err = new Error((json && json.error) || `Request failed (${res.status})`);
+    err.status = res.status;
+    if (json && json.code) err.code = json.code;
+    err.data = json;
+    throw err;
   }
   return json;
 }

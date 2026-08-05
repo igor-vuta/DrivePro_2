@@ -1,0 +1,516 @@
+import { Platform, NativeModules } from 'react-native';
+
+// Lightweight i18n: EN is the base, RU is a full translation. The language
+// preference ('auto' | 'en' | 'ru') is chosen in Profile; 'auto' follows the
+// device language.
+
+const en = {
+  // common
+  'common.back': '‹ Back',
+  'common.close': 'Close',
+  'common.cancel': 'Cancel',
+  'common.save': 'Save',
+  'common.find': 'Find',
+  'common.remove': 'Remove',
+  'common.set': 'Set',
+  'common.change': 'Change',
+  'common.offlineSend': 'Not connected to the server.',
+  'common.freeRide': 'Free ride',
+  'common.noRatings': 'no ratings yet',
+
+  // auth
+  'auth.tagline': 'Rides between people. No fares, no fuss.',
+  'auth.login': 'Log in',
+  'auth.signup': 'Sign up',
+  'auth.yourName': 'Your name',
+  'auth.namePh': 'e.g. Igor',
+  'auth.phone': 'Phone number',
+  'auth.password': 'Password',
+  'auth.passwordPh': 'At least 6 characters',
+  'auth.createAccount': 'Create account',
+  'auth.vName': 'Enter your name (at least 2 letters).',
+  'auth.vPhone': 'Enter a valid phone number (7–15 digits).',
+  'auth.vPassword': 'Password must be at least 6 characters.',
+
+  // verify
+  'verify.title': 'Verify your phone',
+  'verify.sentTo': 'We sent a 4-digit code to {phone}',
+  'verify.codePh': '4-digit code',
+  'verify.button': 'Verify',
+  'verify.resend': 'Resend code',
+  'verify.resendIn': 'Resend in {s}s',
+  'verify.devCode': 'Dev code: {code}',
+  'verify.vCode': 'Enter the 4-digit code.',
+  'verify.changePhone': 'Use a different phone',
+
+  // home
+  'home.connected': 'Connected ({host})',
+  'home.connecting': 'Connecting to {host}…',
+  'home.profile': 'Profile',
+  'home.ride': 'Ride',
+  'home.drive': 'Drive',
+
+  // ride tab
+  'ride.setPickup': 'Set pickup point',
+  'ride.setDest': 'Set destination',
+  'ride.confirm': 'Confirm your ride',
+  'ride.searchPh': 'Search address…',
+  'ride.pickupAddr': 'Pickup address (edit if needed)',
+  'ride.destAddr': 'Destination address (edit if needed)',
+  'ride.addrPh': 'Move the map to set the point',
+  'ride.nextDest': 'Next: destination',
+  'ride.nextConfirm': 'Next: confirm',
+  'ride.request': 'Request ride',
+  'ride.instructions': 'Instructions for the driver (optional)',
+  'ride.instructionsPh': 'e.g. Blue jacket, waiting by the pharmacy',
+  'ride.calcRoute': 'Calculating route…',
+  'ride.straightLine': '(straight line)',
+  'ride.nothingFound': 'Nothing found. Try a different search.',
+  'ride.notConnected': 'Not connected to the server. Check that it is running.',
+  'ride.looking': 'Looking for a driver…',
+  'ride.cancelRide': 'Cancel ride',
+  'ride.cancelQ': 'Cancel ride?',
+  'ride.driverNotified': 'Your driver will be notified.',
+  'ride.keepRide': 'Keep ride',
+  'ride.onTheWay': 'Your driver is on the way',
+  'ride.arrivedTitle': 'Your driver has arrived',
+  'ride.onTrip': 'On the trip',
+  'ride.headingTo': 'Heading to {dest}',
+  'ride.waitingAtPickup': 'Your driver is waiting at the pickup point.',
+  'ride.pickupLabel': 'Pickup: {addr}',
+  'ride.callDriver': 'Call driver',
+  'ride.activeAsDriver': 'You have an active ride as a driver — see the Drive tab.',
+  'ride.homeChip': '🏠 Home',
+  'ride.workChip': '💼 Work',
+  'ride.pickupDetails': 'Pickup details (entrance, flat…)',
+  'ride.destDetails': 'Destination details (entrance, flat…)',
+  'ride.entrance': 'Entrance',
+  'ride.apartment': 'Flat',
+  'ride.floor': 'Floor',
+  'ride.intercom': 'Intercom',
+  'ride.detailsNote': 'Note for this address',
+
+  // drive tab
+  'drive.become': 'Become a driver',
+  'drive.becomeText': 'Add your car details once, then go online whenever you want to take orders.',
+  'drive.addCar': 'Add car details',
+  'drive.online': 'You are online',
+  'drive.offline': 'You are offline',
+  'drive.taking': 'Taking orders',
+  'drive.notTaking': 'Not taking orders',
+  'drive.goOnline': 'Go online',
+  'drive.goOffline': 'Go offline',
+  'drive.waiting': 'Waiting for orders…',
+  'drive.away': '{d} away',
+  'drive.trip': 'Trip {d}',
+  'drive.dismiss': 'Dismiss',
+  'drive.accept': 'Accept',
+  'drive.tooLate': 'Too late',
+  'drive.tooLateText': 'Another driver took this order.',
+  'drive.cannotAccept': 'Cannot accept',
+  'drive.tryAgain': 'Try again.',
+  'drive.locationNeeded': 'Location needed',
+  'drive.locationNeededText': 'Allow location access so riders can find you.',
+  'drive.offlineTryAgain': 'Not connected to the server yet. Try again in a moment.',
+  'drive.error': 'Error',
+  'drive.headPickup': 'Head to pickup',
+  'drive.waitingRider': 'Waiting for the rider',
+  'drive.onTrip': 'On the trip',
+  'drive.arrived': "I've arrived",
+  'drive.start': 'Start ride',
+  'drive.finish': 'Finish ride',
+  'drive.callRider': 'Call rider',
+  'drive.riderNotified': 'The rider will be notified.',
+  'drive.activeAsRider': 'You have an active ride as a rider — see the Ride tab.',
+  'drive.to': 'To: {addr}',
+  'drive.pointsEarned': '+{n} points for the trip',
+
+  // permissions
+  'perm.title': 'Before we start',
+  'perm.text': 'DrivePro needs your location to work properly.',
+  'perm.point1': '🗺  Center the map on you',
+  'perm.point2': '🚗  Let nearby drivers find you',
+  'perm.point3': '📡  Share your position with the rider while you drive',
+  'perm.allow': 'Allow location',
+  'perm.skip': 'Not now',
+  'perm.deniedNote': 'Permission was not granted. You can enable it any time in your browser or system settings.',
+
+  // app shell
+  'app.crashTitle': 'Something went wrong',
+  'app.reload': 'Reload',
+
+  // profile
+  'profile.history': 'Ride history ›',
+  'profile.say': 'What people say about you',
+  'profile.personal': 'Personal details',
+  'profile.name': 'Name',
+  'profile.about': 'About you',
+  'profile.aboutPh': 'A line about yourself (optional)',
+  'profile.city': 'City',
+  'profile.cityPh': 'e.g. London (optional)',
+  'profile.email': 'Email',
+  'profile.emailPh': 'you@example.com (optional)',
+  'profile.saveProfile': 'Save profile',
+  'profile.saved': 'Saved',
+  'profile.profileUpdated': 'Your profile has been updated.',
+  'profile.addPhoto': 'Add photo',
+  'profile.changePhoto': 'Change photo',
+  'profile.removePhoto': 'Remove photo',
+  'profile.photoTooLarge': 'This image is too large. Pick a smaller one.',
+  'profile.driver': 'Driver details',
+  'profile.fillCar': 'Fill in your car to unlock Drive mode.',
+  'profile.carMake': 'Car make',
+  'profile.carModel': 'Car model',
+  'profile.colour': 'Colour',
+  'profile.plate': 'Plate',
+  'profile.updateCar': 'Update car',
+  'profile.saveCar': 'Save car & become a driver',
+  'profile.carSaved': 'Car details saved. You can now go online in Drive mode.',
+  'profile.vCar': 'Fill in all four car fields.',
+  'profile.places': 'Saved places',
+  'profile.home': 'Home',
+  'profile.work': 'Work',
+  'profile.notSet': 'Not set',
+  'profile.placeSearchPh': 'Search address for this place…',
+  'profile.language': 'Language',
+  'profile.langAuto': 'Auto',
+  'profile.logout': 'Log out',
+  'profile.rides': 'rides',
+  'profile.points': 'points',
+
+  // history
+  'history.title': 'Ride history',
+  'history.refresh': 'Refresh',
+  'history.empty': 'No rides yet. Request one from the Ride tab.',
+  'history.youRode': 'You rode',
+  'history.youDrove': 'You drove',
+  'history.noDriver': 'No driver',
+  'history.rate': 'Rate ›',
+  'history.finished': 'Finished',
+  'history.cancelled': 'Cancelled',
+  'history.requested': 'Searching',
+  'history.accepted': 'Matched',
+  'history.arrived': 'Driver arrived',
+  'history.in_progress': 'In progress',
+
+  // rating
+  'rate.finished': 'Ride finished',
+  'rate.how': 'How was your ride with {name}?',
+  'rate.counterpart': 'your counterpart',
+  'rate.commentPh': 'Leave a comment (optional)',
+  'rate.submit': 'Submit rating',
+  'rate.skip': 'Skip',
+  'rate.couldNotSave': 'Could not save rating',
+
+  // profile modal
+  'modal.car': 'Car',
+  'modal.say': 'What people say',
+  'modal.noRatings': 'No ratings yet',
+  'modal.meta': '{rides} rides · joined {date}',
+  'modal.ratings': '★ {avg} ({n} ratings)',
+
+  // state notifications
+  'note.rideCancelled': 'Ride cancelled',
+  'note.byRider': 'The rider cancelled the ride.',
+  'note.byDriver': 'The driver cancelled the ride.',
+  'note.arrivedTitle': 'Your driver has arrived',
+  'note.lookFor': 'Look for the {color} {make} {model}, plate {plate}.',
+  'note.meetPickup': 'Meet them at the pickup point.',
+
+  // server error codes
+  'err.invalid_phone': 'Enter a valid phone number.',
+  'err.name_required': 'Enter your name.',
+  'err.password_short': 'Password must be at least 6 characters.',
+  'err.phone_taken': 'This phone number is already registered.',
+  'err.wrong_credentials': 'Wrong phone number or password.',
+  'err.no_account': 'No account with this phone number.',
+  'err.code_expired': 'The code has expired. Request a new one.',
+  'err.code_wrong': 'Wrong code. Check and try again.',
+  'err.resend_too_soon': 'Wait a moment before requesting another code.',
+  'err.already_verified': 'This account is already verified.',
+  'err.invalid_email': 'Enter a valid email address.',
+  'err.invalid_avatar': 'The photo must be an image file.',
+  'err.avatar_too_large': 'The photo is too large.',
+  'err.invalid_place': 'Pick a point and address for this place.',
+  'err.car_required': 'Car make, model, color and plate are all required.',
+  'err.invalid_plate': 'Plate can contain letters, digits, spaces and dashes.',
+  'err.taken': 'This order is no longer available.',
+  'err.points_required': 'Pickup and destination are required.',
+  'err.body_too_large': 'The data you sent is too large.',
+  'err.network': "Can't reach the server at {url}. Is it running?",
+};
+
+const ru = {
+  'common.back': '‹ Назад',
+  'common.close': 'Закрыть',
+  'common.cancel': 'Отмена',
+  'common.save': 'Сохранить',
+  'common.find': 'Найти',
+  'common.remove': 'Убрать',
+  'common.set': 'Задать',
+  'common.change': 'Изменить',
+  'common.offlineSend': 'Нет соединения с сервером.',
+  'common.freeRide': 'Бесплатная поездка',
+  'common.noRatings': 'пока нет оценок',
+
+  'auth.tagline': 'Поездки между людьми. Без тарифов и лишнего.',
+  'auth.login': 'Вход',
+  'auth.signup': 'Регистрация',
+  'auth.yourName': 'Ваше имя',
+  'auth.namePh': 'например, Игорь',
+  'auth.phone': 'Номер телефона',
+  'auth.password': 'Пароль',
+  'auth.passwordPh': 'Не менее 6 символов',
+  'auth.createAccount': 'Создать аккаунт',
+  'auth.vName': 'Введите имя (минимум 2 буквы).',
+  'auth.vPhone': 'Введите корректный номер телефона (7–15 цифр).',
+  'auth.vPassword': 'Пароль должен быть не короче 6 символов.',
+
+  'verify.title': 'Подтвердите телефон',
+  'verify.sentTo': 'Мы отправили 4-значный код на {phone}',
+  'verify.codePh': 'Код из 4 цифр',
+  'verify.button': 'Подтвердить',
+  'verify.resend': 'Отправить код ещё раз',
+  'verify.resendIn': 'Повторно через {s} с',
+  'verify.devCode': 'Код (dev): {code}',
+  'verify.vCode': 'Введите код из 4 цифр.',
+  'verify.changePhone': 'Другой номер телефона',
+
+  'home.connected': 'В сети ({host})',
+  'home.connecting': 'Подключение к {host}…',
+  'home.profile': 'Профиль',
+  'home.ride': 'Поездка',
+  'home.drive': 'За рулём',
+
+  'ride.setPickup': 'Точка подачи',
+  'ride.setDest': 'Куда едем',
+  'ride.confirm': 'Подтвердите поездку',
+  'ride.searchPh': 'Поиск адреса…',
+  'ride.pickupAddr': 'Адрес подачи (можно изменить)',
+  'ride.destAddr': 'Адрес назначения (можно изменить)',
+  'ride.addrPh': 'Двигайте карту, чтобы выбрать точку',
+  'ride.nextDest': 'Дальше: куда едем',
+  'ride.nextConfirm': 'Дальше: подтверждение',
+  'ride.request': 'Заказать поездку',
+  'ride.instructions': 'Комментарий для водителя (необязательно)',
+  'ride.instructionsPh': 'например: синяя куртка, стою у аптеки',
+  'ride.calcRoute': 'Строим маршрут…',
+  'ride.straightLine': '(по прямой)',
+  'ride.nothingFound': 'Ничего не найдено. Попробуйте другой запрос.',
+  'ride.notConnected': 'Нет соединения с сервером. Проверьте, что он запущен.',
+  'ride.looking': 'Ищем водителя…',
+  'ride.cancelRide': 'Отменить поездку',
+  'ride.cancelQ': 'Отменить поездку?',
+  'ride.driverNotified': 'Водитель получит уведомление.',
+  'ride.keepRide': 'Оставить',
+  'ride.onTheWay': 'Водитель едет к вам',
+  'ride.arrivedTitle': 'Водитель приехал',
+  'ride.onTrip': 'В пути',
+  'ride.headingTo': 'Едем: {dest}',
+  'ride.waitingAtPickup': 'Водитель ждёт вас в точке подачи.',
+  'ride.pickupLabel': 'Подача: {addr}',
+  'ride.callDriver': 'Позвонить водителю',
+  'ride.activeAsDriver': 'У вас активная поездка как у водителя — откройте вкладку «За рулём».',
+  'ride.homeChip': '🏠 Дом',
+  'ride.workChip': '💼 Работа',
+  'ride.pickupDetails': 'Детали подачи (подъезд, квартира…)',
+  'ride.destDetails': 'Детали назначения (подъезд, квартира…)',
+  'ride.entrance': 'Подъезд',
+  'ride.apartment': 'Кв.',
+  'ride.floor': 'Этаж',
+  'ride.intercom': 'Домофон',
+  'ride.detailsNote': 'Заметка к адресу',
+
+  'drive.become': 'Станьте водителем',
+  'drive.becomeText': 'Заполните данные машины один раз — и выходите на линию, когда захотите.',
+  'drive.addCar': 'Добавить машину',
+  'drive.online': 'Вы на линии',
+  'drive.offline': 'Вы не на линии',
+  'drive.taking': 'Принимаете заказы',
+  'drive.notTaking': 'Заказы не принимаются',
+  'drive.goOnline': 'Выйти на линию',
+  'drive.goOffline': 'Уйти с линии',
+  'drive.waiting': 'Ожидание заказов…',
+  'drive.away': '{d} до подачи',
+  'drive.trip': 'Поездка {d}',
+  'drive.dismiss': 'Скрыть',
+  'drive.accept': 'Принять',
+  'drive.tooLate': 'Не успели',
+  'drive.tooLateText': 'Этот заказ забрал другой водитель.',
+  'drive.cannotAccept': 'Не удалось принять',
+  'drive.tryAgain': 'Попробуйте ещё раз.',
+  'drive.locationNeeded': 'Нужна геолокация',
+  'drive.locationNeededText': 'Разрешите доступ к геолокации, чтобы пассажиры вас видели.',
+  'drive.offlineTryAgain': 'Пока нет соединения с сервером. Попробуйте через мгновение.',
+  'drive.error': 'Ошибка',
+  'drive.headPickup': 'Едем на подачу',
+  'drive.waitingRider': 'Ожидание пассажира',
+  'drive.onTrip': 'В пути',
+  'drive.arrived': 'Я на месте',
+  'drive.start': 'Начать поездку',
+  'drive.finish': 'Завершить поездку',
+  'drive.callRider': 'Позвонить пассажиру',
+  'drive.riderNotified': 'Пассажир получит уведомление.',
+  'drive.activeAsRider': 'У вас активная поездка как у пассажира — откройте вкладку «Поездка».',
+  'drive.to': 'Куда: {addr}',
+  'drive.pointsEarned': '+{n} баллов за поездку',
+
+  'profile.history': 'История поездок ›',
+  'profile.say': 'Что о вас говорят',
+  'profile.personal': 'Личные данные',
+  'profile.name': 'Имя',
+  'profile.about': 'О себе',
+  'profile.aboutPh': 'Пара слов о себе (необязательно)',
+  'profile.city': 'Город',
+  'profile.cityPh': 'например, Лондон (необязательно)',
+  'profile.email': 'Эл. почта',
+  'profile.emailPh': 'you@example.com (необязательно)',
+  'profile.saveProfile': 'Сохранить профиль',
+  'profile.saved': 'Сохранено',
+  'profile.profileUpdated': 'Профиль обновлён.',
+  'profile.addPhoto': 'Добавить фото',
+  'profile.changePhoto': 'Изменить фото',
+  'profile.removePhoto': 'Убрать фото',
+  'profile.photoTooLarge': 'Изображение слишком большое. Выберите поменьше.',
+  'profile.driver': 'Данные водителя',
+  'profile.fillCar': 'Заполните данные машины, чтобы открыть режим «За рулём».',
+  'profile.carMake': 'Марка',
+  'profile.carModel': 'Модель',
+  'profile.colour': 'Цвет',
+  'profile.plate': 'Госномер',
+  'profile.updateCar': 'Обновить машину',
+  'profile.saveCar': 'Сохранить и стать водителем',
+  'profile.carSaved': 'Машина сохранена. Теперь можно выйти на линию.',
+  'profile.vCar': 'Заполните все четыре поля о машине.',
+  'profile.places': 'Мои адреса',
+  'profile.home': 'Дом',
+  'profile.work': 'Работа',
+  'profile.notSet': 'Не задан',
+  'profile.placeSearchPh': 'Найдите адрес для этого места…',
+  'profile.language': 'Язык',
+  'profile.langAuto': 'Авто',
+  'profile.logout': 'Выйти',
+  'profile.rides': 'поездок',
+  'profile.points': 'баллов',
+
+  'history.title': 'История поездок',
+  'history.refresh': 'Обновить',
+  'history.empty': 'Поездок пока нет. Закажите на вкладке «Поездка».',
+  'history.youRode': 'Вы ехали',
+  'history.youDrove': 'Вы везли',
+  'history.noDriver': 'Без водителя',
+  'history.rate': 'Оценить ›',
+  'history.finished': 'Завершена',
+  'history.cancelled': 'Отменена',
+  'history.requested': 'Поиск',
+  'history.accepted': 'Найден водитель',
+  'history.arrived': 'Водитель приехал',
+  'history.in_progress': 'В пути',
+
+  'rate.finished': 'Поездка завершена',
+  'rate.how': 'Как прошла поездка с {name}?',
+  'rate.counterpart': 'попутчиком',
+  'rate.commentPh': 'Оставьте комментарий (необязательно)',
+  'rate.submit': 'Поставить оценку',
+  'rate.skip': 'Пропустить',
+  'rate.couldNotSave': 'Не удалось сохранить оценку',
+
+  'perm.title': 'Прежде чем начать',
+  'perm.text': 'DrivePro нужна ваша геолокация для работы.',
+  'perm.point1': '🗺  Центрировать карту на вас',
+  'perm.point2': '🚗  Помочь ближайшим водителям найти вас',
+  'perm.point3': '📡  Показывать пассажиру, где вы едете',
+  'perm.allow': 'Разрешить геолокацию',
+  'perm.skip': 'Не сейчас',
+  'perm.deniedNote': 'Доступ не предоставлен. Его можно включить в любой момент в настройках браузера или телефона.',
+
+  'app.crashTitle': 'Что-то пошло не так',
+  'app.reload': 'Перезагрузить',
+
+  'modal.car': 'Машина',
+  'modal.say': 'Что говорят люди',
+  'modal.noRatings': 'Пока нет оценок',
+  'modal.meta': '{rides} поездок · с {date}',
+  'modal.ratings': '★ {avg} ({n} оценок)',
+
+  'note.rideCancelled': 'Поездка отменена',
+  'note.byRider': 'Пассажир отменил поездку.',
+  'note.byDriver': 'Водитель отменил поездку.',
+  'note.arrivedTitle': 'Водитель приехал',
+  'note.lookFor': 'Ищите: {color} {make} {model}, номер {plate}.',
+  'note.meetPickup': 'Встречайте у точки подачи.',
+
+  'err.invalid_phone': 'Введите корректный номер телефона.',
+  'err.name_required': 'Введите имя.',
+  'err.password_short': 'Пароль должен быть не короче 6 символов.',
+  'err.phone_taken': 'Этот номер уже зарегистрирован.',
+  'err.wrong_credentials': 'Неверный номер телефона или пароль.',
+  'err.no_account': 'Нет аккаунта с таким номером.',
+  'err.code_expired': 'Код устарел. Запросите новый.',
+  'err.code_wrong': 'Неверный код. Проверьте и попробуйте снова.',
+  'err.resend_too_soon': 'Подождите немного перед повторной отправкой.',
+  'err.already_verified': 'Этот аккаунт уже подтверждён.',
+  'err.invalid_email': 'Введите корректный адрес почты.',
+  'err.invalid_avatar': 'Фото должно быть изображением.',
+  'err.avatar_too_large': 'Фото слишком большое.',
+  'err.invalid_place': 'Выберите точку и адрес для этого места.',
+  'err.car_required': 'Нужны марка, модель, цвет и номер машины.',
+  'err.invalid_plate': 'Номер может содержать буквы, цифры, пробелы и дефисы.',
+  'err.taken': 'Этот заказ уже недоступен.',
+  'err.points_required': 'Нужны точки подачи и назначения.',
+  'err.body_too_large': 'Отправленные данные слишком большие.',
+  'err.network': 'Не удаётся связаться с сервером {url}. Он запущен?',
+};
+
+const dicts = { en, ru };
+
+let current = 'ru';
+
+export function detectDeviceLang() {
+  try {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
+      return (navigator.language || 'en').toLowerCase();
+    }
+    const locale =
+      (NativeModules.SettingsManager &&
+        NativeModules.SettingsManager.settings &&
+        (NativeModules.SettingsManager.settings.AppleLocale ||
+          (NativeModules.SettingsManager.settings.AppleLanguages || [])[0])) ||
+      (NativeModules.I18nManager && NativeModules.I18nManager.localeIdentifier) ||
+      (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().locale : 'en');
+    return String(locale || 'en').toLowerCase();
+  } catch (e) {
+    return 'en';
+  }
+}
+
+export function resolveLang(pref) {
+  if (pref === 'en' || pref === 'ru') return pref;
+  // Follow the device language; Russian is the default for everything else.
+  return detectDeviceLang().startsWith('en') ? 'en' : 'ru';
+}
+
+export function setLang(lang) {
+  current = dicts[lang] ? lang : 'ru';
+}
+
+export function getLang() {
+  return current;
+}
+
+export function t(key, params) {
+  const s = (dicts[current] && dicts[current][key]) || en[key] || key;
+  if (!params) return s;
+  return s.replace(/\{(\w+)\}/g, (m, k) => (params[k] != null ? String(params[k]) : m));
+}
+
+export function hasKey(key) {
+  return key in en;
+}
+
+// Preferred message for a thrown API/ws error: translated code if we know it,
+// otherwise whatever the server said.
+export function errMsg(e) {
+  if (e && e.code && hasKey(`err.${e.code}`)) return t(`err.${e.code}`);
+  return (e && e.message) || t('drive.error');
+}

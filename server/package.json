@@ -9,7 +9,12 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "smoke": "node tests/smoke.mjs"
+    "smoke": "node tests/smoke.mjs",
+    "smoke2": "node tests/smoke2.mjs",
+    "smoke3": "node tests/smoke3.mjs",
+    "smoke4": "node tests/smoke4.mjs",
+    "smoke5": "node tests/smoke5.mjs",
+    "smoke7": "node tests/smoke7.mjs"
   },
   "engines": {
     "node": ">=18"

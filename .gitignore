@@ -3,8 +3,9 @@ node_modules/
 
 # expo
 .expo/
-dist/
 web-build/
+# app/dist (the exported web build) is committed on purpose so hosts can
+# serve it without running the Expo toolchain.
 
 # server runtime data
 server/data/
@@ -12,6 +13,8 @@ server/data/
 # logs and OS noise
 *.log
 .DS_Store
+_to_delete/
+server/tests/.tmp-data/
 
 # env
 .env

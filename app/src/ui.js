@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   SafeAreaView,
   StatusBar,
@@ -69,9 +70,9 @@ export function Button({ title, onPress, disabled, loading, kind = 'primary', st
   );
 }
 
-export function Input({ label, style, ...props }) {
+export function Input({ label, style, containerStyle, ...props }) {
   return (
-    <View style={{ marginBottom: 12 }}>
+    <View style={[{ marginBottom: 12 }, containerStyle]}>
       {label ? <Text style={s.label}>{label}</Text> : null}
       <TextInput
         placeholderTextColor="#9a9a9a"
@@ -118,6 +119,32 @@ export function StatusDot({ on, labelOn, labelOff }) {
 
 export function Row({ children, style }) {
   return <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>{children}</View>;
+}
+
+// Round profile picture with an initial-letter fallback.
+export function Avatar({ user, size = 44, style }) {
+  const initial = user && user.name ? user.name.trim().charAt(0).toUpperCase() : '?';
+  const base = {
+    width: size,
+    height: size,
+    borderRadius: size / 2,
+    backgroundColor: '#dcdcdc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  };
+  if (user && user.avatar) {
+    return (
+      <View style={[base, style]}>
+        <Image source={{ uri: user.avatar }} style={{ width: size, height: size }} />
+      </View>
+    );
+  }
+  return (
+    <View style={[base, style]}>
+      <Text style={{ fontSize: size * 0.42, fontWeight: '700', color: '#666' }}>{initial}</Text>
+    </View>
+  );
 }
 
 const s = StyleSheet.create({

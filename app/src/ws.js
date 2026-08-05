@@ -36,6 +36,18 @@ class WsClient {
     return false;
   }
 
+  // Force an immediate reconnect attempt (used when the app regains focus).
+  kick() {
+    if (!this.token || this.manuallyClosed) return;
+    if (this.connected) return;
+    this.retry = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this._open();
+  }
+
   on(type, fn) {
     if (!this.listeners.has(type)) this.listeners.set(type, new Set());
     this.listeners.get(type).add(fn);

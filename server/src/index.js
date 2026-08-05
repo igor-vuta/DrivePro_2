@@ -7,11 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { Store } from './store.js';
 import { Hub } from './hub.js';
 import { createApi } from './api.js';
+import { setupRides } from './rides.js';
 import { acceptUpgrade } from './ws.js';
+import { createStatic } from './static.js';
 import { verifyToken } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const WEB_DIR = process.env.WEB_DIR || path.join(__dirname, '..', '..', 'app', 'dist');
 const PORT = Number(process.env.PORT || 4000);
 
 // Persistent signing secret (created on first run).
@@ -24,7 +27,8 @@ const secret = fs.readFileSync(secretFile, 'utf8').trim();
 
 const store = new Store(DATA_DIR);
 const hub = new Hub(store);
-const api = createApi({ store, secret, hub });
+setupRides({ store, hub });
+const api = createApi({ store, secret, hub, serveStatic: createStatic(WEB_DIR) });
 
 const server = http.createServer((req, res) => {
   api(req, res).catch((e) => {
@@ -66,4 +70,9 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`DrivePro server running (storage: ${store.backendName})`);
   console.log(`  Local:   http://localhost:${PORT}`);
   for (const ip of lan) console.log(`  Network: http://${ip}:${PORT}  <- use this in the app on your phone`);
+  console.log(
+    fs.existsSync(path.join(WEB_DIR, 'index.html'))
+      ? `  Web app: serving ${WEB_DIR}`
+      : `  Web app: not built yet (cd app && npx expo export -p web)`
+  );
 });
