@@ -189,6 +189,12 @@ class SqliteBackend {
       .map((r) => ({ points: safeParse(r.points), finishedAt: Number(r.finished_at) }))
       .filter((t) => Array.isArray(t.points) && t.points.length >= 2);
   }
+  finishedRidesSince(sinceMs) {
+    return this.db
+      .prepare("SELECT * FROM rides WHERE status = 'finished' AND finished_at >= ?")
+      .all(sinceMs)
+      .map(rowToRide);
+  }
 
   // driver profiles
   upsertDriver(p) {
@@ -438,6 +444,9 @@ class JsonBackend {
       .map((t) => ({ points: safeParse(t.points), finishedAt: t.finishedAt }))
       .filter((t) => Array.isArray(t.points) && t.points.length >= 2);
   }
+  finishedRidesSince(sinceMs) {
+    return this.data.rides.filter((r) => r.status === 'finished' && (r.finishedAt || 0) >= sinceMs);
+  }
 
   upsertDriver(p) {
     const existing = this.data.driverProfiles.find((d) => d.userId === p.userId);
@@ -549,6 +558,10 @@ export class Store {
   }
   listTrails(hours = 24, limit = 200) {
     return this.b.listTrails(now() - hours * 3600 * 1000, limit);
+  }
+
+  listFinishedSince(sinceMs) {
+    return this.b.finishedRidesSince(sinceMs);
   }
 
   upsertDriverProfile(userId, { carMake, carModel, carColor, plate }) {

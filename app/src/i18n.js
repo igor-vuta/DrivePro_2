@@ -148,6 +148,21 @@ const en = {
   'app.crashTitle': 'Something went wrong',
   'app.reload': 'Reload',
 
+  // weekly recap
+  'weekly.title': 'Weekly recap',
+  'weekly.subtitle': 'The movement, last 7 days',
+  'weekly.you': 'You',
+  'weekly.youDrove': '{n} rides as driver',
+  'weekly.youRode': '{n} rides as rider',
+  'weekly.youEarned': '+{n} points',
+  'weekly.city': 'The city',
+  'weekly.cityRides': '{n} shared rides',
+  'weekly.cityKm': '{n} km travelled together',
+  'weekly.cityDrivers': '{n} drivers on the road',
+  'weekly.top': 'Drivers of the week',
+  'weekly.empty': 'A quiet week. The city is waiting for you.',
+  'weekly.close': 'Continue',
+
   // profile
   'profile.history': 'Ride history ›',
   'profile.say': 'What people say about you',
@@ -432,6 +447,20 @@ const ru = {
   'rate.submit': 'Поставить оценку',
   'rate.skip': 'Пропустить',
   'rate.couldNotSave': 'Не удалось сохранить оценку',
+
+  'weekly.title': 'Итоги недели',
+  'weekly.subtitle': 'Движение за последние 7 дней',
+  'weekly.you': 'Вы',
+  'weekly.youDrove': '{n} поездок за рулём',
+  'weekly.youRode': '{n} поездок пассажиром',
+  'weekly.youEarned': '+{n} баллов',
+  'weekly.city': 'Город',
+  'weekly.cityRides': '{n} совместных поездок',
+  'weekly.cityKm': '{n} км вместе',
+  'weekly.cityDrivers': '{n} водителей в строю',
+  'weekly.top': 'Водители недели',
+  'weekly.empty': 'Тихая неделя. Город ждёт вас.',
+  'weekly.close': 'Продолжить',
 
   'perm.title': 'Прежде чем начать',
   'perm.text': 'DrivePro нужна ваша геолокация для работы.',

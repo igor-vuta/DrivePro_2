@@ -1,4 +1,4 @@
-// L3 smoke test: neon trails - ride geometries stored at request, exposed
+// L3+L4 smoke test: neon trails + weekly recap - ride geometries stored at request, exposed
 // after finish via /api/trails.
 // Usage: node tests/smoke10.mjs
 
@@ -174,6 +174,16 @@ const after2 = await api('GET', '/api/trails', null, rider.token);
 check('two trails after two finished rides', (after2.json.trails || []).length === 2);
 const straight = (after2.json.trails || []).find((t) => t.points.length === 2);
 check('routeless ride falls back to a straight-line trail', !!straight);
+
+// ---- weekly recap over the same data ----
+const wkDrv = await api('GET', '/api/weekly', null, drv.token);
+check('weekly: city counted both rides', wkDrv.json.city && wkDrv.json.city.rides === 2, JSON.stringify(wkDrv.json.city));
+check('weekly: km aggregated', wkDrv.json.city.km === 4, `got ${wkDrv.json.city.km}`);
+check('weekly: one driver on the road', wkDrv.json.city.drivers === 1);
+check('weekly: top driver is Timur', wkDrv.json.city.top[0] && wkDrv.json.city.top[0].name === 'Timur' && wkDrv.json.city.top[0].rides === 2);
+check('weekly: my driver stats', wkDrv.json.me.drove === 2 && wkDrv.json.me.rode === 0 && wkDrv.json.me.points >= 2);
+const wkRid = await api('GET', '/api/weekly', null, rider.token);
+check('weekly: rider stats count the ride', wkRid.json.me.rode === 1 && wkRid.json.me.drove === 0 && wkRid.json.me.points === 1);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 cleanup();

@@ -6,6 +6,7 @@ import { SERVER_HOST } from '../config';
 import { t } from '../i18n';
 import RideTab from './RideTab';
 import DriveTab from './DriveTab';
+import WeeklyRecap from '../WeeklyRecap';
 
 export default function HomeScreen({ openProfile }) {
   const { me, wsConnected, activeRide } = useAuth();
@@ -42,6 +43,7 @@ export default function HomeScreen({ openProfile }) {
       />
 
       {tab === 'ride' ? <RideTab /> : <DriveTab openProfile={openProfile} />}
+      <WeeklyRecap />
     </Screen>
   );
 }

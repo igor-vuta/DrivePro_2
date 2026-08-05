@@ -272,6 +272,47 @@ export function createApi({ store, secret, hub, serveStatic }) {
     sendJson(res, 201, { ok: true, rating: { stars: rating.stars, comment: rating.comment } });
   });
 
+  // Weekly recap: your last 7 days plus the whole movement's totals.
+  route('GET', '/api/weekly', async (req, res) => {
+    const user = authUser(req);
+    const since = Date.now() - 7 * 24 * 3600 * 1000;
+    const rides = store.listFinishedSince(since);
+    const ptsFor = (r) => {
+      const km = (r.distanceM || 0) / 1000;
+      const minutes = Math.max(1, ((r.finishedAt || 0) - (r.startedAt || r.finishedAt || 0)) / 60000);
+      return Math.max(1, Math.min(5000, Math.round(km * minutes)));
+    };
+    const byDriver = new Map();
+    let km = 0;
+    for (const r of rides) {
+      km += (r.distanceM || 0) / 1000;
+      if (r.driverId) {
+        const e = byDriver.get(r.driverId) || { points: 0, rides: 0 };
+        e.points += ptsFor(r);
+        e.rides += 1;
+        byDriver.set(r.driverId, e);
+      }
+    }
+    const top = [...byDriver.entries()]
+      .sort((a, b) => b[1].points - a[1].points)
+      .slice(0, 3)
+      .map(([uid, e]) => {
+        const u = store.getUser(uid);
+        return { name: u ? u.name : '?', points: e.points, rides: e.rides };
+      });
+    const drove = rides.filter((r) => r.driverId === user.id);
+    const rode = rides.filter((r) => r.riderId === user.id);
+    sendJson(res, 200, {
+      since,
+      me: {
+        drove: drove.length,
+        rode: rode.length,
+        points: drove.reduce((s, r) => s + ptsFor(r), 0) + rode.length,
+      },
+      city: { rides: rides.length, km: Math.round(km), drivers: byDriver.size, top },
+    });
+  });
+
   // Neon trails: traces of rides finished in the last 24h, drawn on the map.
   route('GET', '/api/trails', async (req, res) => {
     authUser(req);
