@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+
+# expo
+.expo/
+dist/
+web-build/
+
+# server runtime data
+server/data/
+
+# logs and OS noise
+*.log
+.DS_Store
+
+# env
+.env
+.env.*

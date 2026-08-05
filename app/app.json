@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "DrivePro",
+    "slug": "drivepro",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "DrivePro uses your location to show you on the map, find nearby drivers and track rides."
+      }
+    },
+    "android": {
+      "edgeToEdgeEnabled": true,
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    }
+  }
+}

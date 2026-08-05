@@ -1,0 +1,22 @@
+{
+  "name": "drivepro-app",
+  "version": "0.1.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "expo": "~56.0.12",
+    "expo-status-bar": "~56.0.4",
+    "expo-constants": "~56.0.13",
+    "expo-location": "~56.0.11",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "react-native-webview": "13.16.1",
+    "react": "19.2.3",
+    "react-native": "0.85.3"
+  },
+  "private": true
+}
