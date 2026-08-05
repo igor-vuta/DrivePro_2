@@ -133,6 +133,13 @@ const en = {
   'drive.routeSet': 'Route set: only matching requests will appear.',
   'drive.routeAnywhereNote': 'No route - you see all nearby requests.',
   'drive.routeOnline': 'On route · corridor {r}',
+  'drive.routePickMap': 'Choose on map',
+  'drive.pickDestTitle': 'Where are you heading?',
+  'drive.confirmDest': 'Set destination',
+  'drive.navTitle': 'On route',
+  'drive.navLeft': '{km} km left',
+  'drive.navEta': '≈ {min} min',
+  'drive.navFollow': 'Follow me',
 
   // permissions
   'perm.title': 'Before we start',
@@ -387,6 +394,13 @@ const ru = {
   'drive.routeSet': 'Маршрут задан: будут видны только подходящие заказы.',
   'drive.routeAnywhereNote': 'Без маршрута — вы видите все заказы поблизости.',
   'drive.routeOnline': 'По маршруту · коридор {r}',
+  'drive.routePickMap': 'Выбрать на карте',
+  'drive.pickDestTitle': 'Куда вы едете?',
+  'drive.confirmDest': 'Задать точку',
+  'drive.navTitle': 'В пути',
+  'drive.navLeft': 'осталось {km} км',
+  'drive.navEta': '≈ {min} мин',
+  'drive.navFollow': 'Следовать',
 
   'profile.history': 'История поездок ›',
   'profile.say': 'Что о вас говорят',

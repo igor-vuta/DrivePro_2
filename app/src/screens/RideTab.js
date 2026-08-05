@@ -3,7 +3,7 @@ import { ActivityIndicator, Keyboard, Linking, Pressable, ScrollView, Text, View
 import { confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
-import { Card, Button, Input, Sub, ErrorText, Row, Avatar, colors } from '../ui';
+import { Card, Button, Input, Sub, ErrorText, Row, Avatar, FadeIn, colors } from '../ui';
 import { useAuth } from '../state';
 import { api } from '../api';
 import { wsClient } from '../ws';
@@ -360,6 +360,7 @@ export default function RideTab() {
       </View>
 
       <View style={{ paddingHorizontal: 16, paddingTop: 10, backgroundColor: colors.bg }}>
+        <FadeIn keyId={step} from={18}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 8 }}>{stepTitle}</Text>
 
         {step !== 'confirm' ? (
@@ -441,6 +442,7 @@ export default function RideTab() {
           </ScrollView>
         )}
         <View style={{ height: 12 }} />
+        </FadeIn>
       </View>
     </View>
   );

@@ -1,7 +1,10 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Image,
+  Platform,
   Pressable,
   SafeAreaView,
   StatusBar,
@@ -10,6 +13,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+
+const NATIVE = Platform.OS !== 'web';
 
 // Cyberpunk-luxury design system: deep night surfaces, neon cyan primaries,
 // magenta trails, gold for points. Every screen inherits from these tokens.
@@ -37,6 +42,31 @@ export function Screen({ children, style }) {
   );
 }
 
+// Fade + slide-up on mount; re-runs when keyId changes (screen/tab/step switches).
+export function FadeIn({ children, keyId, delay = 0, from = 14, style }) {
+  const v = React.useRef(new Animated.Value(0)).current;
+  React.useEffect(() => {
+    v.setValue(0);
+    Animated.timing(v, {
+      toValue: 1,
+      duration: 240,
+      delay,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: NATIVE,
+    }).start();
+  }, [keyId]);
+  return (
+    <Animated.View
+      style={[
+        { opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [from, 0] }) }] },
+        style,
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
 export function Title({ children, style, glow }) {
   return <Text style={[s.title, glow && s.titleGlow, style]}>{children}</Text>;
 }
@@ -51,23 +81,30 @@ export function Card({ children, style }) {
 
 export function Button({ title, onPress, disabled, loading, kind = 'primary', style }) {
   const isPrimary = kind === 'primary';
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const pump = (to) =>
+    Animated.spring(scale, { toValue: to, useNativeDriver: NATIVE, speed: 40, bounciness: 6 }).start();
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
+      onPressIn={() => pump(0.93)}
+      onPressOut={() => pump(1)}
       style={({ pressed }) => [
         s.btn,
         isPrimary ? s.btnPrimary : s.btnGhost,
         (disabled || loading) && { opacity: 0.4 },
-        pressed && { opacity: 0.75 },
+        pressed && { opacity: 0.85 },
         style,
       ]}
     >
-      {loading ? (
-        <ActivityIndicator color={isPrimary ? colors.primaryText : colors.primary} />
-      ) : (
-        <Text style={[s.btnText, isPrimary ? { color: colors.primaryText } : { color: colors.text }]}>{title}</Text>
-      )}
+      <Animated.View style={{ transform: [{ scale }] }}>
+        {loading ? (
+          <ActivityIndicator color={isPrimary ? colors.primaryText : colors.primary} />
+        ) : (
+          <Text style={[s.btnText, isPrimary ? { color: colors.primaryText } : { color: colors.text }]}>{title}</Text>
+        )}
+      </Animated.View>
     </Pressable>
   );
 }
@@ -102,12 +139,28 @@ export function Segmented({ options, value, onChange }) {
 }
 
 export function StatusDot({ on, labelOn, labelOff }) {
+  const pulse = React.useRef(new Animated.Value(1)).current;
+  React.useEffect(() => {
+    if (!on) {
+      pulse.setValue(1);
+      return undefined;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.35, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: NATIVE }),
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: NATIVE }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [on]);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <View
+      <Animated.View
         style={[
           s.dot,
           {
+            opacity: pulse,
             backgroundColor: on ? colors.ok : colors.danger,
             shadowColor: on ? colors.ok : colors.danger,
             shadowOpacity: 0.9,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, BackHandler, Platform, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, LayoutAnimation, Platform, Text, UIManager, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
@@ -12,8 +12,12 @@ import HistoryScreen from './src/screens/HistoryScreen';
 import RateScreen from './src/screens/RateScreen';
 import PermissionsScreen from './src/screens/PermissionsScreen';
 import { DialogHost } from './src/dialogs';
-import { Button, colors } from './src/ui';
+import { Button, FadeIn, colors } from './src/ui';
 import { t } from './src/i18n';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const PERM_KEY = 'drivepro.permDone';
 
@@ -95,13 +99,19 @@ function Root() {
 
   if (pendingRating) return <RateScreen />;
 
-  if (screen === 'profile') {
-    return <ProfileScreen goBack={() => setScreen('home')} openHistory={() => setScreen('history')} />;
-  }
-  if (screen === 'history') {
-    return <HistoryScreen goBack={() => setScreen('profile')} />;
-  }
-  return <HomeScreen openProfile={() => setScreen('profile')} />;
+  const body =
+    screen === 'profile' ? (
+      <ProfileScreen goBack={() => setScreen('home')} openHistory={() => setScreen('history')} />
+    ) : screen === 'history' ? (
+      <HistoryScreen goBack={() => setScreen('profile')} />
+    ) : (
+      <HomeScreen openProfile={() => setScreen('profile')} />
+    );
+  return (
+    <FadeIn keyId={screen} style={{ flex: 1 }}>
+      {body}
+    </FadeIn>
+  );
 }
 
 // Renders a recoverable message instead of the white screen a render crash

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Alert, Modal, Platform, Pressable, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Easing, Modal, Platform, Pressable, Text, View } from 'react-native';
 import { colors } from './ui';
 
 // In-app, non-blocking notifications and confirmations. Browser dialogs
@@ -55,6 +55,47 @@ export function DialogHost() {
 
   const dismiss = (id) => setToasts((t) => t.filter((x) => x.id !== id));
 
+  const ToastItem = ({ x }) => {
+    const v = useRef(new Animated.Value(0)).current;
+    useEffect(() => {
+      Animated.timing(v, {
+        toValue: 1,
+        duration: 260,
+        easing: Easing.out(Easing.back(1.4)),
+        useNativeDriver: Platform.OS !== 'web',
+      }).start();
+    }, []);
+    return (
+      <Animated.View
+        style={{
+          opacity: v,
+          transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }) }],
+        }}
+      >
+        <Pressable
+          onPress={() => dismiss(x.id)}
+          style={{
+            backgroundColor: '#101728',
+            borderWidth: 1,
+            borderColor: '#254a63',
+            borderRadius: 14,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            marginBottom: 8,
+            shadowColor: '#00e5ff',
+            shadowOpacity: 0.25,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 6,
+          }}
+        >
+          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>{x.title}</Text>
+          {x.message ? <Text style={{ color: colors.sub, marginTop: 2 }}>{x.message}</Text> : null}
+        </Pressable>
+      </Animated.View>
+    );
+  };
+
   return (
     <>
       {toasts.length ? (
@@ -63,27 +104,7 @@ export function DialogHost() {
           style={{ position: 'absolute', top: Platform.OS === 'web' ? 16 : 54, left: 16, right: 16, zIndex: 1000 }}
         >
           {toasts.map((x) => (
-            <Pressable
-              key={x.id}
-              onPress={() => dismiss(x.id)}
-              style={{
-                backgroundColor: '#101728',
-                borderWidth: 1,
-                borderColor: '#254a63',
-                borderRadius: 14,
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                marginBottom: 8,
-                shadowColor: '#00e5ff',
-                shadowOpacity: 0.25,
-                shadowRadius: 10,
-                shadowOffset: { width: 0, height: 4 },
-                elevation: 6,
-              }}
-            >
-              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>{x.title}</Text>
-              {x.message ? <Text style={{ color: colors.sub, marginTop: 2 }}>{x.message}</Text> : null}
-            </Pressable>
+            <ToastItem key={x.id} x={x} />
           ))}
         </View>
       ) : null}

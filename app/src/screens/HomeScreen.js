@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { Screen, Title, Button, Segmented, StatusDot, Row } from '../ui';
+import { Screen, Title, Button, Segmented, StatusDot, Row, FadeIn } from '../ui';
 import { useAuth } from '../state';
 import { SERVER_HOST } from '../config';
 import { t } from '../i18n';
@@ -42,7 +42,9 @@ export default function HomeScreen({ openProfile }) {
         ]}
       />
 
-      {tab === 'ride' ? <RideTab /> : <DriveTab openProfile={openProfile} />}
+      <FadeIn keyId={tab} style={{ flex: 1 }}>
+        {tab === 'ride' ? <RideTab /> : <DriveTab openProfile={openProfile} />}
+      </FadeIn>
       <WeeklyRecap />
     </Screen>
   );
