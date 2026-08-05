@@ -27,6 +27,12 @@ export function setupRides({ store, hub }) {
         : haversineMeters(p.lat, p.lng, d.lat, d.lng);
     const durationS = isFiniteNum(msg.durationS) && msg.durationS > 0 ? Math.round(msg.durationS) : null;
 
+    // Trail geometry: the route the rider previewed, or a straight line.
+    const routePoints = (Array.isArray(msg.routePoints) ? msg.routePoints : [])
+      .filter((pt) => Array.isArray(pt) && isLat(Number(pt[0])) && isLng(Number(pt[1])))
+      .slice(0, 200)
+      .map((pt) => [Number(pt[0]), Number(pt[1])]);
+
     const ride = store.createRide({
       riderId: user.id,
       driverId: null,
@@ -43,6 +49,7 @@ export function setupRides({ store, hub }) {
       durationS,
     });
 
+    store.saveTrail(ride.id, routePoints.length >= 2 ? routePoints : [[p.lat, p.lng], [d.lat, d.lng]]);
     conn.send({ type: 'ride:created', ride, reqId: msg.reqId });
     offerToDrivers(store, hub, ride);
   });
@@ -133,6 +140,7 @@ export function setupRides({ store, hub }) {
     const minutes = Math.max(1, (finishedAt - (updated.startedAt || finishedAt)) / 60000);
     const pointsEarned = Math.max(1, Math.min(5000, Math.round(km * minutes)));
     store.addPoints(user.id, pointsEarned);
+    store.finishTrail(updated.id, finishedAt);
     store.addPoints(updated.riderId, 1); // riders climb too, slowly
     hub.sendTo(updated.riderId, { type: 'ride:update', ride: updated });
     hub.sendTo(updated.driverId, { type: 'ride:update', ride: updated, pointsEarned, reqId: msg.reqId });

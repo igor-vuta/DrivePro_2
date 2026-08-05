@@ -272,6 +272,12 @@ export function createApi({ store, secret, hub, serveStatic }) {
     sendJson(res, 201, { ok: true, rating: { stars: rating.stars, comment: rating.comment } });
   });
 
+  // Neon trails: traces of rides finished in the last 24h, drawn on the map.
+  route('GET', '/api/trails', async (req, res) => {
+    authUser(req);
+    sendJson(res, 200, { trails: store.listTrails(24, 200) });
+  });
+
   // --- geocoding / routing proxy (OpenStreetMap services) ---
 
   route('GET', '/api/geo/reverse', async (req, res, params, url) => {

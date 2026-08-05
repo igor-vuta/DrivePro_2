@@ -89,6 +89,13 @@ class SqliteBackend {
         created_at INTEGER NOT NULL,
         UNIQUE (ride_id, rater_id)
       );
+      CREATE TABLE IF NOT EXISTS trails (
+        ride_id TEXT PRIMARY KEY,
+        points TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        finished_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_trails_finished ON trails (finished_at);
       CREATE INDEX IF NOT EXISTS idx_rides_rider ON rides (rider_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_rides_driver ON rides (driver_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_ratings_ratee ON ratings (ratee_id);
@@ -163,6 +170,24 @@ class SqliteBackend {
   }
   addPoints(uid, n) {
     this.db.prepare('UPDATE users SET points = COALESCE(points, 0) + ? WHERE id = ?').run(n, uid);
+  }
+
+  // trails (neon traces of finished rides)
+  putTrail(rideId, pointsJson, createdAt) {
+    this.db
+      .prepare('INSERT OR REPLACE INTO trails (ride_id, points, created_at, finished_at) VALUES (?, ?, ?, NULL)')
+      .run(rideId, pointsJson, createdAt);
+    this.db.prepare('DELETE FROM trails WHERE created_at < ?').run(createdAt - 48 * 3600 * 1000);
+  }
+  finishTrail(rideId, ts) {
+    this.db.prepare('UPDATE trails SET finished_at = ? WHERE ride_id = ?').run(ts, rideId);
+  }
+  listTrails(sinceMs, limit) {
+    return this.db
+      .prepare('SELECT points, finished_at FROM trails WHERE finished_at IS NOT NULL AND finished_at >= ? ORDER BY finished_at DESC LIMIT ?')
+      .all(sinceMs, limit)
+      .map((r) => ({ points: safeParse(r.points), finishedAt: Number(r.finished_at) }))
+      .filter((t) => Array.isArray(t.points) && t.points.length >= 2);
   }
 
   // driver profiles
@@ -274,6 +299,14 @@ class SqliteBackend {
   }
 }
 
+function safeParse(v) {
+  try {
+    return JSON.parse(v);
+  } catch {
+    return null;
+  }
+}
+
 function rowToUser(row) {
   if (!row) return null;
   let places = null;
@@ -380,6 +413,32 @@ class JsonBackend {
     }
   }
 
+  _trails() {
+    if (!Array.isArray(this.data.trails)) this.data.trails = [];
+    return this.data.trails;
+  }
+  putTrail(rideId, pointsJson, createdAt) {
+    const trails = this._trails().filter((t) => t.rideId !== rideId && t.createdAt >= createdAt - 48 * 3600 * 1000);
+    trails.push({ rideId, points: pointsJson, createdAt, finishedAt: null });
+    this.data.trails = trails;
+    this.save();
+  }
+  finishTrail(rideId, ts) {
+    const t = this._trails().find((x) => x.rideId === rideId);
+    if (t) {
+      t.finishedAt = ts;
+      this.save();
+    }
+  }
+  listTrails(sinceMs, limit) {
+    return this._trails()
+      .filter((t) => t.finishedAt != null && t.finishedAt >= sinceMs)
+      .sort((a, b) => b.finishedAt - a.finishedAt)
+      .slice(0, limit)
+      .map((t) => ({ points: safeParse(t.points), finishedAt: t.finishedAt }))
+      .filter((t) => Array.isArray(t.points) && t.points.length >= 2);
+  }
+
   upsertDriver(p) {
     const existing = this.data.driverProfiles.find((d) => d.userId === p.userId);
     if (existing) Object.assign(existing, p, { createdAt: existing.createdAt });
@@ -479,6 +538,17 @@ export class Store {
   addPoints(uid, n) {
     if (Number.isFinite(n) && n > 0) this.b.addPoints(uid, Math.round(n));
     return this.getUser(uid);
+  }
+
+  saveTrail(rideId, points) {
+    if (!Array.isArray(points) || points.length < 2) return;
+    this.b.putTrail(rideId, JSON.stringify(points), now());
+  }
+  finishTrail(rideId, ts) {
+    this.b.finishTrail(rideId, ts);
+  }
+  listTrails(hours = 24, limit = 200) {
+    return this.b.listTrails(now() - hours * 3600 * 1000, limit);
   }
 
   upsertDriverProfile(userId, { carMake, carModel, carColor, plate }) {

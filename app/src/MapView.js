@@ -37,6 +37,7 @@ const html = `<!DOCTYPE html>
 
   var markers = {};
   var polyline = null;
+  var trailLayer = null;
 
   function post(obj) {
     var text = JSON.stringify(obj);
@@ -78,6 +79,18 @@ const html = `<!DOCTYPE html>
         if (c.points && c.points.length) {
           polyline = L.polyline(c.points, { color: '#111', weight: 4, opacity: 0.85 }).addTo(map);
         }
+      } else if (c.type === 'setTrails') {
+        if (trailLayer) { map.removeLayer(trailLayer); trailLayer = null; }
+        if (c.trails && c.trails.length) {
+          trailLayer = L.layerGroup();
+          c.trails.forEach(function (tr) {
+            if (!tr.points || tr.points.length < 2) return;
+            var a = Math.max(0.12, 1 - (tr.age || 0));
+            L.polyline(tr.points, { color: '#ff2bd6', weight: 8, opacity: 0.10 * a, interactive: false, lineCap: 'round' }).addTo(trailLayer);
+            L.polyline(tr.points, { color: '#ff5ce1', weight: 2.5, opacity: 0.55 * a, interactive: false, lineCap: 'round' }).addTo(trailLayer);
+          });
+          trailLayer.addTo(map);
+        }
       } else if (c.type === 'fitBounds') {
         if (c.points && c.points.length) {
           map.fitBounds(L.latLngBounds(c.points), { padding: [40, 40], animate: true, maxZoom: 17 });
@@ -98,7 +111,7 @@ const html = `<!DOCTYPE html>
 </html>`;
 
 const MapViewCmp = forwardRef(function MapViewCmp(
-  { initialCenter, initialZoom = 15, markers = [], polyline = null, onMoveEnd, onMoveStart, onReady, style },
+  { initialCenter, initialZoom = 15, markers = [], polyline = null, trails = null, onMoveEnd, onMoveStart, onReady, style },
   ref
 ) {
   const isWeb = Platform.OS === 'web';
@@ -156,6 +169,10 @@ const MapViewCmp = forwardRef(function MapViewCmp(
   useEffect(() => {
     send({ type: 'setPolyline', points: polyline });
   }, [JSON.stringify(polyline)]);
+
+  useEffect(() => {
+    if (trails) send({ type: 'setTrails', trails });
+  }, [JSON.stringify(trails)]);
 
   // Web: messages arrive on the window from the iframe.
   useEffect(() => {

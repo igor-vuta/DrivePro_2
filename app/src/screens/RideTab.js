@@ -11,6 +11,15 @@ import UserProfileModal from '../UserProfileModal';
 import { t, errMsg, getLang } from '../i18n';
 
 // Almaty, Kazakhstan - used until real geolocation arrives.
+// Thin a polyline before sending it over the socket.
+function simplifyPts(pts, max = 60) {
+  if (!Array.isArray(pts) || pts.length <= max) return pts || [];
+  const step = (pts.length - 1) / (max - 1);
+  const out = [];
+  for (let i = 0; i < max; i++) out.push(pts[Math.round(i * step)]);
+  return out;
+}
+
 const FALLBACK_CENTER = { lat: 43.2389, lng: 76.8897 };
 
 const cleanDetails = (d) => {
@@ -53,6 +62,7 @@ export default function RideTab() {
 
   const [step, setStep] = useState('pickup'); // pickup | dest | confirm
   const [center, setCenter] = useState(FALLBACK_CENTER);
+  const [trails, setTrails] = useState([]);
   const [address, setAddress] = useState('');
   const [addrLoading, setAddrLoading] = useState(false);
   const [pickup, setPickup] = useState(null); // {lat, lng, address}
@@ -107,6 +117,30 @@ export default function RideTab() {
 
   const centerRef = useRef(center);
   centerRef.current = center;
+
+  // Neon trails: glowing traces of recently finished rides, refreshed lazily.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const r = await api('GET', '/api/trails', null, token);
+        if (cancelled) return;
+        const nowMs = Date.now();
+        setTrails(
+          (r.trails || []).map((tr) => ({
+            points: tr.points,
+            age: Math.min(1, Math.max(0, (nowMs - tr.finishedAt) / 86_400_000)),
+          }))
+        );
+      } catch (e) {}
+    };
+    load();
+    const iv = setInterval(load, 120_000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [token]);
 
   const reverseLookup = async (c) => {
     const seq = ++geoSeq.current;
@@ -204,6 +238,7 @@ export default function RideTab() {
       comment: comment.trim(),
       distanceM: route ? route.distanceM : null,
       durationS: route ? route.durationS : null,
+      routePoints: route && route.points ? simplifyPts(route.points) : null,
     });
     if (!ok) {
       setBusy(false);
@@ -294,6 +329,7 @@ export default function RideTab() {
           initialZoom={15}
           markers={markers}
           polyline={polyline}
+          trails={trails}
           onMoveEnd={onMoveEnd}
         />
         {step !== 'confirm' ? (
