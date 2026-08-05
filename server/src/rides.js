@@ -1,4 +1,4 @@
-import { isFiniteNum, isLat, isLng, cleanStr, cleanAddressDetails, haversineMeters } from './util.js';
+import { isFiniteNum, isLat, isLng, cleanStr, cleanAddressDetails, haversineMeters, pointToPolyline } from './util.js';
 import { publicUser, rideCounterpart } from './views.js';
 
 // Ride lifecycle over websocket messages. This module registers the
@@ -153,6 +153,7 @@ export function setupRides({ store, hub }) {
     const loc = hub.driverLocation(driverId);
     for (const ride of store.listRequestedRides()) {
       if (ride.riderId === driverId) continue;
+      if (!fitsDriverRoute(loc, ride)) continue;
       const rider = publicUser(store, ride.riderId);
       if (rider) {
         delete rider.phone;
@@ -191,6 +192,17 @@ export function setupRides({ store, hub }) {
   });
 }
 
+// Route mode: a ride fits when both its pickup and destination lie inside the
+// driver's corridor and follow the direction of travel.
+export function fitsDriverRoute(driverEntry, ride) {
+  const route = driverEntry && driverEntry.route;
+  if (!route) return true;
+  const p = pointToPolyline(ride.pickupLat, ride.pickupLng, route.points);
+  const d = pointToPolyline(ride.destLat, ride.destLng, route.points);
+  if (p.distM > route.radiusM || d.distM > route.radiusM) return false;
+  return d.pos >= p.pos - 1e-6;
+}
+
 export function offerToDrivers(store, hub, ride) {
   const rider = publicUser(store, ride.riderId);
   if (rider) {
@@ -201,6 +213,7 @@ export function offerToDrivers(store, hub, ride) {
   for (const driverId of hub.onlineDriverIds()) {
     if (driverId === ride.riderId) continue;
     const loc = hub.driverLocation(driverId);
+    if (!fitsDriverRoute(loc, ride)) continue;
     const pickupDistanceM = loc ? haversineMeters(loc.lat, loc.lng, ride.pickupLat, ride.pickupLng) : null;
     hub.sendTo(driverId, { type: 'ride:offer', ride, rider, pickupDistanceM });
   }

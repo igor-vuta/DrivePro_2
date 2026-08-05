@@ -1,4 +1,4 @@
-import { isFiniteNum } from './util.js';
+import { isFiniteNum, isLat, isLng } from './util.js';
 import { publicUser, rideCounterpart } from './views.js';
 
 // Realtime hub: tracks connected users, online (active) drivers and routes
@@ -135,8 +135,31 @@ export class Hub {
         conn.send({ type: 'error', message: 'Location is required to go online.', reqId: msg.reqId });
         return;
       }
-      this.drivers.set(user.id, { lat: msg.lat, lng: msg.lng, updatedAt: Date.now() });
-      conn.send({ type: 'driver:status', active: true, reqId: msg.reqId });
+      // Optional route mode: only requests along this corridor are offered.
+      let route = null;
+      if (msg.route && typeof msg.route === 'object') {
+        const r = msg.route;
+        const points = (Array.isArray(r.points) ? r.points : [])
+          .filter((p) => Array.isArray(p) && isLat(Number(p[0])) && isLng(Number(p[1])))
+          .slice(0, 300)
+          .map((p) => [Number(p[0]), Number(p[1])]);
+        if (points.length >= 2 && isLat(Number(r.destLat)) && isLng(Number(r.destLng))) {
+          route = {
+            points,
+            radiusM: Math.max(100, Math.min(5000, Math.round(Number(r.radiusM)) || 1000)),
+            destLat: Number(r.destLat),
+            destLng: Number(r.destLng),
+            destAddress: String(r.destAddress || '').slice(0, 200),
+          };
+        }
+      }
+      this.drivers.set(user.id, { lat: msg.lat, lng: msg.lng, updatedAt: Date.now(), route });
+      conn.send({
+        type: 'driver:status',
+        active: true,
+        route: route ? { destAddress: route.destAddress, radiusM: route.radiusM } : null,
+        reqId: msg.reqId,
+      });
       if (this.onDriverReady) this.onDriverReady(user.id, conn);
     });
 

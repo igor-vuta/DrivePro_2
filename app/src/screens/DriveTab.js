@@ -3,12 +3,12 @@ import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { notify, confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
-import { Card, Button, Sub, StatusDot, Row, Avatar, colors } from '../ui';
+import { Card, Button, Sub, StatusDot, Row, Avatar, Input, Segmented, colors } from '../ui';
 import { useAuth } from '../state';
 import { api } from '../api';
 import { wsClient } from '../ws';
 import UserProfileModal from '../UserProfileModal';
-import { t, errMsg } from '../i18n';
+import { t, errMsg, getLang } from '../i18n';
 
 // Priority: requester's points plus strong aging so nobody starves - a
 // request waiting ~4 minutes outranks most point balances.
@@ -22,6 +22,15 @@ function offerScore(o, nowMs) {
 function fmtKm(m) {
   if (m == null) return '';
   return m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`;
+}
+
+// Thin the OSRM geometry before shipping it over the socket.
+function simplifyPts(pts, max = 80) {
+  if (!Array.isArray(pts) || pts.length <= max) return pts || [];
+  const step = (pts.length - 1) / (max - 1);
+  const out = [];
+  for (let i = 0; i < max; i++) out.push(pts[Math.round(i * step)]);
+  return out;
 }
 
 function stars(user) {
@@ -48,8 +57,14 @@ export default function DriveTab({ openProfile }) {
   const [acceptingId, setAcceptingId] = useState(null);
   const [profileUserId, setProfileUserId] = useState(null);
   const [nowTick, setNowTick] = useState(Date.now());
+  const [routePlan, setRoutePlan] = useState(null); // { dest:{lat,lng,address}, points, radiusM }
+  const [routeQuery, setRouteQuery] = useState('');
+  const [routeResults, setRouteResults] = useState(null);
+  const [routeBusy, setRouteBusy] = useState(false);
+  const [routeErr, setRouteErr] = useState('');
   const watchRef = useRef(null);
   const pendingAcceptRef = useRef(null);
+  const routeMapRef = useRef(null);
 
   const drivingRide = activeRide && me && activeRide.driverId === me.id ? activeRide : null;
   const ridingRide = activeRide && me && activeRide.riderId === me.id ? activeRide : null;
@@ -133,6 +148,60 @@ export default function DriveTab({ openProfile }) {
     };
   }, [driverActive, !!drivingRide]);
 
+  const searchRouteDest = async () => {
+    const q = routeQuery.trim();
+    if (q.length < 2) return;
+    setRouteErr('');
+    setRouteBusy(true);
+    try {
+      const base = coords ? `&lat=${coords.lat}&lng=${coords.lng}` : '';
+      const r = await api('GET', `/api/geo/search?q=${encodeURIComponent(q)}${base}&lang=${getLang()}`, null, token);
+      setRouteResults(r.results || []);
+    } catch (e) {
+      setRouteErr(errMsg(e));
+    } finally {
+      setRouteBusy(false);
+    }
+  };
+
+  const chooseRouteDest = async (rslt) => {
+    setRouteErr('');
+    setRouteBusy(true);
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== 'granted') {
+        notify(t('drive.locationNeeded'), t('drive.locationNeededText'));
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const from = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+      setCoords(from);
+      let points = [[from.lat, from.lng], [rslt.lat, rslt.lng]];
+      try {
+        const r = await api(
+          'GET',
+          `/api/geo/route?fromLat=${from.lat}&fromLng=${from.lng}&toLat=${rslt.lat}&toLng=${rslt.lng}`,
+          null,
+          token
+        );
+        if (r.points && r.points.length >= 2) points = simplifyPts(r.points);
+      } catch (e) {
+        // straight-line corridor fallback
+      }
+      setRoutePlan((prev) => ({
+        dest: { lat: rslt.lat, lng: rslt.lng, address: rslt.address },
+        points,
+        radiusM: prev ? prev.radiusM : 1000,
+      }));
+      setRouteQuery('');
+      setRouteResults(null);
+    } catch (e) {
+      setRouteErr(errMsg(e));
+    } finally {
+      setRouteBusy(false);
+    }
+  };
+
   const goOnline = async () => {
     setBusyToggle(true);
     try {
@@ -144,7 +213,22 @@ export default function DriveTab({ openProfile }) {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const { latitude, longitude } = loc.coords;
       setCoords({ lat: latitude, lng: longitude });
-      const sent = wsClient.send({ type: 'driver:activate', lat: latitude, lng: longitude });
+      const sent = wsClient.send({
+        type: 'driver:activate',
+        lat: latitude,
+        lng: longitude,
+        ...(routePlan
+          ? {
+              route: {
+                destLat: routePlan.dest.lat,
+                destLng: routePlan.dest.lng,
+                destAddress: routePlan.dest.address,
+                radiusM: routePlan.radiusM,
+                points: routePlan.points,
+              },
+            }
+          : {}),
+      });
       if (!sent) notify(t('drive.offline'), t('drive.offlineTryAgain'));
     } catch (e) {
       notify(t('drive.error'), errMsg(e));
@@ -208,12 +292,89 @@ export default function DriveTab({ openProfile }) {
           <StatusDot on={driverActive} labelOn={t('drive.taking')} labelOff={t('drive.notTaking')} />
         </Row>
         <Sub>{me.car ? `${me.car.color} ${me.car.make} ${me.car.model} · ${me.car.plate}` : ''}</Sub>
+        {driverActive && routePlan ? (
+          <Sub>{t('drive.routeOnline', { r: fmtKm(routePlan.radiusM) })} → {routePlan.dest.address}</Sub>
+        ) : null}
         {driverActive ? (
           <Button title={t('drive.goOffline')} onPress={goOffline} kind="ghost" />
         ) : (
           <Button title={t('drive.goOnline')} onPress={goOnline} loading={busyToggle} />
         )}
       </Card>
+
+      {!driverActive ? (
+        <Card>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 4 }}>{t('drive.routeTitle')}</Text>
+          <Sub>{routePlan ? t('drive.routeSet') : t('drive.routeHint')}</Sub>
+          {routePlan ? (
+            <View>
+              <Sub style={{ marginBottom: 8 }}>{t('drive.to', { addr: routePlan.dest.address })}</Sub>
+              <View style={{ height: 170, borderRadius: 12, overflow: 'hidden', marginBottom: 10 }}>
+                <MapView
+                  key={`${routePlan.dest.lat},${routePlan.dest.lng}`}
+                  ref={routeMapRef}
+                  initialCenter={{ lat: routePlan.dest.lat, lng: routePlan.dest.lng }}
+                  markers={[
+                    ...(coords ? [{ id: 'me', lat: coords.lat, lng: coords.lng, kind: 'car' }] : []),
+                    { id: 'dest', lat: routePlan.dest.lat, lng: routePlan.dest.lng, kind: 'dest' },
+                  ]}
+                  polyline={routePlan.points}
+                  onReady={() => {
+                    if (routeMapRef.current && routePlan.points.length >= 2) routeMapRef.current.fitBounds(routePlan.points);
+                  }}
+                />
+              </View>
+              <Sub style={{ marginBottom: 4 }}>{t('drive.routeCorridor')}</Sub>
+              <Segmented
+                value={routePlan.radiusM}
+                onChange={(v) => setRoutePlan((p) => (p ? { ...p, radiusM: v } : p))}
+                options={[
+                  { value: 200, label: '200 m' },
+                  { value: 500, label: '500 m' },
+                  { value: 1000, label: '1 km' },
+                  { value: 2000, label: '2 km' },
+                ]}
+              />
+              <Button kind="ghost" title={t('drive.routeClear')} onPress={() => setRoutePlan(null)} style={{ marginTop: 8 }} />
+            </View>
+          ) : (
+            <View>
+              <Row>
+                <Input
+                  value={routeQuery}
+                  onChangeText={setRouteQuery}
+                  placeholder={t('drive.routeSearchPh')}
+                  returnKeyType="search"
+                  onSubmitEditing={searchRouteDest}
+                  containerStyle={{ flex: 1, marginBottom: 0 }}
+                />
+                <Button
+                  title={t('common.find')}
+                  onPress={searchRouteDest}
+                  loading={routeBusy}
+                  style={{ marginLeft: 8, height: 48, paddingHorizontal: 16, marginTop: 0 }}
+                />
+              </Row>
+              {routeResults
+                ? routeResults.map((r, i) => (
+                    <Pressable
+                      key={i}
+                      onPress={() => chooseRouteDest(r)}
+                      style={{ paddingVertical: 8, borderBottomWidth: 1, borderColor: colors.border }}
+                    >
+                      <Text style={{ color: colors.text }}>{r.address}</Text>
+                      <Text style={{ color: colors.sub, fontSize: 12 }} numberOfLines={1}>
+                        {r.fullAddress}
+                      </Text>
+                    </Pressable>
+                  ))
+                : null}
+              {routeResults && !routeResults.length ? <Sub>{t('ride.nothingFound')}</Sub> : null}
+              {routeErr ? <Sub style={{ color: colors.danger }}>{routeErr}</Sub> : null}
+            </View>
+          )}
+        </Card>
+      ) : null}
 
       {driverActive ? (
         offers.length === 0 ? (

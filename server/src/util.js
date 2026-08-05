@@ -101,6 +101,38 @@ export function cleanAddressDetails(raw) {
   return Object.keys(out).length ? out : null;
 }
 
+// Distance (meters) from a point to a polyline of [lat, lng] pairs, plus the
+// fractional position (segment index + t) of the nearest projection - used to
+// check travel direction along a driver's route. Equirectangular approximation,
+// accurate enough at city scale.
+export function pointToPolyline(lat, lng, pts) {
+  if (!Array.isArray(pts) || pts.length < 2) return { distM: Infinity, pos: -1 };
+  const cosLat = Math.cos((lat * Math.PI) / 180);
+  const X = (p) => p[1] * cosLat * 111_320;
+  const Y = (p) => p[0] * 110_540;
+  const px = X([lat, lng]);
+  const py = Y([lat, lng]);
+  let best = Infinity;
+  let bestPos = -1;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const ax = X(pts[i]);
+    const ay = Y(pts[i]);
+    const bx = X(pts[i + 1]);
+    const by = Y(pts[i + 1]);
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    if (d < best) {
+      best = d;
+      bestPos = i + t;
+    }
+  }
+  return { distM: best, pos: bestPos };
+}
+
 export function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
   const toRad = (d) => (d * Math.PI) / 180;
