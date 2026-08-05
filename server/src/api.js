@@ -267,6 +267,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
       stars,
       comment: cleanStr(body.comment, 300),
     });
+    store.addPoints(user.id, 1); // small thank-you for rating
     if (hub) hub.sendTo(rateeId, { type: 'rating:received' });
     sendJson(res, 201, { ok: true, rating: { stars: rating.stars, comment: rating.comment } });
   });

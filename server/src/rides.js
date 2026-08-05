@@ -133,6 +133,7 @@ export function setupRides({ store, hub }) {
     const minutes = Math.max(1, (finishedAt - (updated.startedAt || finishedAt)) / 60000);
     const pointsEarned = Math.max(1, Math.min(5000, Math.round(km * minutes)));
     store.addPoints(user.id, pointsEarned);
+    store.addPoints(updated.riderId, 1); // riders climb too, slowly
     hub.sendTo(updated.riderId, { type: 'ride:update', ride: updated });
     hub.sendTo(updated.driverId, { type: 'ride:update', ride: updated, pointsEarned, reqId: msg.reqId });
   });

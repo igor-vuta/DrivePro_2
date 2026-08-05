@@ -10,6 +10,15 @@ import { wsClient } from '../ws';
 import UserProfileModal from '../UserProfileModal';
 import { t, errMsg } from '../i18n';
 
+// Priority: requester's points plus strong aging so nobody starves - a
+// request waiting ~4 minutes outranks most point balances.
+const AGING_PER_MIN = 150;
+function offerScore(o, nowMs) {
+  const pts = o.rider && o.rider.points ? o.rider.points : 0;
+  const waitedMin = o.ride && o.ride.createdAt ? (nowMs - o.ride.createdAt) / 60000 : 0;
+  return pts + waitedMin * AGING_PER_MIN;
+}
+
 function fmtKm(m) {
   if (m == null) return '';
   return m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`;
@@ -38,11 +47,19 @@ export default function DriveTab({ openProfile }) {
   const [offers, setOffers] = useState([]);
   const [acceptingId, setAcceptingId] = useState(null);
   const [profileUserId, setProfileUserId] = useState(null);
+  const [nowTick, setNowTick] = useState(Date.now());
   const watchRef = useRef(null);
   const pendingAcceptRef = useRef(null);
 
   const drivingRide = activeRide && me && activeRide.driverId === me.id ? activeRide : null;
   const ridingRide = activeRide && me && activeRide.riderId === me.id ? activeRide : null;
+
+  // Aging re-sort tick while the feed is visible.
+  useEffect(() => {
+    if (!offers.length) return undefined;
+    const iv = setInterval(() => setNowTick(Date.now()), 20000);
+    return () => clearInterval(iv);
+  }, [offers.length]);
 
   // Order feed subscriptions.
   useEffect(() => {
@@ -205,7 +222,7 @@ export default function DriveTab({ openProfile }) {
           </Card>
         ) : (
           <ScrollView>
-            {offers.map((o) => (
+            {[...offers].sort((a, b) => offerScore(b, nowTick) - offerScore(a, nowTick)).map((o) => (
               <Card key={o.ride.id}>
                 <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
                   <Row style={{ flex: 1, marginRight: 8 }}>
@@ -218,6 +235,9 @@ export default function DriveTab({ openProfile }) {
                     >
                       {o.rider ? o.rider.name : ''}{' '}
                       <Text style={{ color: colors.sub, fontWeight: '400', fontSize: 13 }}>{stars(o.rider)}</Text>
+                      {o.rider && o.rider.points >= 100 ? (
+                        <Text style={{ color: '#b8860b', fontWeight: '700', fontSize: 13 }}>  ⚡{o.rider.points}</Text>
+                      ) : null}
                     </Text>
                   </Row>
                   {o.pickupDistanceM != null ? (
@@ -240,6 +260,7 @@ export default function DriveTab({ openProfile }) {
                 ) : null}
                 <Sub style={{ marginBottom: 6 }}>
                   {t('drive.trip', { d: fmtKm(o.ride.distanceM) })} · {t('common.freeRide')}
+                  {o.ride.createdAt && nowTick - o.ride.createdAt > 120000 ? ` · ${t('drive.waitingFor', { m: Math.round((nowTick - o.ride.createdAt) / 60000) })}` : ''}
                   {o.ride.comment ? `\n“${o.ride.comment}”` : ''}
                 </Sub>
                 <Row>

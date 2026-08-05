@@ -145,9 +145,14 @@ check('points persisted on driver profile', meAfter.json.user.points === fin.poi
 const publicView = await api('GET', `/api/users/${meAfter.json.user.id}`, null, rider.token);
 check('points visible on public profile', publicView.json.user.points === fin.pointsEarned);
 
-// rider earned nothing
+// rider earns +1 for the finished ride
 const riderMe = await api('GET', '/api/me', null, rider.token);
-check('rider earns no points', (riderMe.json.user.points || 0) === 0);
+check('rider earns +1 for the ride', (riderMe.json.user.points || 0) === 1, `got ${riderMe.json.user.points}`);
+
+// +1 more for leaving a rating
+await api('POST', `/api/rides/${offer.ride.id}/rating`, { stars: 5, comment: 'Рахмет!' }, rider.token);
+const riderMe2 = await api('GET', '/api/me', null, rider.token);
+check('rating grants +1 to the rater', (riderMe2.json.user.points || 0) === 2, `got ${riderMe2.json.user.points}`);
 
 // geo lang param does not break the endpoint shape (upstream may be unreachable in CI)
 const geo = await api('GET', '/api/geo/search?q=%D0%90%D0%B1%D0%B0%D1%8F&lang=ru', null, rider.token);

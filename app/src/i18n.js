@@ -124,6 +124,7 @@ const en = {
   'drive.activeAsRider': 'You have an active ride as a rider — see the Ride tab.',
   'drive.to': 'To: {addr}',
   'drive.pointsEarned': '+{n} points for the trip',
+  'drive.waitingFor': 'waiting {m} min',
 
   // permissions
   'perm.title': 'Before we start',
@@ -354,6 +355,7 @@ const ru = {
   'drive.activeAsRider': 'У вас активная поездка как у пассажира — откройте вкладку «Поездка».',
   'drive.to': 'Куда: {addr}',
   'drive.pointsEarned': '+{n} баллов за поездку',
+  'drive.waitingFor': 'ждёт {m} мин',
 
   'profile.history': 'История поездок ›',
   'profile.say': 'Что о вас говорят',
