@@ -1,6 +1,10 @@
 # dependencies
 node_modules/
 
+# signing key + cloud-session recycle bin - never commit these
+_keys/
+_to_delete/
+
 # expo
 .expo/
 web-build/
