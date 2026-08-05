@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, Text, Vibration, View } from 'react-native';
 import { notify, confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
@@ -97,7 +97,7 @@ function fmtDetails(d) {
 }
 
 export default function DriveTab({ openProfile }) {
-  const { token, me, driverActive, activeRide, counterpart } = useAuth();
+  const { token, me, driverActive, activeRide, driverRides } = useAuth();
   const [busyToggle, setBusyToggle] = useState(false);
   const [coords, setCoords] = useState(null);
   const [offers, setOffers] = useState([]);
@@ -116,7 +116,8 @@ export default function DriveTab({ openProfile }) {
   const pendingAcceptRef = useRef(null);
   const routeMapRef = useRef(null);
 
-  const drivingRide = activeRide && me && activeRide.driverId === me.id ? activeRide : null;
+  const convoy = driverRides || [];
+  const drivingRide = convoy.length ? convoy[0].ride : null;
   const ridingRide = activeRide && me && activeRide.riderId === me.id ? activeRide : null;
 
   // Aging re-sort tick while the feed is visible.
@@ -126,10 +127,20 @@ export default function DriveTab({ openProfile }) {
     return () => clearInterval(iv);
   }, [offers.length]);
 
+  const convoyRef = useRef(0);
+  useEffect(() => {
+    convoyRef.current = convoy.length;
+  }, [convoy.length]);
+
   // Order feed subscriptions.
   useEffect(() => {
     const offOffer = wsClient.on('ride:offer', (msg) => {
       setOffers((prev) => (prev.some((o) => o.ride.id === msg.ride.id) ? prev : [msg, ...prev]));
+      // Mid-convoy: make the new corridor rider impossible to miss.
+      if (convoyRef.current > 0) {
+        Vibration.vibrate([0, 250, 120, 250]);
+        notify(`⚡ ${t('drive.newAlong')}`, `${msg.ride.pickupAddress || ''} → ${msg.ride.destAddress || ''}`);
+      }
     });
     const offGone = wsClient.on('ride:offer_gone', (msg) => {
       setOffers((prev) => prev.filter((o) => o.ride.id !== msg.rideId));
@@ -161,14 +172,15 @@ export default function DriveTab({ openProfile }) {
     }
   }, [coords ? coords.lat : null, coords ? coords.lng : null, driverActive, navFollow]);
 
-  // Accepting resolved successfully -> ride:update set the active ride.
+  // Accepting resolved successfully -> the ride joined the convoy.
   useEffect(() => {
-    if (drivingRide && pendingAcceptRef.current) {
+    const pending = pendingAcceptRef.current;
+    if (pending && convoy.some((x) => x.ride.id === pending)) {
       pendingAcceptRef.current = null;
       setAcceptingId(null);
-      setOffers([]);
+      setOffers((prev) => prev.filter((o) => o.ride.id !== pending));
     }
-  }, [drivingRide]);
+  }, [convoy.length]);
 
   // Stream location while online (and during an active ride).
   useEffect(() => {
@@ -315,6 +327,62 @@ export default function DriveTab({ openProfile }) {
     setOffers((prev) => prev.filter((o) => o.ride.id !== rideId));
   };
 
+  const offerCards = [...offers].sort((a, b) => offerScore(b, nowTick) - offerScore(a, nowTick)).map((o) => (
+              <FadeIn key={o.ride.id} keyId={o.ride.id} from={22}>
+              <Card>
+                <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Row style={{ flex: 1, marginRight: 8 }}>
+                    <Pressable onPress={o.rider ? () => setProfileUserId(o.rider.id) : undefined}>
+                      <Avatar user={o.rider} size={34} style={{ marginRight: 8 }} />
+                    </Pressable>
+                    <Text
+                      style={{ fontSize: 16, fontWeight: '700', color: colors.text, flexShrink: 1 }}
+                      onPress={o.rider ? () => setProfileUserId(o.rider.id) : undefined}
+                    >
+                      {o.rider ? o.rider.name : ''}{' '}
+                      <Text style={{ color: colors.sub, fontWeight: '400', fontSize: 13 }}>{stars(o.rider)}</Text>
+                      {o.rider && o.rider.points >= 100 ? (
+                        <Text style={{ color: colors.gold, fontWeight: '700', fontSize: 13 }}>  ⚡{o.rider.points}</Text>
+                      ) : null}
+                    </Text>
+                  </Row>
+                  {o.pickupDistanceM != null ? (
+                    <Text style={{ color: colors.sub, fontSize: 13 }}>{t('drive.away', { d: fmtKm(o.pickupDistanceM) })}</Text>
+                  ) : null}
+                </Row>
+                <Row style={{ marginBottom: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.ok, marginRight: 8 }} />
+                  <Text style={{ color: colors.text, flex: 1 }} numberOfLines={1}>{o.ride.pickupAddress}</Text>
+                </Row>
+                {fmtDetails(o.ride.pickupDetails) ? (
+                  <Sub style={{ marginBottom: 4, marginLeft: 16 }}>{fmtDetails(o.ride.pickupDetails)}</Sub>
+                ) : null}
+                <Row style={{ marginBottom: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger, marginRight: 8 }} />
+                  <Text style={{ color: colors.text, flex: 1 }} numberOfLines={1}>{o.ride.destAddress}</Text>
+                </Row>
+                {fmtDetails(o.ride.destDetails) ? (
+                  <Sub style={{ marginBottom: 4, marginLeft: 16 }}>{fmtDetails(o.ride.destDetails)}</Sub>
+                ) : null}
+                <Sub style={{ marginBottom: 6 }}>
+                  {t('drive.trip', { d: fmtKm(o.ride.distanceM) })} · {t('common.freeRide')}
+                  {o.ride.createdAt && nowTick - o.ride.createdAt > 120000 ? ` · ${t('drive.waitingFor', { m: Math.round((nowTick - o.ride.createdAt) / 60000) })}` : ''}
+                  {o.ride.comment ? `\n“${o.ride.comment}”` : ''}
+                </Sub>
+                <Row>
+                  <Button kind="ghost" title={t('drive.dismiss')} onPress={() => dismiss(o.ride.id)} style={{ flex: 1, marginRight: 8 }} />
+                  <Button
+                    title={t('drive.accept')}
+                    onPress={() => accept(o.ride.id)}
+                    loading={acceptingId === o.ride.id}
+                    disabled={!!acceptingId && acceptingId !== o.ride.id}
+                    style={{ flex: 2 }}
+                  />
+                </Row>
+              </Card>
+              </FadeIn>
+            ));
+
   if (!me) return null;
 
   if (!me.isDriver) {
@@ -335,10 +403,6 @@ export default function DriveTab({ openProfile }) {
     );
   }
 
-  if (drivingRide) {
-    return <ActiveDriveView ride={drivingRide} rider={counterpart} myCoords={coords} token={token} />;
-  }
-
   return (
     <View style={{ flex: 1 }}>
       <UserProfileModal userId={profileUserId} onClose={() => setProfileUserId(null)} />
@@ -352,6 +416,18 @@ export default function DriveTab({ openProfile }) {
         initialCenter={coords || (routePlan ? routePlan.dest : { lat: 43.2389, lng: 76.8897 })}
         token={token}
       />
+      {convoy.length ? (
+        <ScrollView>
+          <ConvoyView rides={convoy} myCoords={coords} token={token} openProfile={setProfileUserId} />
+          {offers.length ? (
+            <Text style={{ color: colors.gold, fontWeight: '800', fontSize: 15, marginBottom: 8 }}>
+              ⚡ {t('drive.newAlong')}
+            </Text>
+          ) : null}
+          {offerCards}
+        </ScrollView>
+      ) : (
+      <>
       <Card>
         <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
           <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>
@@ -507,90 +583,41 @@ export default function DriveTab({ openProfile }) {
             <Sub style={{ marginBottom: 0 }}>{t('drive.waiting')}</Sub>
           </Card>
         ) : (
-          <ScrollView>
-            {[...offers].sort((a, b) => offerScore(b, nowTick) - offerScore(a, nowTick)).map((o) => (
-              <FadeIn key={o.ride.id} keyId={o.ride.id} from={22}>
-              <Card>
-                <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-                  <Row style={{ flex: 1, marginRight: 8 }}>
-                    <Pressable onPress={o.rider ? () => setProfileUserId(o.rider.id) : undefined}>
-                      <Avatar user={o.rider} size={34} style={{ marginRight: 8 }} />
-                    </Pressable>
-                    <Text
-                      style={{ fontSize: 16, fontWeight: '700', color: colors.text, flexShrink: 1 }}
-                      onPress={o.rider ? () => setProfileUserId(o.rider.id) : undefined}
-                    >
-                      {o.rider ? o.rider.name : ''}{' '}
-                      <Text style={{ color: colors.sub, fontWeight: '400', fontSize: 13 }}>{stars(o.rider)}</Text>
-                      {o.rider && o.rider.points >= 100 ? (
-                        <Text style={{ color: colors.gold, fontWeight: '700', fontSize: 13 }}>  ⚡{o.rider.points}</Text>
-                      ) : null}
-                    </Text>
-                  </Row>
-                  {o.pickupDistanceM != null ? (
-                    <Text style={{ color: colors.sub, fontSize: 13 }}>{t('drive.away', { d: fmtKm(o.pickupDistanceM) })}</Text>
-                  ) : null}
-                </Row>
-                <Row style={{ marginBottom: 4 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.ok, marginRight: 8 }} />
-                  <Text style={{ color: colors.text, flex: 1 }} numberOfLines={1}>{o.ride.pickupAddress}</Text>
-                </Row>
-                {fmtDetails(o.ride.pickupDetails) ? (
-                  <Sub style={{ marginBottom: 4, marginLeft: 16 }}>{fmtDetails(o.ride.pickupDetails)}</Sub>
-                ) : null}
-                <Row style={{ marginBottom: 4 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger, marginRight: 8 }} />
-                  <Text style={{ color: colors.text, flex: 1 }} numberOfLines={1}>{o.ride.destAddress}</Text>
-                </Row>
-                {fmtDetails(o.ride.destDetails) ? (
-                  <Sub style={{ marginBottom: 4, marginLeft: 16 }}>{fmtDetails(o.ride.destDetails)}</Sub>
-                ) : null}
-                <Sub style={{ marginBottom: 6 }}>
-                  {t('drive.trip', { d: fmtKm(o.ride.distanceM) })} · {t('common.freeRide')}
-                  {o.ride.createdAt && nowTick - o.ride.createdAt > 120000 ? ` · ${t('drive.waitingFor', { m: Math.round((nowTick - o.ride.createdAt) / 60000) })}` : ''}
-                  {o.ride.comment ? `\n“${o.ride.comment}”` : ''}
-                </Sub>
-                <Row>
-                  <Button kind="ghost" title={t('drive.dismiss')} onPress={() => dismiss(o.ride.id)} style={{ flex: 1, marginRight: 8 }} />
-                  <Button
-                    title={t('drive.accept')}
-                    onPress={() => accept(o.ride.id)}
-                    loading={acceptingId === o.ride.id}
-                    disabled={!!acceptingId && acceptingId !== o.ride.id}
-                    style={{ flex: 2 }}
-                  />
-                </Row>
-              </Card>
-              </FadeIn>
-            ))}
-          </ScrollView>
+          <ScrollView>{offerCards}</ScrollView>
         )
       ) : null}
+      </>
+      )}
     </View>
   );
 }
 
-function ActiveDriveView({ ride, rider, myCoords, token }) {
+// Convoy: the driver's live view while carrying 1-3 passengers - one map
+// with every target, per-passenger status controls, follow-me and remaining km.
+function ConvoyView({ rides, myCoords, token, openProfile }) {
   const mapRef = useRef(null);
   const [route, setRoute] = useState(null);
-  const [busyAction, setBusyAction] = useState(false);
-  const [profileUserId, setProfileUserId] = useState(null);
+  const [busyId, setBusyId] = useState(null);
   const [follow, setFollow] = useState(true);
   const fittedRef = useRef(false);
 
-  const inTrip = ride.status === 'in_progress';
-  const target = inTrip
-    ? { lat: ride.destLat, lng: ride.destLng, kind: 'dest' }
-    : { lat: ride.pickupLat, lng: ride.pickupLng, kind: 'pickup' };
+  const targetFor = (r) =>
+    r.status === 'in_progress'
+      ? { lat: r.destLat, lng: r.destLng, kind: 'dest' }
+      : { lat: r.pickupLat, lng: r.pickupLng, kind: 'pickup' };
+  const first = rides[0];
+  const target = targetFor(first.ride);
+  const statuses = rides.map((x) => x.ride.status).join(',');
 
-  // New status -> new leg: clear the route, refit the map, unlock buttons.
+  // New leg for the lead ride -> new route + refit; any status change unlocks buttons.
   useEffect(() => {
     setRoute(null);
     fittedRef.current = false;
-    setBusyAction(false);
-  }, [ride.status, ride.id]);
+  }, [first.ride.id, first.ride.status]);
+  useEffect(() => {
+    setBusyId(null);
+  }, [statuses, rides.length]);
 
-  // Route from the driver's position to the current target.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -604,77 +631,70 @@ function ActiveDriveView({ ride, rider, myCoords, token }) {
         );
         if (!cancelled) setRoute(r);
       } catch (e) {
-        // straight line fallback drawn below
+        // straight line fallback below
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [myCoords, ride.id, ride.status, route]);
+  }, [myCoords, first.ride.id, first.ride.status, route]);
 
   useEffect(() => {
     if (mapRef.current && myCoords && !fittedRef.current) {
       fittedRef.current = true;
-      mapRef.current.fitBounds([[myCoords.lat, myCoords.lng], [target.lat, target.lng]]);
+      mapRef.current.fitBounds([
+        [myCoords.lat, myCoords.lng],
+        ...rides.map((x) => {
+          const tg = targetFor(x.ride);
+          return [tg.lat, tg.lng];
+        }),
+      ]);
     }
-  }, [myCoords, ride.status]);
+  }, [myCoords, rides.length, first.ride.status]);
 
-  // Follow-me during the ride: keep the car centered as it moves.
+  // Follow-me while driving the convoy.
   useEffect(() => {
     if (follow && fittedRef.current && myCoords && mapRef.current) {
       mapRef.current.setCenter({ lat: myCoords.lat, lng: myCoords.lng, animate: true });
     }
   }, [myCoords ? myCoords.lat : null, myCoords ? myCoords.lng : null, follow]);
 
-  const markers = [{ id: 'target', lat: target.lat, lng: target.lng, kind: target.kind }];
+  const markers = rides.map((x) => {
+    const tg = targetFor(x.ride);
+    return { id: `t-${x.ride.id}`, lat: tg.lat, lng: tg.lng, kind: tg.kind };
+  });
   if (myCoords) markers.push({ id: 'me', lat: myCoords.lat, lng: myCoords.lng, kind: 'car' });
-
   const polyline = route
     ? route.points
     : myCoords
     ? [[myCoords.lat, myCoords.lng], [target.lat, target.lng]]
     : null;
 
-  const call = () => {
-    if (rider && rider.phone) Linking.openURL(`tel:${rider.phone}`);
+  const act = (type, rideId) => {
+    setBusyId(rideId);
+    const ok = wsClient.send({ type, rideId });
+    if (!ok) {
+      setBusyId(null);
+      notify(t('drive.offline'), t('common.offlineSend'));
+    }
   };
-
-  const cancel = () => {
+  const cancelRide = (rideId) => {
     confirmAction({
       title: t('ride.cancelQ'),
       message: t('drive.riderNotified'),
       okLabel: t('ride.cancelRide'),
       cancelLabel: t('ride.keepRide'),
-      onOk: () => wsClient.send({ type: 'ride:cancel', rideId: ride.id }),
+      onOk: () => wsClient.send({ type: 'ride:cancel', rideId }),
     });
   };
 
-  const act = (type) => {
-    setBusyAction(true);
-    const ok = wsClient.send({ type, rideId: ride.id });
-    if (!ok) {
-      setBusyAction(false);
-      notify(t('drive.offline'), t('common.offlineSend'));
-    }
-  };
-
-  const heading =
-    ride.status === 'accepted' ? t('drive.headPickup') : ride.status === 'arrived' ? t('drive.waitingRider') : t('drive.onTrip');
-  const mainAction =
-    ride.status === 'accepted'
-      ? { title: t('drive.arrived'), type: 'ride:arrived' }
-      : ride.status === 'arrived'
-      ? { title: t('drive.start'), type: 'ride:start' }
-      : { title: t('drive.finish'), type: 'ride:finish' };
-
   return (
-    <View style={{ flex: 1, marginHorizontal: -16 }}>
-      <View style={{ flex: 1 }}>
-        <MapView ref={mapRef} initialCenter={{ lat: target.lat, lng: target.lng }} markers={markers} polyline={polyline} />
-      </View>
-      <View style={{ paddingHorizontal: 16, paddingTop: 10, backgroundColor: colors.bg }}>
-        <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-          <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>{heading}</Text>
+    <View>
+      <Card style={{ padding: 10 }}>
+        <Row style={{ justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 6 }}>
+          <Text style={{ fontWeight: '800', color: colors.text, fontSize: 16 }}>
+            🚗 {t('drive.convoyTitle', { n: rides.length })}
+          </Text>
           <Row>
             {route && route.points && myCoords ? (
               <Text style={{ color: colors.sub, marginRight: 12, fontSize: 13 }}>
@@ -686,34 +706,68 @@ function ActiveDriveView({ ride, rider, myCoords, token }) {
             </Pressable>
           </Row>
         </Row>
-        <Card style={{ marginBottom: 10 }}>
-          <Row style={{ marginBottom: 2 }}>
-            <Pressable onPress={rider ? () => setProfileUserId(rider.id) : undefined}>
-              <Avatar user={rider} size={34} style={{ marginRight: 8 }} />
-            </Pressable>
-            <Text
-              style={{ fontSize: 16, fontWeight: '700', color: colors.text, flexShrink: 1 }}
-              onPress={rider ? () => setProfileUserId(rider.id) : undefined}
-            >
-              {rider ? rider.name : ''}{' '}
-              <Text style={{ color: colors.sub, fontWeight: '400', fontSize: 13 }}>{stars(rider)}</Text>
-            </Text>
-          </Row>
-          <Sub style={{ marginBottom: 6 }}>
-            {inTrip ? t('drive.to', { addr: ride.destAddress }) : `${ride.pickupAddress} → ${ride.destAddress}`}
-          </Sub>
-          {fmtDetails(inTrip ? ride.destDetails : ride.pickupDetails) ? (
-            <Sub style={{ marginBottom: 6 }}>{fmtDetails(inTrip ? ride.destDetails : ride.pickupDetails)}</Sub>
-          ) : null}
-          {ride.comment && !inTrip ? <Sub style={{ marginBottom: 6 }}>“{ride.comment}”</Sub> : null}
-          <Button title={mainAction.title} onPress={() => act(mainAction.type)} loading={busyAction} />
-          <Row style={{ marginTop: 8 }}>
-            <Button kind="ghost" title={t('drive.callRider')} onPress={call} style={{ flex: 1, marginRight: inTrip ? 0 : 8 }} />
-            {!inTrip ? <Button kind="ghost" title={t('common.cancel')} onPress={cancel} style={{ flex: 1 }} /> : null}
-          </Row>
-        </Card>
-      </View>
-      <UserProfileModal userId={profileUserId} onClose={() => setProfileUserId(null)} />
+        <View style={{ height: 250, borderRadius: 12, overflow: 'hidden' }}>
+          <MapView ref={mapRef} initialCenter={{ lat: target.lat, lng: target.lng }} markers={markers} polyline={polyline} />
+        </View>
+      </Card>
+
+      {rides.map(({ ride, rider }, idx) => {
+        const inTrip = ride.status === 'in_progress';
+        const heading =
+          ride.status === 'accepted'
+            ? t('drive.headPickup')
+            : ride.status === 'arrived'
+            ? t('drive.waitingRider')
+            : t('drive.onTrip');
+        const mainAction =
+          ride.status === 'accepted'
+            ? { title: t('drive.arrived'), type: 'ride:arrived' }
+            : ride.status === 'arrived'
+            ? { title: t('drive.start'), type: 'ride:start' }
+            : { title: t('drive.finish'), type: 'ride:finish' };
+        return (
+          <FadeIn key={ride.id} keyId={ride.id} from={16}>
+            <Card>
+              <Row style={{ marginBottom: 2 }}>
+                <Pressable onPress={rider ? () => openProfile(rider.id) : undefined}>
+                  <Avatar user={rider} size={34} style={{ marginRight: 8 }} />
+                </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{ fontSize: 15, fontWeight: '700', color: colors.text }}
+                    onPress={rider ? () => openProfile(rider.id) : undefined}
+                  >
+                    {idx + 1}. {rider ? rider.name : ''}{' '}
+                    <Text style={{ color: colors.sub, fontWeight: '400', fontSize: 12 }}>{stars(rider)}</Text>
+                  </Text>
+                  <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>{heading}</Text>
+                </View>
+              </Row>
+              <Sub style={{ marginBottom: 6 }}>
+                {inTrip ? t('drive.to', { addr: ride.destAddress }) : `${ride.pickupAddress} → ${ride.destAddress}`}
+              </Sub>
+              {fmtDetails(inTrip ? ride.destDetails : ride.pickupDetails) ? (
+                <Sub style={{ marginBottom: 6 }}>{fmtDetails(inTrip ? ride.destDetails : ride.pickupDetails)}</Sub>
+              ) : null}
+              {ride.comment && !inTrip ? <Sub style={{ marginBottom: 6 }}>“{ride.comment}”</Sub> : null}
+              <Button title={mainAction.title} onPress={() => act(mainAction.type, ride.id)} loading={busyId === ride.id} />
+              <Row style={{ marginTop: 8 }}>
+                <Button
+                  kind="ghost"
+                  title={t('drive.callRider')}
+                  onPress={() => {
+                    if (rider && rider.phone) Linking.openURL(`tel:${rider.phone}`);
+                  }}
+                  style={{ flex: 1, marginRight: inTrip ? 0 : 8 }}
+                />
+                {!inTrip ? (
+                  <Button kind="ghost" title={t('common.cancel')} onPress={() => cancelRide(ride.id)} style={{ flex: 1 }} />
+                ) : null}
+              </Row>
+            </Card>
+          </FadeIn>
+        );
+      })}
     </View>
   );
 }

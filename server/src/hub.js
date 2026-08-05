@@ -89,6 +89,9 @@ export class Hub {
       activeRide,
       counterpart: rideCounterpart(this.store, activeRide, user.id),
       driverLocation: driverLoc ? { lat: driverLoc.lat, lng: driverLoc.lng } : null,
+      driverRides: this.store
+        .listActiveRidesForDriver(user.id)
+        .map((r) => ({ ride: r, rider: rideCounterpart(this.store, r, user.id) })),
     });
 
     // Online driver reconnecting: replay any open orders they may have missed.

@@ -166,7 +166,7 @@ d1.send({ type: 'driver:location', lat: 51.505, lng: -0.105 });
 const relay = await r.nextOf('ride:driver_location');
 check('driver movement relayed to rider', relay.rideId === created.id && relay.lat === 51.505);
 
-// busy driver can't take another order
+// a busy driver may now take another order (convoy, since L7)
 r.send({ type: 'ride:cancel', rideId: 'nonexistent' });
 await r.nextOf('error');
 const rider2 = await reg('+15551110004', 'Rob Rider');
@@ -176,8 +176,13 @@ r2.send({ type: 'ride:request', pickup: { lat: 51.5, lng: -0.1, address: 'A' }, 
 const created2 = (await r2.nextOf('ride:created')).ride;
 await d2.nextOf('ride:offer');
 d1.send({ type: 'ride:accept', rideId: created2.id });
-const errBusy = await d1.nextOf('error');
-check('driver with active ride cannot accept another', /current ride/i.test(errBusy.message));
+const convoyUpd = await d1.nextOf('ride:update');
+check('driver with active ride can convoy a second one', convoyUpd.ride.id === created2.id && convoyUpd.ride.status === 'accepted');
+const meConvoy = await api('GET', '/api/me', null, drv1.token);
+check('/api/me lists both convoy rides', (meConvoy.json.driverRides || []).length === 2);
+// hand the second ride back so the rest of the flow stays as before
+d1.send({ type: 'ride:cancel', rideId: created2.id });
+await d1.nextOf('ride:cancelled');
 
 // reconnect mid-ride: hello carries ride + counterpart
 const rReconnect = await connectWs(rider.token);
@@ -198,13 +203,15 @@ const c1 = await r.nextOf('ride:cancelled');
 const c2 = await d1.nextOf('ride:cancelled');
 check('both sides notified of cancel', c1.ride.id === created.id && c2.ride.id === created.id && c2.ride.cancelledBy === 'rider');
 
-// driver 1 is free again and can accept the second rider's open order
-d1.send({ type: 'ride:accept', rideId: created2.id });
+// driver 1 is free again and can accept a fresh open order
+r2.send({ type: 'ride:request', pickup: { lat: 51.5, lng: -0.1, address: 'A' }, dest: { lat: 51.51, lng: -0.11, address: 'B' } });
+const created2b = (await r2.nextOf('ride:created')).ride;
+d1.send({ type: 'ride:accept', rideId: created2b.id });
 const upd2 = await d1.nextOf('ride:update');
-check('freed driver can accept the next order', upd2.ride.id === created2.id && upd2.ride.status === 'accepted');
+check('freed driver can accept the next order', upd2.ride.id === created2b.id && upd2.ride.status === 'accepted');
 
 // non-driver cannot accept
-r2.send({ type: 'ride:cancel', rideId: created2.id });
+r2.send({ type: 'ride:cancel', rideId: created2b.id });
 await r2.nextOf('ride:cancelled');
 await d1.nextOf('ride:cancelled');
 r2.send({ type: 'ride:request', pickup: { lat: 51.5, lng: -0.1, address: 'A' }, dest: { lat: 51.51, lng: -0.11, address: 'B' } });

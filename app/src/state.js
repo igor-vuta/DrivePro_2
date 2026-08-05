@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
   const [me, setMe] = useState(null); // public profile of the signed-in user
   const [driverActive, setDriverActive] = useState(false);
   const [activeRide, setActiveRide] = useState(null);
+  const [driverRides, setDriverRides] = useState([]); // convoy: [{ ride, rider }]
   const [counterpart, setCounterpart] = useState(null);
   const [driverLoc, setDriverLoc] = useState(null);
   const [pendingRating, setPendingRating] = useState(null); // { ride, counterpart: {id, name} }
@@ -32,6 +33,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     rideRef.current = activeRide;
   }, [activeRide]);
+  const driverRidesRef = useRef([]);
+  useEffect(() => {
+    driverRidesRef.current = driverRides;
+  }, [driverRides]);
   const counterpartRef = useRef(null);
   useEffect(() => {
     counterpartRef.current = counterpart;
@@ -60,6 +65,7 @@ export function AuthProvider({ children }) {
           setActiveRide(data.activeRide || null);
           setCounterpart(data.counterpart || null);
           setDriverLoc(data.driverLocation || null);
+          setDriverRides(data.driverRides || []);
         }
       } catch (e) {
         await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
@@ -87,6 +93,7 @@ export function AuthProvider({ children }) {
             setActiveRide(data.activeRide || null);
             setCounterpart(data.counterpart || null);
             setDriverLoc(data.driverLocation || null);
+            setDriverRides(data.driverRides || []);
           })
           .catch(() => {});
       }
@@ -109,6 +116,7 @@ export function AuthProvider({ children }) {
       setActiveRide(msg.activeRide || null);
       setCounterpart(msg.counterpart || null);
       setDriverLoc(msg.driverLocation || null);
+      setDriverRides(msg.driverRides || []);
     });
     const offStatus = wsClient.on('driver:status', (msg) => setDriverActive(!!msg.active));
     const offCreated = wsClient.on('ride:created', (msg) => {
@@ -120,13 +128,20 @@ export function AuthProvider({ children }) {
       const r = msg.ride;
       if (msg.counterpart) setCounterpart(msg.counterpart);
       if (msg.driverLocation) setDriverLoc(msg.driverLocation);
+      const my0 = meRef.current;
+      const iAmDriver = !!(my0 && r.driverId === my0.id);
       if (r.status === 'finished') {
-        setActiveRide(null);
+        let remaining = driverRidesRef.current || [];
+        const entry = remaining.find((x) => x.ride.id === r.id);
+        if (iAmDriver) {
+          remaining = remaining.filter((x) => x.ride.id !== r.id);
+          setDriverRides(remaining);
+        }
+        setActiveRide(iAmDriver && remaining.length ? remaining[0].ride : null);
         setDriverLoc(null);
-        const c = counterpartRef.current;
+        const c = iAmDriver ? (entry && entry.rider) || counterpartRef.current : counterpartRef.current;
         setCounterpart(null);
-        const my0 = meRef.current;
-        if (msg.pointsEarned && my0 && r.driverId === my0.id) {
+        if (msg.pointsEarned && iAmDriver) {
           notify(t('rate.finished'), t('drive.pointsEarned', { n: msg.pointsEarned }));
           api('GET', '/api/me', null, token)
             .then((data) => {
@@ -134,8 +149,20 @@ export function AuthProvider({ children }) {
             })
             .catch(() => {});
         }
-        setPendingRating({ ride: r, counterpart: c ? { id: c.id, name: c.name } : null });
+        // A driver still carrying passengers keeps driving - they can rate
+        // later from the history screen.
+        if (!iAmDriver || remaining.length === 0) {
+          setPendingRating({ ride: r, counterpart: c ? { id: c.id, name: c.name } : null });
+        }
         return;
+      }
+      if (iAmDriver) {
+        setDriverRides((prev) => {
+          const others = prev.filter((x) => x.ride.id !== r.id);
+          const existing = prev.find((x) => x.ride.id === r.id);
+          const rider = msg.counterpart || (existing ? existing.rider : null);
+          return [...others, { ride: r, rider }].sort((a, b) => a.ride.createdAt - b.ride.createdAt);
+        });
       }
       const prev = rideRef.current;
       setActiveRide(r);
@@ -159,7 +186,14 @@ export function AuthProvider({ children }) {
       } catch (e) {}
     });
     const offCancelled = wsClient.on('ride:cancelled', (msg) => {
-      setActiveRide(null);
+      const myD = meRef.current;
+      if (myD && msg.ride && msg.ride.driverId === myD.id) {
+        const rem = (driverRidesRef.current || []).filter((x) => x.ride.id !== msg.ride.id);
+        setDriverRides(rem);
+        setActiveRide(rem.length ? rem[0].ride : null);
+      } else {
+        setActiveRide(null);
+      }
       setCounterpart(null);
       setDriverLoc(null);
       const my = meRef.current;
@@ -190,6 +224,7 @@ export function AuthProvider({ children }) {
       me,
       driverActive,
       activeRide,
+      driverRides,
       counterpart,
       driverLoc,
       pendingRating,
@@ -260,6 +295,7 @@ export function AuthProvider({ children }) {
         setMe(null);
         setDriverActive(false);
         setActiveRide(null);
+        setDriverRides([]);
         setCounterpart(null);
         setDriverLoc(null);
       },
@@ -272,6 +308,7 @@ export function AuthProvider({ children }) {
         setActiveRide(data.activeRide || null);
         setCounterpart(data.counterpart || null);
         setDriverLoc(data.driverLocation || null);
+        setDriverRides(data.driverRides || []);
       },
 
       async saveProfile(patch) {
@@ -289,7 +326,7 @@ export function AuthProvider({ children }) {
         if (data && data.user) setMe(data.user);
       },
     }),
-    [booting, token, me, driverActive, activeRide, counterpart, driverLoc, pendingRating, pendingVerification, langPref, lang, wsConnected]
+    [booting, token, me, driverActive, activeRide, driverRides, counterpart, driverLoc, pendingRating, pendingVerification, langPref, lang, wsConnected]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

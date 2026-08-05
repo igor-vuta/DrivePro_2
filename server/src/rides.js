@@ -6,6 +6,7 @@ import { publicUser, rideCounterpart } from './views.js';
 // Driver-side accept/arrive/start/finish arrive in the next milestones.
 
 const CANCELLABLE = ['requested', 'accepted', 'arrived'];
+const MAX_CONVOY = 3; // passengers a driver may carry at once
 
 export function setupRides({ store, hub }) {
   // Rider requests a ride.
@@ -70,8 +71,12 @@ export function setupRides({ store, hub }) {
       conn.send({ type: 'error', message: "You can't take your own order.", reqId: msg.reqId });
       return;
     }
-    if (store.findActiveRideForUser(user.id)) {
+    if (store.findActiveRideAsRider(user.id)) {
       conn.send({ type: 'error', message: 'Finish your current ride first.', reqId: msg.reqId });
+      return;
+    }
+    if (store.listActiveRidesForDriver(user.id).length >= MAX_CONVOY) {
+      conn.send({ type: 'error', code: 'convoy_full', message: `You already carry ${MAX_CONVOY} passengers.`, reqId: msg.reqId });
       return;
     }
 
@@ -157,7 +162,8 @@ export function setupRides({ store, hub }) {
   // A driver who goes online (or reconnects while online) receives every
   // still-open order, so orders created while they were away aren't lost.
   hub.onDriverReady = (driverId, conn) => {
-    if (store.findActiveRideForUser(driverId)) return;
+    if (store.findActiveRideAsRider(driverId)) return;
+    if (store.listActiveRidesForDriver(driverId).length >= MAX_CONVOY) return;
     const loc = hub.driverLocation(driverId);
     for (const ride of store.listRequestedRides()) {
       if (ride.riderId === driverId) continue;
@@ -208,7 +214,13 @@ export function fitsDriverRoute(driverEntry, ride) {
   const p = pointToPolyline(ride.pickupLat, ride.pickupLng, route.points);
   const d = pointToPolyline(ride.destLat, ride.destLng, route.points);
   if (p.distM > route.radiusM || d.distM > route.radiusM) return false;
-  return d.pos >= p.pos - 1e-6;
+  if (d.pos < p.pos - 1e-6) return false;
+  // Only the road still ahead: skip pickups the driver has already passed.
+  if (isFiniteNum(driverEntry.lat) && isFiniteNum(driverEntry.lng)) {
+    const cur = pointToPolyline(driverEntry.lat, driverEntry.lng, route.points);
+    if (p.pos < cur.pos - 0.75) return false;
+  }
+  return true;
 }
 
 export function offerToDrivers(store, hub, ride) {
@@ -220,6 +232,7 @@ export function offerToDrivers(store, hub, ride) {
   }
   for (const driverId of hub.onlineDriverIds()) {
     if (driverId === ride.riderId) continue;
+    if (store.listActiveRidesForDriver(driverId).length >= MAX_CONVOY) continue;
     const loc = hub.driverLocation(driverId);
     if (!fitsDriverRoute(loc, ride)) continue;
     const pickupDistanceM = loc ? haversineMeters(loc.lat, loc.lng, ride.pickupLat, ride.pickupLng) : null;

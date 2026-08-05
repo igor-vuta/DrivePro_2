@@ -260,6 +260,20 @@ class SqliteBackend {
       .get(uid, uid, ...ACTIVE_RIDE_STATUSES);
     return rowToRide(row);
   }
+  activeRideAsRider(uid) {
+    const q = ACTIVE_RIDE_STATUSES.map(() => '?').join(', ');
+    const row = this.db
+      .prepare(`SELECT * FROM rides WHERE rider_id = ? AND status IN (${q}) ORDER BY created_at DESC LIMIT 1`)
+      .get(uid, ...ACTIVE_RIDE_STATUSES);
+    return rowToRide(row);
+  }
+  activeRidesAsDriver(uid) {
+    const q = ACTIVE_RIDE_STATUSES.map(() => '?').join(', ');
+    return this.db
+      .prepare(`SELECT * FROM rides WHERE driver_id = ? AND status IN (${q}) ORDER BY created_at ASC`)
+      .all(uid, ...ACTIVE_RIDE_STATUSES)
+      .map(rowToRide);
+  }
   ridesForUser(uid, limit = 50) {
     return this.db
       .prepare('SELECT * FROM rides WHERE rider_id = ? OR driver_id = ? ORDER BY created_at DESC LIMIT ?')
@@ -479,6 +493,18 @@ class JsonBackend {
         .find((r) => (r.riderId === uid || r.driverId === uid) && ACTIVE_RIDE_STATUSES.includes(r.status)) || null
     );
   }
+  activeRideAsRider(uid) {
+    return (
+      [...this.data.rides]
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .find((r) => r.riderId === uid && ACTIVE_RIDE_STATUSES.includes(r.status)) || null
+    );
+  }
+  activeRidesAsDriver(uid) {
+    return this.data.rides
+      .filter((r) => r.driverId === uid && ACTIVE_RIDE_STATUSES.includes(r.status))
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
   ridesForUser(uid, limit = 50) {
     return [...this.data.rides]
       .filter((r) => r.riderId === uid || r.driverId === uid)
@@ -591,6 +617,12 @@ export class Store {
   }
   findActiveRideForUser(uid) {
     return this.b.activeRideForUser(uid);
+  }
+  findActiveRideAsRider(uid) {
+    return this.b.activeRideAsRider(uid);
+  }
+  listActiveRidesForDriver(uid) {
+    return this.b.activeRidesAsDriver(uid);
   }
   listRidesForUser(uid, limit) {
     return this.b.ridesForUser(uid, limit);

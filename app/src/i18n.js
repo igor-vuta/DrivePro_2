@@ -140,6 +140,8 @@ const en = {
   'drive.navLeft': '{km} km left',
   'drive.navEta': '≈ {min} min',
   'drive.navFollow': 'Follow me',
+  'drive.newAlong': 'Rider along your route!',
+  'drive.convoyTitle': 'Convoy · {n}',
 
   // permissions
   'perm.title': 'Before we start',
@@ -268,6 +270,7 @@ const en = {
   'err.taken': 'This order is no longer available.',
   'err.points_required': 'Pickup and destination are required.',
   'err.body_too_large': 'The data you sent is too large.',
+  'err.convoy_full': 'You already carry 3 passengers.',
   'err.network': "Can't reach the server at {url}. Is it running?",
 };
 
@@ -401,6 +404,8 @@ const ru = {
   'drive.navLeft': 'осталось {km} км',
   'drive.navEta': '≈ {min} мин',
   'drive.navFollow': 'Следовать',
+  'drive.newAlong': 'Попутчик по пути!',
+  'drive.convoyTitle': 'Конвой · {n}',
 
   'profile.history': 'История поездок ›',
   'profile.say': 'Что о вас говорят',
@@ -520,6 +525,7 @@ const ru = {
   'err.taken': 'Этот заказ уже недоступен.',
   'err.points_required': 'Нужны точки подачи и назначения.',
   'err.body_too_large': 'Отправленные данные слишком большие.',
+  'err.convoy_full': 'У вас уже 3 пассажира.',
   'err.network': 'Не удаётся связаться с сервером {url}. Он запущен?',
 };
 

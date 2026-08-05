@@ -147,6 +147,9 @@ export function createApi({ store, secret, hub, serveStatic }) {
       activeRide,
       counterpart: rideCounterpart(store, activeRide, user.id),
       driverLocation: driverLoc ? { lat: driverLoc.lat, lng: driverLoc.lng } : null,
+      driverRides: store
+        .listActiveRidesForDriver(user.id)
+        .map((r) => ({ ride: r, rider: rideCounterpart(store, r, user.id) })),
     });
   });
 
