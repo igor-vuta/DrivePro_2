@@ -10,6 +10,7 @@ import { createApi } from './api.js';
 import { setupRides } from './rides.js';
 import { acceptUpgrade } from './ws.js';
 import { createStatic } from './static.js';
+import { initPush } from './push.js';
 import { verifyToken } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,6 +26,7 @@ if (!fs.existsSync(secretFile)) {
 }
 const secret = fs.readFileSync(secretFile, 'utf8').trim();
 
+initPush(DATA_DIR);
 const store = new Store(DATA_DIR);
 const hub = new Hub(store);
 setupRides({ store, hub });

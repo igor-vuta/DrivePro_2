@@ -1,5 +1,6 @@
 import { isFiniteNum, isLat, isLng, cleanStr, cleanAddressDetails, haversineMeters, pointToPolyline } from './util.js';
 import { publicUser, rideCounterpart } from './views.js';
+import { pushToUser } from './push.js';
 
 // Ride lifecycle over websocket messages. This module registers the
 // rider-side handlers (request/cancel) and pushes offers to online drivers.
@@ -27,7 +28,15 @@ export function sweepStaleRides(store, hub, nowMs = Date.now()) {
     const updated = store.updateRide(ride.id, { status: 'cancelled', cancelledAt: nowMs, cancelledBy: 'system' });
     closed++;
     for (const uid of [updated.riderId, updated.driverId]) {
-      if (uid) hub.sendTo(uid, { type: 'ride:cancelled', ride: updated });
+      if (uid) {
+        hub.sendTo(uid, { type: 'ride:cancelled', ride: updated });
+        pushToUser(store, uid, {
+          title: 'Поездка закрыта',
+          body: 'Поездка истекла и была закрыта автоматически',
+          tag: `ride-${updated.id}`,
+          url: '/',
+        });
+      }
     }
     for (const did of hub.onlineDriverIds()) hub.sendTo(did, { type: 'ride:offer_gone', rideId: updated.id });
   }
@@ -136,12 +145,18 @@ export function setupRides({ store, hub }) {
     for (const did of hub.onlineDriverIds()) {
       if (did !== user.id) hub.sendTo(did, { type: 'ride:offer_gone', rideId: updated.id });
     }
+    pushToUser(store, updated.riderId, {
+      title: '🚗 Водитель найден',
+      body: `${user.name} уже едет к вам`,
+      tag: `ride-${updated.id}`,
+      url: '/',
+    });
   });
 
   // Driver-only status transitions: accepted -> arrived -> in_progress -> finished.
   // (Starting straight from "accepted" is allowed in case the driver forgets
   // to tap "arrived".)
-  const transition = (type, fromStatuses, toStatus, stampField) => {
+  const transition = (type, fromStatuses, toStatus, stampField, pushFn) => {
     hub.on(type, (user, msg, conn) => {
       const ride = msg.rideId ? store.getRide(msg.rideId) : store.findActiveRideForUser(user.id);
       if (!ride || ride.driverId !== user.id) {
@@ -155,9 +170,17 @@ export function setupRides({ store, hub }) {
       const updated = store.updateRide(ride.id, { status: toStatus, [stampField]: Date.now() });
       hub.sendTo(updated.riderId, { type: 'ride:update', ride: updated });
       hub.sendTo(updated.driverId, { type: 'ride:update', ride: updated, reqId: msg.reqId });
+      if (pushFn) pushFn(updated);
     });
   };
-  transition('ride:arrived', ['accepted'], 'arrived', 'arrivedAt');
+  transition('ride:arrived', ['accepted'], 'arrived', 'arrivedAt', (r) =>
+    pushToUser(store, r.riderId, {
+      title: '📍 Водитель на месте',
+      body: 'Вас ждут у точки подачи',
+      tag: `ride-${r.id}`,
+      url: '/',
+    })
+  );
   transition('ride:start', ['accepted', 'arrived'], 'in_progress', 'startedAt');
 
   // Finishing is special: the driver earns points = distance (km) x trip time
@@ -180,6 +203,12 @@ export function setupRides({ store, hub }) {
     store.addPoints(user.id, pointsEarned);
     store.finishTrail(updated.id, finishedAt);
     store.addPoints(updated.riderId, 1); // riders climb too, slowly
+    pushToUser(store, updated.riderId, {
+      title: '🏁 Поездка завершена',
+      body: 'Спасибо, что едете вместе. Оцените поездку!',
+      tag: `ride-${updated.id}`,
+      url: '/',
+    });
     hub.sendTo(updated.riderId, { type: 'ride:update', ride: updated });
     hub.sendTo(updated.driverId, { type: 'ride:update', ride: updated, pointsEarned, reqId: msg.reqId });
   });
@@ -272,5 +301,11 @@ export function offerToDrivers(store, hub, ride) {
     if (!fitsDriverRoute(loc, ride)) continue;
     const pickupDistanceM = loc ? haversineMeters(loc.lat, loc.lng, ride.pickupLat, ride.pickupLng) : null;
     hub.sendTo(driverId, { type: 'ride:offer', ride, rider, pickupDistanceM });
+    pushToUser(store, driverId, {
+      title: '⚡ Новый заказ',
+      body: `${ride.pickupAddress || ''} → ${ride.destAddress || ''}`,
+      tag: `offer-${ride.id}`,
+      url: '/',
+    });
   }
 }

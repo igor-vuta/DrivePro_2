@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from './api';
 import { wsClient } from './ws';
 import { t, setLang, resolveLang } from './i18n';
+import { setupPush } from './push';
 
 const TOKEN_KEY = 'drivepro.token';
 const LANG_KEY = 'drivepro.lang';
@@ -103,6 +104,11 @@ export function AuthProvider({ children }) {
   const tokenRef = useRef(null);
   useEffect(() => {
     tokenRef.current = token;
+  }, [token]);
+
+  // Silent push re-subscription (only if the browser already granted it).
+  useEffect(() => {
+    if (token) setupPush(token, false);
   }, [token]);
 
   // Keep the websocket in sync with the session.

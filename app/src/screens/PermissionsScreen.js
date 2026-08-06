@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import * as Location from 'expo-location';
 import { Screen, Title, Sub, Card, Button, colors } from '../ui';
+import { useAuth } from '../state';
+import { setupPush } from '../push';
 import { t } from '../i18n';
 
 // One-time permissions step shown right after signing in: ask for location
 // up front so the map and driver matching work without surprise prompts later.
 
 export default function PermissionsScreen({ onDone }) {
+  const { token } = useAuth();
   const [busy, setBusy] = useState(false);
   const [denied, setDenied] = useState(false);
 
@@ -15,6 +18,7 @@ export default function PermissionsScreen({ onDone }) {
     setBusy(true);
     try {
       const res = await Location.requestForegroundPermissionsAsync();
+      await setupPush(token, true); // notifications ride on the same tap
       if (res && res.granted) {
         onDone();
         return;
@@ -36,7 +40,8 @@ export default function PermissionsScreen({ onDone }) {
         <Card>
           <Text style={{ color: colors.text, marginBottom: 4 }}>{t('perm.point1')}</Text>
           <Text style={{ color: colors.text, marginBottom: 4 }}>{t('perm.point2')}</Text>
-          <Text style={{ color: colors.text }}>{t('perm.point3')}</Text>
+          <Text style={{ color: colors.text, marginBottom: 4 }}>{t('perm.point3')}</Text>
+          <Text style={{ color: colors.text }}>{t('perm.point4')}</Text>
         </Card>
         {denied ? <Sub style={{ textAlign: 'center' }}>{t('perm.deniedNote')}</Sub> : null}
         <Button title={t('perm.allow')} onPress={allow} loading={busy} />

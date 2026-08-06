@@ -3,6 +3,7 @@ import { hashPassword, verifyPassword, signToken, verifyToken } from './auth.js'
 import { publicUser, rideCounterpart, directoryUser } from './views.js';
 import { reverseGeocode, searchAddress, route as geoRoute } from './geo.js';
 import { generateCode, sendCode, OTP_TTL_MS, OTP_RESEND_COOLDOWN_MS, OTP_ECHO } from './otp.js';
+import { vapidPublicKey } from './push.js';
 
 const MAX_AVATAR_CHARS = 400_000; // ~300 KB of base64 image data
 const OTP_MAX_ATTEMPTS = 5;
@@ -315,6 +316,26 @@ export function createApi({ store, secret, hub, serveStatic }) {
     store.addPoints(user.id, 1); // small thank-you for rating
     if (hub) hub.sendTo(rateeId, { type: 'rating:received' });
     sendJson(res, 201, { ok: true, rating: { stars: rating.stars, comment: rating.comment } });
+  });
+
+  // -------------------------------------------------------- web push ---
+  route('GET', '/api/push/key', async (req, res) => {
+    authUser(req);
+    sendJson(res, 200, { key: vapidPublicKey() });
+  });
+
+  route('POST', '/api/push/subscribe', async (req, res) => {
+    const user = authUser(req);
+    const body = await readJson(req);
+    if (!store.savePushSub(user.id, body.subscription)) throw httpError(400, 'invalid subscription');
+    sendJson(res, 200, { ok: true });
+  });
+
+  route('POST', '/api/push/unsubscribe', async (req, res) => {
+    authUser(req);
+    const body = await readJson(req);
+    if (typeof body.endpoint === 'string') store.dropPushSub(body.endpoint);
+    sendJson(res, 200, { ok: true });
   });
 
   // ------------------------------------------- trust: block / report ---

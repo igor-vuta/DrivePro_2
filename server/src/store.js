@@ -111,6 +111,13 @@ class SqliteBackend {
         reason TEXT,
         created_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS push_subs (
+        endpoint TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        sub_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_push_user ON push_subs (user_id);
       CREATE TABLE IF NOT EXISTS shares (
         share_id TEXT PRIMARY KEY,
         ride_id TEXT NOT NULL UNIQUE,
@@ -342,6 +349,21 @@ class SqliteBackend {
   rideByShare(shareId) {
     const row = this.db.prepare('SELECT ride_id FROM shares WHERE share_id = ?').get(shareId);
     return row ? row.ride_id : null;
+  }
+  putPushSub(userId, endpoint, subJson, ts) {
+    this.db
+      .prepare('INSERT OR REPLACE INTO push_subs (endpoint, user_id, sub_json, created_at) VALUES (?, ?, ?, ?)')
+      .run(endpoint, userId, subJson, ts);
+  }
+  dropPushSub(endpoint) {
+    this.db.prepare('DELETE FROM push_subs WHERE endpoint = ?').run(endpoint);
+  }
+  pushSubsByUser(userId) {
+    return this.db
+      .prepare('SELECT sub_json FROM push_subs WHERE user_id = ?')
+      .all(userId)
+      .map((r) => safeParse(r.sub_json))
+      .filter(Boolean);
   }
   ridesForUser(uid, limit = 50) {
     return this.db
@@ -632,6 +654,25 @@ class JsonBackend {
     const x = this._shares().find((s) => s.shareId === shareId);
     return x ? x.rideId : null;
   }
+  _pushsubs() {
+    if (!Array.isArray(this.data.pushSubs)) this.data.pushSubs = [];
+    return this.data.pushSubs;
+  }
+  putPushSub(userId, endpoint, subJson, ts) {
+    this.data.pushSubs = this._pushsubs().filter((x) => x.endpoint !== endpoint);
+    this.data.pushSubs.push({ userId, endpoint, subJson, ts });
+    this.save();
+  }
+  dropPushSub(endpoint) {
+    this.data.pushSubs = this._pushsubs().filter((x) => x.endpoint !== endpoint);
+    this.save();
+  }
+  pushSubsByUser(userId) {
+    return this._pushsubs()
+      .filter((x) => x.userId === userId)
+      .map((x) => safeParse(x.subJson))
+      .filter(Boolean);
+  }
   ridesForUser(uid, limit = 50) {
     return [...this.data.rides]
       .filter((r) => r.riderId === uid || r.driverId === uid)
@@ -789,6 +830,18 @@ export class Store {
   }
   rideIdByShare(shareId) {
     return this.b.rideByShare(shareId);
+  }
+
+  savePushSub(userId, sub) {
+    if (!sub || typeof sub.endpoint !== 'string' || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) return false;
+    this.b.putPushSub(userId, sub.endpoint, JSON.stringify(sub), now());
+    return true;
+  }
+  dropPushSub(endpoint) {
+    this.b.dropPushSub(endpoint);
+  }
+  pushSubsFor(userId) {
+    return this.b.pushSubsByUser(userId);
   }
   listRidesForUser(uid, limit) {
     return this.b.ridesForUser(uid, limit);
