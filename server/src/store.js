@@ -97,6 +97,25 @@ class SqliteBackend {
         created_at INTEGER NOT NULL,
         finished_at INTEGER
       );
+      CREATE TABLE IF NOT EXISTS blocks (
+        blocker_id TEXT NOT NULL,
+        blocked_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (blocker_id, blocked_id)
+      );
+      CREATE TABLE IF NOT EXISTS reports (
+        id TEXT PRIMARY KEY,
+        reporter_id TEXT NOT NULL,
+        reported_id TEXT NOT NULL,
+        ride_id TEXT,
+        reason TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS shares (
+        share_id TEXT PRIMARY KEY,
+        ride_id TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL
+      );
       CREATE INDEX IF NOT EXISTS idx_trails_finished ON trails (finished_at);
       CREATE INDEX IF NOT EXISTS idx_rides_rider ON rides (rider_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_rides_driver ON rides (driver_id, created_at);
@@ -285,6 +304,44 @@ class SqliteBackend {
   }
   allUsers(limit = 300) {
     return this.db.prepare('SELECT * FROM users ORDER BY created_at DESC LIMIT ?').all(limit).map(rowToUser);
+  }
+
+  // blocks / reports / share links
+  putBlock(a, b, ts) {
+    this.db.prepare('INSERT OR IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)').run(a, b, ts);
+  }
+  dropBlock(a, b) {
+    this.db.prepare('DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?').run(a, b);
+  }
+  blockedEither(a, b) {
+    return !!this.db
+      .prepare('SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1')
+      .get(a, b, b, a);
+  }
+  blockedBy(a) {
+    return this.db.prepare('SELECT blocked_id FROM blocks WHERE blocker_id = ?').all(a).map((r) => r.blocked_id);
+  }
+  putReport(r) {
+    this.db
+      .prepare('INSERT INTO reports (id, reporter_id, reported_id, ride_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(r.id, r.reporterId, r.reportedId, r.rideId ?? null, r.reason ?? null, r.createdAt);
+  }
+  allReports(limit = 100) {
+    return this.db
+      .prepare('SELECT * FROM reports ORDER BY created_at DESC LIMIT ?')
+      .all(limit)
+      .map((r) => ({ id: r.id, reporterId: r.reporter_id, reportedId: r.reported_id, rideId: r.ride_id, reason: r.reason, createdAt: Number(r.created_at) }));
+  }
+  putShare(shareId, rideId, ts) {
+    this.db.prepare('INSERT OR IGNORE INTO shares (share_id, ride_id, created_at) VALUES (?, ?, ?)').run(shareId, rideId, ts);
+  }
+  shareByRide(rideId) {
+    const row = this.db.prepare('SELECT share_id FROM shares WHERE ride_id = ?').get(rideId);
+    return row ? row.share_id : null;
+  }
+  rideByShare(shareId) {
+    const row = this.db.prepare('SELECT ride_id FROM shares WHERE share_id = ?').get(shareId);
+    return row ? row.ride_id : null;
   }
   ridesForUser(uid, limit = 50) {
     return this.db
@@ -525,6 +582,56 @@ class JsonBackend {
   allUsers(limit = 300) {
     return [...this.data.users].sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
   }
+
+  _blocks() {
+    if (!Array.isArray(this.data.blocks)) this.data.blocks = [];
+    return this.data.blocks;
+  }
+  _reports() {
+    if (!Array.isArray(this.data.reports)) this.data.reports = [];
+    return this.data.reports;
+  }
+  _shares() {
+    if (!Array.isArray(this.data.shares)) this.data.shares = [];
+    return this.data.shares;
+  }
+  putBlock(a, b, ts) {
+    if (!this._blocks().some((x) => x.a === a && x.b === b)) {
+      this._blocks().push({ a, b, ts });
+      this.save();
+    }
+  }
+  dropBlock(a, b) {
+    this.data.blocks = this._blocks().filter((x) => !(x.a === a && x.b === b));
+    this.save();
+  }
+  blockedEither(a, b) {
+    return this._blocks().some((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a));
+  }
+  blockedBy(a) {
+    return this._blocks().filter((x) => x.a === a).map((x) => x.b);
+  }
+  putReport(r) {
+    this._reports().push(r);
+    this.save();
+  }
+  allReports(limit = 100) {
+    return [...this._reports()].sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+  }
+  putShare(shareId, rideId, ts) {
+    if (!this._shares().some((x) => x.rideId === rideId)) {
+      this._shares().push({ shareId, rideId, ts });
+      this.save();
+    }
+  }
+  shareByRide(rideId) {
+    const x = this._shares().find((s) => s.rideId === rideId);
+    return x ? x.shareId : null;
+  }
+  rideByShare(shareId) {
+    const x = this._shares().find((s) => s.shareId === shareId);
+    return x ? x.rideId : null;
+  }
   ridesForUser(uid, limit = 50) {
     return [...this.data.rides]
       .filter((r) => r.riderId === uid || r.driverId === uid)
@@ -649,6 +756,39 @@ export class Store {
   }
   listUsers(limit) {
     return this.b.allUsers(limit);
+  }
+
+  block(a, b) {
+    this.b.putBlock(a, b, now());
+  }
+  unblock(a, b) {
+    this.b.dropBlock(a, b);
+  }
+  isBlockedEither(a, b) {
+    if (!a || !b) return false;
+    return this.b.blockedEither(a, b);
+  }
+  listBlockedIds(a) {
+    return this.b.blockedBy(a);
+  }
+  addReport({ reporterId, reportedId, rideId = null, reason = null }) {
+    const r = { id: id(), reporterId, reportedId, rideId, reason, createdAt: now() };
+    this.b.putReport(r);
+    return r;
+  }
+  listReports(limit = 100) {
+    return this.b.allReports(limit);
+  }
+  shareForRide(rideId) {
+    let sid = this.b.shareByRide(rideId);
+    if (!sid) {
+      sid = id().replace(/-/g, '').slice(0, 20);
+      this.b.putShare(sid, rideId, now());
+    }
+    return sid;
+  }
+  rideIdByShare(shareId) {
+    return this.b.rideByShare(shareId);
   }
   listRidesForUser(uid, limit) {
     return this.b.ridesForUser(uid, limit);

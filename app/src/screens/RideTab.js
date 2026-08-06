@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Linking, Pressable, ScrollView, Text, View } from 'react-native';
-import { confirmAction } from '../dialogs';
+import { ActivityIndicator, Keyboard, Linking, Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { notify, confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
 import { Card, Button, Input, Sub, ErrorText, Row, Avatar, FadeIn, colors } from '../ui';
@@ -9,6 +9,7 @@ import { api } from '../api';
 import { wsClient } from '../ws';
 import UserProfileModal from '../UserProfileModal';
 import { t, errMsg, getLang } from '../i18n';
+import { API_URL } from '../config';
 
 // Almaty, Kazakhstan - used until real geolocation arrives.
 // Thin a polyline before sending it over the socket.
@@ -501,6 +502,21 @@ function DriverOnTheWay({ ride, driver, driverLoc, onCancel }) {
     if (driver && driver.phone) Linking.openURL(`tel:${driver.phone}`);
   };
 
+  const shareRide = async () => {
+    try {
+      const r = await api('POST', `/api/rides/${ride.id}/share`, {}, token);
+      const url = `${API_URL}${r.path}`;
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ url });
+      } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        notify(t('ride.share'), t('ride.shareCopied'));
+      } else {
+        await Share.share({ message: url });
+      }
+    } catch (e) {}
+  };
+
   const heading =
     ride.status === 'accepted'
       ? t('ride.onTheWay')
@@ -544,9 +560,10 @@ function DriverOnTheWay({ ride, driver, driverLoc, onCancel }) {
               : t('ride.pickupLabel', { addr: ride.pickupAddress })}
           </Sub>
           <Row>
-            <Button title={t('ride.callDriver')} onPress={call} style={{ flex: 1, marginRight: inTrip ? 0 : 8 }} />
+            <Button title={t('ride.callDriver')} onPress={call} style={{ flex: 1, marginRight: 8 }} />
             {!inTrip ? <Button kind="ghost" title={t('common.cancel')} onPress={onCancel} style={{ flex: 1 }} /> : null}
           </Row>
+          <Button kind="ghost" title={`🔗 ${t('ride.share')}`} onPress={shareRide} style={{ marginTop: 8, height: 42 }} />
         </Card>
       </View>
       <UserProfileModal userId={profileUserId} onClose={() => setProfileUserId(null)} />

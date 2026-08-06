@@ -317,6 +317,65 @@ export function createApi({ store, secret, hub, serveStatic }) {
     sendJson(res, 201, { ok: true, rating: { stars: rating.stars, comment: rating.comment } });
   });
 
+  // ------------------------------------------- trust: block / report ---
+  route('POST', '/api/users/:id/block', async (req, res, params) => {
+    const user = authUser(req);
+    const other = store.getUser(params.id);
+    if (!other || other.id === user.id) throw httpError(404, 'user not found');
+    store.block(user.id, other.id);
+    sendJson(res, 200, { ok: true, blocked: true });
+  });
+
+  route('POST', '/api/users/:id/unblock', async (req, res, params) => {
+    const user = authUser(req);
+    store.unblock(user.id, params.id);
+    sendJson(res, 200, { ok: true, blocked: false });
+  });
+
+  route('GET', '/api/me/blocks', async (req, res) => {
+    const user = authUser(req);
+    sendJson(res, 200, { blocked: store.listBlockedIds(user.id) });
+  });
+
+  route('POST', '/api/users/:id/report', async (req, res, params) => {
+    rateLimit(req, 'report', 10);
+    const user = authUser(req);
+    const other = store.getUser(params.id);
+    if (!other || other.id === user.id) throw httpError(404, 'user not found');
+    const body = await readJson(req);
+    store.addReport({ reporterId: user.id, reportedId: other.id, rideId: cleanStr(body.rideId, 60) || null, reason: cleanStr(body.reason, 300) || null });
+    sendJson(res, 201, { ok: true });
+  });
+
+  // ------------------------------------------- trust: share-my-ride ---
+  route('POST', '/api/rides/:id/share', async (req, res, params) => {
+    const user = authUser(req);
+    const ride = store.getRide(params.id);
+    if (!ride || (ride.riderId !== user.id && ride.driverId !== user.id)) throw httpError(404, 'ride not found');
+    const shareId = store.shareForRide(ride.id);
+    sendJson(res, 200, { shareId, path: `/share/${shareId}` });
+  });
+
+  // Public: no auth - safe subset only (no phones, no rider identity).
+  route('GET', '/api/share/:id', async (req, res, params) => {
+    const rideId = store.rideIdByShare(params.id);
+    const ride = rideId ? store.getRide(rideId) : null;
+    if (!ride) throw httpError(404, 'not found');
+    const driver = ride.driverId ? store.getUser(ride.driverId) : null;
+    const dp = ride.driverId ? store.getDriverProfile(ride.driverId) : null;
+    const loc = hub && ride.driverId ? hub.driverLocation(ride.driverId) : null;
+    sendJson(res, 200, {
+      status: ride.status,
+      pickup: { lat: ride.pickupLat, lng: ride.pickupLng, address: ride.pickupAddress },
+      dest: { lat: ride.destLat, lng: ride.destLng, address: ride.destAddress },
+      driver: driver
+        ? { name: driver.name, car: dp ? `${dp.carColor} ${dp.carMake} ${dp.carModel}` : null, plate: dp ? dp.plate : null }
+        : null,
+      driverLocation: loc ? { lat: loc.lat, lng: loc.lng } : null,
+      updatedAt: Date.now(),
+    });
+  });
+
   // ------------------------------------------------------------- admin ---
   // Enabled only when ADMIN_TOKEN is set in the environment.
   route('GET', '/api/admin/overview', async (req, res) => {
@@ -332,7 +391,18 @@ export function createApi({ store, secret, hub, serveStatic }) {
       rides: store.countFinishedRides(u.id),
     }));
     const active = store.listAllActiveRides();
-    sendJson(res, 200, { users, activeRides: active.length, totalUsers: users.length });
+    const nameOf = (uid) => {
+      const u = store.getUser(uid);
+      return u ? u.name : uid;
+    };
+    const reports = store.listReports(50).map((r) => ({
+      reporter: nameOf(r.reporterId),
+      reported: nameOf(r.reportedId),
+      reportedId: r.reportedId,
+      reason: r.reason,
+      createdAt: r.createdAt,
+    }));
+    sendJson(res, 200, { users, activeRides: active.length, totalUsers: users.length, reports });
   });
 
   route('POST', '/api/admin/users/:id/ban', async (req, res, params) => {
@@ -433,6 +503,13 @@ export function createApi({ store, secret, hub, serveStatic }) {
       return;
     }
 
+    // Public live share page.
+    if (req.method === 'GET' && path.startsWith('/share/')) {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      res.end(SHARE_HTML);
+      return;
+    }
+
     // Minimal operator panel (enabled only with ADMIN_TOKEN set).
     if (req.method === 'GET' && path === '/admin' && ADMIN_TOKEN) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
@@ -487,6 +564,8 @@ th{color:#8b96b8;font-weight:600;text-transform:uppercase;font-size:11px}
 <div id="panel" style="display:none">
   <p class="sub" id="stats"></p>
   <table><thead><tr><th>Name</th><th>Phone</th><th>⚡</th><th>Rides</th><th>Status</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+  <h1 style="margin-top:28px">Reports</h1>
+  <table><thead><tr><th>When</th><th>Reporter</th><th>Reported</th><th>Reason</th></tr></thead><tbody id="reps"></tbody></table>
   <p><button class="ghost" onclick="localStorage.removeItem('admtok');location.reload()">Log out</button></p>
 </div>
 <script>
@@ -501,6 +580,9 @@ async function load(){
   document.getElementById('login').style.display='none';
   document.getElementById('panel').style.display='block';
   document.getElementById('stats').textContent = d.totalUsers+' users · '+d.activeRides+' active rides';
+  document.getElementById('reps').innerHTML = (d.reports||[]).map(r =>
+    '<tr><td>'+new Date(r.createdAt).toLocaleString()+'</td><td>'+r.reporter+'</td><td class="banned">'+r.reported+'</td><td>'+(r.reason||'')+'</td></tr>'
+  ).join('') || '<tr><td colspan="4" class="sub">none</td></tr>';
   document.getElementById('rows').innerHTML = d.users.map(u =>
     '<tr><td>'+u.name+'</td><td>'+u.phone+'</td><td class="badge">'+u.points+'</td><td>'+u.rides+'</td>'+
     '<td class="'+(u.banned?'banned':'ok')+'">'+(u.banned?'BANNED':(u.verified?'active':'unverified'))+'</td>'+
@@ -508,4 +590,50 @@ async function load(){
   ).join('');
 }
 load();
+</script></body></html>`;
+
+// Public live-tracking page for a shared ride; polls the JSON endpoint.
+const SHARE_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>DrivePro · live ride</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+body{background:#06070d;color:#e9f2ff;font-family:-apple-system,system-ui,sans-serif;margin:0;display:flex;flex-direction:column;height:100vh}
+#map{flex:1}
+#panel{padding:14px 18px;border-top:1px solid #1c2438;background:#0e1220}
+h1{font-size:16px;margin:0 0 4px;letter-spacing:1px}
+.sub{color:#8b96b8;font-size:13px;margin:2px 0}
+.status{color:#00e5ff;font-weight:700}
+.leaflet-control-attribution{background:rgba(6,7,13,.6)!important;color:#5a6684!important;font-size:9px}
+</style></head><body>
+<div id="map"></div>
+<div id="panel"><h1>DRIVEPRO <span class="sub">live ride</span></h1>
+<div class="status" id="st">…</div><div class="sub" id="drv"></div><div class="sub" id="route"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const shareId = location.pathname.split('/').pop();
+const map = L.map('map', { zoomControl: false }).setView([43.2389, 76.8897], 13);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', attribution: '© OpenStreetMap © CARTO' }).addTo(map);
+let car = null, pins = [], fitted = false;
+const dot = (color) => L.divIcon({ className: '', html: '<div style="width:15px;height:15px;border-radius:50%;background:'+color+';border:2px solid rgba(233,242,255,.9);box-shadow:0 0 10px 2px '+color+'"></div>', iconSize: [15,15], iconAnchor: [8,8] });
+const STATUS = { requested: 'Ищем водителя…', accepted: 'Водитель в пути', arrived: 'Водитель на месте', in_progress: 'В пути', finished: 'Поездка завершена ✓', cancelled: 'Поездка отменена' };
+async function tick(){
+  try{
+    const r = await fetch('/api/share/'+shareId);
+    if(!r.ok){ document.getElementById('st').textContent = 'Ссылка не найдена'; return; }
+    const d = await r.json();
+    document.getElementById('st').textContent = STATUS[d.status] || d.status;
+    document.getElementById('drv').textContent = d.driver ? (d.driver.name + ' · ' + (d.driver.car||'') + ' · ' + (d.driver.plate||'')) : '';
+    document.getElementById('route').textContent = (d.pickup.address||'') + ' → ' + (d.dest.address||'');
+    if(!pins.length){
+      pins = [ L.marker([d.pickup.lat, d.pickup.lng], {icon: dot('#00ffa3')}).addTo(map), L.marker([d.dest.lat, d.dest.lng], {icon: dot('#ff3b5c')}).addTo(map) ];
+    }
+    if(d.driverLocation){
+      if(!car) car = L.marker([d.driverLocation.lat, d.driverLocation.lng], { icon: L.divIcon({className:'',html:'<div style="font-size:24px;filter:drop-shadow(0 0 6px rgba(0,229,255,.9))">🚗</div>',iconSize:[26,26],iconAnchor:[13,13]}) }).addTo(map);
+      else car.setLatLng([d.driverLocation.lat, d.driverLocation.lng]);
+    }
+    if(!fitted){ fitted = true; const pts = [[d.pickup.lat,d.pickup.lng],[d.dest.lat,d.dest.lng]]; if(d.driverLocation) pts.push([d.driverLocation.lat,d.driverLocation.lng]); map.fitBounds(pts, { padding:[40,40] }); }
+    if(d.status === 'finished' || d.status === 'cancelled') clearInterval(iv);
+  }catch(e){}
+}
+const iv = setInterval(tick, 5000); tick();
 </script></body></html>`;

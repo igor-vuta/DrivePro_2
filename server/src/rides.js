@@ -100,6 +100,10 @@ export function setupRides({ store, hub }) {
       conn.send({ type: 'error', message: "You can't take your own order.", reqId: msg.reqId });
       return;
     }
+    if (store.isBlockedEither(user.id, ride.riderId)) {
+      conn.send({ type: 'error', code: 'taken', message: 'This order is no longer available.', reqId: msg.reqId });
+      return;
+    }
     if (store.findActiveRideAsRider(user.id)) {
       conn.send({ type: 'error', message: 'Finish your current ride first.', reqId: msg.reqId });
       return;
@@ -196,6 +200,7 @@ export function setupRides({ store, hub }) {
     const loc = hub.driverLocation(driverId);
     for (const ride of store.listRequestedRides()) {
       if (ride.riderId === driverId) continue;
+      if (store.isBlockedEither(driverId, ride.riderId)) continue;
       if (!fitsDriverRoute(loc, ride)) continue;
       const rider = publicUser(store, ride.riderId);
       if (rider) {
@@ -261,6 +266,7 @@ export function offerToDrivers(store, hub, ride) {
   }
   for (const driverId of hub.onlineDriverIds()) {
     if (driverId === ride.riderId) continue;
+    if (store.isBlockedEither(driverId, ride.riderId)) continue;
     if (store.listActiveRidesForDriver(driverId).length >= MAX_CONVOY) continue;
     const loc = hub.driverLocation(driverId);
     if (!fitsDriverRoute(loc, ride)) continue;

@@ -1,17 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { Card, Sub, Button, Avatar, colors } from './ui';
+import { Card, Sub, Button, Row, Avatar, colors } from './ui';
 import { api } from './api';
 import { useAuth } from './state';
+import { notify, confirmAction } from './dialogs';
 import { t, errMsg } from './i18n';
 
 // Small profile card shown when tapping a person's name anywhere in the app -
 // lets riders and drivers check each other out before and during a ride.
 
 export default function UserProfileModal({ userId, onClose }) {
-  const { token } = useAuth();
+  const { token, me } = useAuth();
   const [profile, setProfile] = useState(null);
   const [error, setError] = useState('');
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -22,6 +24,8 @@ export default function UserProfileModal({ userId, onClose }) {
       try {
         const r = await api('GET', `/api/users/${userId}`, null, token);
         if (!cancelled) setProfile(r.user);
+        const b = await api('GET', '/api/me/blocks', null, token);
+        if (!cancelled) setBlocked((b.blocked || []).includes(userId));
       } catch (e) {
         if (!cancelled) setError(errMsg(e));
       }
@@ -79,6 +83,53 @@ export default function UserProfileModal({ userId, onClose }) {
               ) : null}
             </ScrollView>
           )}
+          {profile && me && profile.id !== me.id ? (
+            <View>
+              {blocked ? <Sub style={{ marginTop: 6, marginBottom: 0, color: colors.danger }}>{t('modal.blockedNote')}</Sub> : null}
+              <Row style={{ marginTop: 8 }}>
+                <Button
+                  kind="ghost"
+                  title={blocked ? t('modal.unblock') : `🚫 ${t('modal.block')}`}
+                  onPress={() => {
+                    if (blocked) {
+                      api('POST', `/api/users/${profile.id}/unblock`, {}, token)
+                        .then(() => setBlocked(false))
+                        .catch(() => {});
+                      return;
+                    }
+                    confirmAction({
+                      title: t('modal.blockQ'),
+                      message: t('modal.blockText'),
+                      okLabel: t('modal.block'),
+                      cancelLabel: t('common.cancel'),
+                      onOk: () =>
+                        api('POST', `/api/users/${profile.id}/block`, {}, token)
+                          .then(() => setBlocked(true))
+                          .catch(() => {}),
+                    });
+                  }}
+                  style={{ flex: 1, marginRight: 8, height: 42 }}
+                />
+                <Button
+                  kind="ghost"
+                  title={`⚠️ ${t('modal.report')}`}
+                  onPress={() =>
+                    confirmAction({
+                      title: t('modal.reportQ'),
+                      message: t('modal.reportText'),
+                      okLabel: t('modal.report'),
+                      cancelLabel: t('common.cancel'),
+                      onOk: () =>
+                        api('POST', `/api/users/${profile.id}/report`, { reason: 'reported in app' }, token)
+                          .then(() => notify(t('modal.report'), t('modal.reported')))
+                          .catch(() => {}),
+                    })
+                  }
+                  style={{ flex: 1, height: 42 }}
+                />
+              </Row>
+            </View>
+          ) : null}
           <Button kind="ghost" title={t('common.close')} onPress={onClose} style={{ marginTop: 8 }} />
         </Pressable>
       </Pressable>

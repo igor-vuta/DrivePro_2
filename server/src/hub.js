@@ -220,6 +220,7 @@ export class Hub {
     const list = [];
     for (const [driverId, loc] of this.drivers) {
       if (driverId === userId) continue;
+      if (this.store.isBlockedEither(driverId, userId)) continue;
       const dx = (loc.lat - watch.lat) * 111_000;
       const dy = (loc.lng - watch.lng) * 111_000 * Math.cos((watch.lat * Math.PI) / 180);
       if (dx * dx + dy * dy > MAP_RADIUS_M * MAP_RADIUS_M) continue;
