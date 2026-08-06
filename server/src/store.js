@@ -44,7 +44,9 @@ class SqliteBackend {
         email TEXT,
         city TEXT,
         places TEXT,
-        points INTEGER DEFAULT 0
+        points INTEGER DEFAULT 0,
+        otp_attempts INTEGER DEFAULT 0,
+        banned INTEGER DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS driver_profiles (
         user_id TEXT PRIMARY KEY,
@@ -127,6 +129,8 @@ class SqliteBackend {
       ['city', 'TEXT'],
       ['places', 'TEXT'],
       ['points', 'INTEGER DEFAULT 0'],
+      ['otp_attempts', 'INTEGER DEFAULT 0'],
+      ['banned', 'INTEGER DEFAULT 0'],
     ]);
     // Accounts created before verification existed stay usable.
     if (addedUsers.includes('verified')) {
@@ -156,13 +160,14 @@ class SqliteBackend {
     const map = {
       name: 'name', verified: 'verified', otpCode: 'otp_code', otpExpires: 'otp_expires',
       otpSentAt: 'otp_sent_at', avatar: 'avatar', about: 'about', email: 'email', city: 'city', places: 'places',
+      otpAttempts: 'otp_attempts', banned: 'banned',
     };
     const cols = [];
     const vals = [];
     for (const [k, v] of Object.entries(patch)) {
       if (!(k in map)) continue;
       cols.push(`${map[k]} = ?`);
-      vals.push(k === 'verified' ? (v ? 1 : 0) : k === 'places' && v != null ? JSON.stringify(v) : v);
+      vals.push(k === 'verified' || k === 'banned' ? (v ? 1 : 0) : k === 'places' && v != null ? JSON.stringify(v) : v);
     }
     if (!cols.length) return;
     vals.push(uid);
@@ -274,6 +279,13 @@ class SqliteBackend {
       .all(uid, ...ACTIVE_RIDE_STATUSES)
       .map(rowToRide);
   }
+  allActiveRides() {
+    const q = ACTIVE_RIDE_STATUSES.map(() => '?').join(', ');
+    return this.db.prepare(`SELECT * FROM rides WHERE status IN (${q})`).all(...ACTIVE_RIDE_STATUSES).map(rowToRide);
+  }
+  allUsers(limit = 300) {
+    return this.db.prepare('SELECT * FROM users ORDER BY created_at DESC LIMIT ?').all(limit).map(rowToUser);
+  }
   ridesForUser(uid, limit = 50) {
     return this.db
       .prepare('SELECT * FROM rides WHERE rider_id = ? OR driver_id = ? ORDER BY created_at DESC LIMIT ?')
@@ -348,6 +360,8 @@ function rowToUser(row) {
     email: row.email ?? null,
     city: row.city ?? null,
     points: row.points != null ? Number(row.points) : 0,
+    otpAttempts: row.otp_attempts != null ? Number(row.otp_attempts) : 0,
+    banned: !!row.banned,
     places,
   };
 }
@@ -418,7 +432,7 @@ class JsonBackend {
   updateUserFields(uid, patch) {
     const u = this.userById(uid);
     if (u) {
-      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places'];
+      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places', 'otpAttempts', 'banned'];
       for (const k of allowed) {
         if (k in patch) u[k] = patch[k];
       }
@@ -504,6 +518,12 @@ class JsonBackend {
     return this.data.rides
       .filter((r) => r.driverId === uid && ACTIVE_RIDE_STATUSES.includes(r.status))
       .sort((a, b) => a.createdAt - b.createdAt);
+  }
+  allActiveRides() {
+    return this.data.rides.filter((r) => ACTIVE_RIDE_STATUSES.includes(r.status));
+  }
+  allUsers(limit = 300) {
+    return [...this.data.users].sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
   }
   ridesForUser(uid, limit = 50) {
     return [...this.data.rides]
@@ -623,6 +643,12 @@ export class Store {
   }
   listActiveRidesForDriver(uid) {
     return this.b.activeRidesAsDriver(uid);
+  }
+  listAllActiveRides() {
+    return this.b.allActiveRides();
+  }
+  listUsers(limit) {
+    return this.b.allUsers(limit);
   }
   listRidesForUser(uid, limit) {
     return this.b.ridesForUser(uid, limit);

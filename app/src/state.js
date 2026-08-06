@@ -200,7 +200,14 @@ export function AuthProvider({ children }) {
       if (my && msg.ride) {
         const mySide = msg.ride.riderId === my.id ? 'rider' : 'driver';
         if (msg.ride.cancelledBy && msg.ride.cancelledBy !== mySide) {
-          notify(t('note.rideCancelled'), msg.ride.cancelledBy === 'rider' ? t('note.byRider') : t('note.byDriver'));
+          notify(
+            t('note.rideCancelled'),
+            msg.ride.cancelledBy === 'system'
+              ? t('note.bySystem')
+              : msg.ride.cancelledBy === 'rider'
+              ? t('note.byRider')
+              : t('note.byDriver')
+          );
         }
       }
     });

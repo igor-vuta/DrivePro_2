@@ -5,6 +5,27 @@ import { reverseGeocode, searchAddress, route as geoRoute } from './geo.js';
 import { generateCode, sendCode, OTP_TTL_MS, OTP_RESEND_COOLDOWN_MS, OTP_ECHO } from './otp.js';
 
 const MAX_AVATAR_CHARS = 400_000; // ~300 KB of base64 image data
+const OTP_MAX_ATTEMPTS = 5;
+const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || '').trim();
+
+// Tiny in-memory per-IP rate limiter for the auth surface.
+const rlBuckets = new Map(); // key -> number[] (timestamps)
+function rateLimit(req, name, max, windowMs = 10 * 60 * 1000) {
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  const ip = fwd || (req.socket && req.socket.remoteAddress) || '?';
+  const key = `${name}:${ip}`;
+  const nowMs = Date.now();
+  const arr = (rlBuckets.get(key) || []).filter((ts) => nowMs - ts < windowMs);
+  if (arr.length >= max) {
+    rlBuckets.set(key, arr);
+    throw httpError(429, 'Too many attempts. Try again later.', 'rate_limited');
+  }
+  arr.push(nowMs);
+  rlBuckets.set(key, arr);
+  if (rlBuckets.size > 5000) {
+    for (const [k, v] of rlBuckets) if (!v.length || nowMs - v[v.length - 1] > windowMs) rlBuckets.delete(k);
+  }
+}
 
 // REST API. Routes are matched as `${METHOD} ${pattern}`; `:param` segments
 // are captured into params.
@@ -37,7 +58,13 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const payload = token ? verifyToken(token, secret) : null;
     const user = payload ? store.getUser(payload.uid) : null;
     if (!user) throw httpError(401, 'authentication required');
+    if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
     return user;
+  };
+
+  const adminAuth = (req) => {
+    if (!ADMIN_TOKEN) throw httpError(404, 'not found');
+    if (String(req.headers['x-admin-token'] || '') !== ADMIN_TOKEN) throw httpError(401, 'admin token required');
   };
 
   const sessionPayload = (user) => ({
@@ -53,7 +80,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
 
   const issueOtp = (user) => {
     const code = generateCode();
-    store.updateUser(user.id, { otpCode: code, otpExpires: Date.now() + OTP_TTL_MS, otpSentAt: Date.now() });
+    store.updateUser(user.id, { otpCode: code, otpExpires: Date.now() + OTP_TTL_MS, otpSentAt: Date.now(), otpAttempts: 0 });
     sendCode(user.phone, code);
     return code;
   };
@@ -68,6 +95,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
   };
 
   route('POST', '/api/register', async (req, res) => {
+    rateLimit(req, 'register', 30);
     const body = await readJson(req);
     const phone = normPhone(body.phone);
     const name = cleanStr(body.name, 60);
@@ -90,11 +118,13 @@ export function createApi({ store, secret, hub, serveStatic }) {
   });
 
   route('POST', '/api/verify', async (req, res) => {
+    rateLimit(req, 'verify', 30);
     const body = await readJson(req);
     const phone = normPhone(body.phone);
     const code = cleanStr(body.code, 8);
     const user = phone ? store.findUserByPhone(phone) : null;
     if (!user) throw httpError(404, 'No account with this phone number.', 'no_account');
+    if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
     if (user.verified) {
       sendJson(res, 200, sessionPayload(user));
       return;
@@ -102,12 +132,22 @@ export function createApi({ store, secret, hub, serveStatic }) {
     if (!user.otpCode || !user.otpExpires || user.otpExpires < Date.now()) {
       throw httpError(400, 'The code has expired. Request a new one.', 'code_expired');
     }
-    if (user.otpCode !== code) throw httpError(400, 'Wrong code. Check and try again.', 'code_wrong');
-    store.updateUser(user.id, { verified: true, otpCode: null, otpExpires: null });
+    if (user.otpCode !== code) {
+      const attempts = (user.otpAttempts || 0) + 1;
+      if (attempts >= OTP_MAX_ATTEMPTS) {
+        // Burn the code entirely: guessing is over, a new one must be requested.
+        store.updateUser(user.id, { otpCode: null, otpExpires: null, otpAttempts: 0 });
+        throw httpError(429, 'Too many wrong codes. Request a new one.', 'code_locked');
+      }
+      store.updateUser(user.id, { otpAttempts: attempts });
+      throw httpError(400, 'Wrong code. Check and try again.', 'code_wrong');
+    }
+    store.updateUser(user.id, { verified: true, otpCode: null, otpExpires: null, otpAttempts: 0 });
     sendJson(res, 200, sessionPayload(store.getUser(user.id)));
   });
 
   route('POST', '/api/resend', async (req, res) => {
+    rateLimit(req, 'resend', 10);
     const body = await readJson(req);
     const phone = normPhone(body.phone);
     const user = phone ? store.findUserByPhone(phone) : null;
@@ -121,6 +161,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
   });
 
   route('POST', '/api/login', async (req, res) => {
+    rateLimit(req, 'login', 20);
     const body = await readJson(req);
     const phone = normPhone(body.phone);
     const password = typeof body.password === 'string' ? body.password : '';
@@ -128,6 +169,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
     if (!user || !verifyPassword(password, user.passwordHash)) {
       throw httpError(401, 'Wrong phone number or password.', 'wrong_credentials');
     }
+    if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
     if (!user.verified) {
       const code =
         user.otpSentAt && Date.now() - user.otpSentAt < OTP_RESEND_COOLDOWN_MS ? user.otpCode : issueOtp(user);
@@ -275,6 +317,33 @@ export function createApi({ store, secret, hub, serveStatic }) {
     sendJson(res, 201, { ok: true, rating: { stars: rating.stars, comment: rating.comment } });
   });
 
+  // ------------------------------------------------------------- admin ---
+  // Enabled only when ADMIN_TOKEN is set in the environment.
+  route('GET', '/api/admin/overview', async (req, res) => {
+    adminAuth(req);
+    const users = store.listUsers(300).map((u) => ({
+      id: u.id,
+      name: u.name,
+      phone: u.phone,
+      points: u.points || 0,
+      banned: !!u.banned,
+      verified: !!u.verified,
+      createdAt: u.createdAt,
+      rides: store.countFinishedRides(u.id),
+    }));
+    const active = store.listAllActiveRides();
+    sendJson(res, 200, { users, activeRides: active.length, totalUsers: users.length });
+  });
+
+  route('POST', '/api/admin/users/:id/ban', async (req, res, params) => {
+    adminAuth(req);
+    const body = await readJson(req);
+    const user = store.getUser(params.id);
+    if (!user) throw httpError(404, 'user not found');
+    store.updateUser(user.id, { banned: !!body.banned });
+    sendJson(res, 200, { ok: true, banned: !!body.banned });
+  });
+
   // Weekly recap: your last 7 days plus the whole movement's totals.
   route('GET', '/api/weekly', async (req, res) => {
     const user = authUser(req);
@@ -364,6 +433,13 @@ export function createApi({ store, secret, hub, serveStatic }) {
       return;
     }
 
+    // Minimal operator panel (enabled only with ADMIN_TOKEN set).
+    if (req.method === 'GET' && path === '/admin' && ADMIN_TOKEN) {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      res.end(ADMIN_HTML);
+      return;
+    }
+
     // Anything outside /api is the web app (when a build exists).
     if ((req.method === 'GET' || req.method === 'HEAD') && !path.startsWith('/api/')) {
       if (serveStatic && serveStatic(req, res, path)) return;
@@ -392,3 +468,44 @@ export function createApi({ store, secret, hub, serveStatic }) {
     sendJson(res, 404, { error: 'not found' });
   };
 }
+
+// Dark one-file operator panel; token stays in the browser's localStorage.
+const ADMIN_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>DrivePro · admin</title><style>
+body{background:#06070d;color:#e9f2ff;font-family:-apple-system,system-ui,sans-serif;margin:0;padding:24px}
+h1{font-size:20px;letter-spacing:1px} .sub{color:#8b96b8;font-size:13px}
+input{background:#0a0e1a;color:#e9f2ff;border:1px solid #223052;border-radius:10px;padding:10px 12px;font-size:14px;width:280px}
+button{background:#00e5ff;color:#02141a;border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+button.ghost{background:transparent;color:#e9f2ff;border:1px solid #254a63}
+table{border-collapse:collapse;width:100%;margin-top:18px;font-size:13px}
+td,th{padding:8px 10px;border-bottom:1px solid #1c2438;text-align:left}
+th{color:#8b96b8;font-weight:600;text-transform:uppercase;font-size:11px}
+.badge{color:#f5c518}.banned{color:#ff3b5c;font-weight:700}.ok{color:#00ffa3}
+</style></head><body>
+<h1>DRIVEPRO <span class="sub">operator panel</span></h1>
+<div id="login"><p class="sub">Admin token</p><input id="tok" type="password"/> <button onclick="save()">Enter</button></div>
+<div id="panel" style="display:none">
+  <p class="sub" id="stats"></p>
+  <table><thead><tr><th>Name</th><th>Phone</th><th>⚡</th><th>Rides</th><th>Status</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+  <p><button class="ghost" onclick="localStorage.removeItem('admtok');location.reload()">Log out</button></p>
+</div>
+<script>
+const tok = () => localStorage.getItem('admtok') || '';
+function save(){ localStorage.setItem('admtok', document.getElementById('tok').value.trim()); load(); }
+async function ban(id, b){ await fetch('/api/admin/users/'+id+'/ban',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':tok()},body:JSON.stringify({banned:b})}); load(); }
+async function load(){
+  if(!tok()) return;
+  const r = await fetch('/api/admin/overview',{headers:{'x-admin-token':tok()}});
+  if(!r.ok){ localStorage.removeItem('admtok'); return; }
+  const d = await r.json();
+  document.getElementById('login').style.display='none';
+  document.getElementById('panel').style.display='block';
+  document.getElementById('stats').textContent = d.totalUsers+' users · '+d.activeRides+' active rides';
+  document.getElementById('rows').innerHTML = d.users.map(u =>
+    '<tr><td>'+u.name+'</td><td>'+u.phone+'</td><td class="badge">'+u.points+'</td><td>'+u.rides+'</td>'+
+    '<td class="'+(u.banned?'banned':'ok')+'">'+(u.banned?'BANNED':(u.verified?'active':'unverified'))+'</td>'+
+    '<td><button class="ghost" onclick="ban(\''+u.id+'\','+(!u.banned)+')">'+(u.banned?'Unban':'Ban')+'</button></td></tr>'
+  ).join('');
+}
+load();
+</script></body></html>`;

@@ -246,6 +246,7 @@ const en = {
   'note.rideCancelled': 'Ride cancelled',
   'note.byRider': 'The rider cancelled the ride.',
   'note.byDriver': 'The driver cancelled the ride.',
+  'note.bySystem': 'The ride expired and was closed automatically.',
   'note.arrivedTitle': 'Your driver has arrived',
   'note.lookFor': 'Look for the {color} {make} {model}, plate {plate}.',
   'note.meetPickup': 'Meet them at the pickup point.',
@@ -271,6 +272,9 @@ const en = {
   'err.points_required': 'Pickup and destination are required.',
   'err.body_too_large': 'The data you sent is too large.',
   'err.convoy_full': 'You already carry 3 passengers.',
+  'err.banned': 'This account is suspended.',
+  'err.rate_limited': 'Too many attempts. Try again later.',
+  'err.code_locked': 'Too many wrong codes. Request a new one.',
   'err.network': "Can't reach the server at {url}. Is it running?",
 };
 
@@ -502,6 +506,7 @@ const ru = {
   'note.rideCancelled': 'Поездка отменена',
   'note.byRider': 'Пассажир отменил поездку.',
   'note.byDriver': 'Водитель отменил поездку.',
+  'note.bySystem': 'Поездка истекла и была закрыта автоматически.',
   'note.arrivedTitle': 'Водитель приехал',
   'note.lookFor': 'Ищите: {color} {make} {model}, номер {plate}.',
   'note.meetPickup': 'Встречайте у точки подачи.',
@@ -526,6 +531,9 @@ const ru = {
   'err.points_required': 'Нужны точки подачи и назначения.',
   'err.body_too_large': 'Отправленные данные слишком большие.',
   'err.convoy_full': 'У вас уже 3 пассажира.',
+  'err.banned': 'Этот аккаунт заблокирован.',
+  'err.rate_limited': 'Слишком много попыток. Попробуйте позже.',
+  'err.code_locked': 'Слишком много неверных кодов. Запросите новый.',
   'err.network': 'Не удаётся связаться с сервером {url}. Он запущен?',
 };
 

@@ -8,7 +8,36 @@ import { publicUser, rideCounterpart } from './views.js';
 const CANCELLABLE = ['requested', 'accepted', 'arrived'];
 const MAX_CONVOY = 3; // passengers a driver may carry at once
 
+// Zombie protection: rides abandoned in an active status get closed
+// automatically. Cutoffs are env-tunable (tests use tiny values).
+const STALE_MS = {
+  requested: Number(process.env.DRIVEPRO_STALE_REQUESTED_MS || 30 * 60 * 1000),
+  accepted: Number(process.env.DRIVEPRO_STALE_ACCEPTED_MS || 3 * 3600 * 1000),
+  arrived: Number(process.env.DRIVEPRO_STALE_ACCEPTED_MS || 3 * 3600 * 1000),
+  in_progress: Number(process.env.DRIVEPRO_STALE_TRIP_MS || 12 * 3600 * 1000),
+};
+const SWEEP_EVERY_MS = Number(process.env.DRIVEPRO_SWEEP_MS || 5 * 60 * 1000);
+
+export function sweepStaleRides(store, hub, nowMs = Date.now()) {
+  let closed = 0;
+  for (const ride of store.listAllActiveRides()) {
+    const started = ride.status === 'requested' ? ride.createdAt : ride.acceptedAt || ride.createdAt;
+    const age = nowMs - (ride.status === 'in_progress' ? ride.startedAt || started : started);
+    if (age < (STALE_MS[ride.status] || Infinity)) continue;
+    const updated = store.updateRide(ride.id, { status: 'cancelled', cancelledAt: nowMs, cancelledBy: 'system' });
+    closed++;
+    for (const uid of [updated.riderId, updated.driverId]) {
+      if (uid) hub.sendTo(uid, { type: 'ride:cancelled', ride: updated });
+    }
+    for (const did of hub.onlineDriverIds()) hub.sendTo(did, { type: 'ride:offer_gone', rideId: updated.id });
+  }
+  return closed;
+}
+
 export function setupRides({ store, hub }) {
+  const sweep = setInterval(() => sweepStaleRides(store, hub), SWEEP_EVERY_MS);
+  if (sweep.unref) sweep.unref();
+
   // Rider requests a ride.
   hub.on('ride:request', (user, msg, conn) => {
     const existing = store.findActiveRideForUser(user.id);
