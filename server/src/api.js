@@ -599,6 +599,86 @@ export function createApi({ store, secret, hub, serveStatic }) {
     sendJson(res, 200, myCrewPayload(user));
   });
 
+  // ---- scheduled & recurring rides (L14) ----
+  const SCHED_MAX = Number(process.env.DRIVEPRO_SCHED_MAX || 10);
+  const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const localDayKey = (ts) => {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const schedView = (s) => ({
+    id: s.id,
+    pickup: { lat: s.pickupLat, lng: s.pickupLng, address: s.pickupAddress },
+    dest: { lat: s.destLat, lng: s.destLng, address: s.destAddress },
+    time: s.time,
+    days: s.days || null,
+    date: s.date || null,
+    comment: s.comment || null,
+    active: !!s.active,
+    createdAt: s.createdAt,
+  });
+
+  route('GET', '/api/schedules', async (req, res) => {
+    const user = authUser(req);
+    sendJson(res, 200, { schedules: store.listSchedules(user.id).map(schedView) });
+  });
+
+  route('POST', '/api/schedules', async (req, res) => {
+    const user = authUser(req);
+    if (store.listSchedules(user.id).length >= SCHED_MAX)
+      throw httpError(400, `You can keep up to ${SCHED_MAX} schedules.`, 'too_many_schedules');
+    const body = await readJson(req);
+    const p = body.pickup || {};
+    const d = body.dest || {};
+    if (!isLat(p.lat) || !isLng(p.lng) || !isLat(d.lat) || !isLng(d.lng))
+      throw httpError(400, 'Pickup and destination are required.', 'points_required');
+    const time = String(body.time || '').trim();
+    if (!TIME_RE.test(time)) throw httpError(400, 'Enter the departure time as HH:MM.', 'invalid_time');
+    let days = null;
+    let date = null;
+    if (body.date != null && body.date !== '') {
+      date = String(body.date).trim();
+      if (!DATE_RE.test(date) || date < localDayKey(Date.now()))
+        throw httpError(400, 'Pick a valid future date.', 'invalid_date');
+    } else {
+      days = Array.isArray(body.days) ? [...new Set(body.days.map(Number))].filter((n) => n >= 1 && n <= 7) : [];
+      if (!days.length) throw httpError(400, 'Pick at least one weekday or a date.', 'invalid_days');
+      days.sort((a, b) => a - b);
+    }
+    const schedule = store.createSchedule({
+      riderId: user.id,
+      pickupLat: p.lat,
+      pickupLng: p.lng,
+      pickupAddress: cleanStr(p.address, 200),
+      destLat: d.lat,
+      destLng: d.lng,
+      destAddress: cleanStr(d.address, 200),
+      time,
+      days,
+      date,
+      comment: cleanStr(body.comment, 300) || null,
+    });
+    sendJson(res, 200, { schedule: schedView(schedule) });
+  });
+
+  route('PUT', '/api/schedules/:id', async (req, res, params) => {
+    const user = authUser(req);
+    const s = store.getSchedule(params.id);
+    if (!s || s.riderId !== user.id) throw httpError(404, 'No such schedule.', 'schedule_not_found');
+    const body = await readJson(req);
+    if (typeof body.active === 'boolean') store.updateSchedule(s.id, { active: body.active });
+    sendJson(res, 200, { schedule: schedView(store.getSchedule(s.id)) });
+  });
+
+  route('DELETE', '/api/schedules/:id', async (req, res, params) => {
+    const user = authUser(req);
+    const s = store.getSchedule(params.id);
+    if (!s || s.riderId !== user.id) throw httpError(404, 'No such schedule.', 'schedule_not_found');
+    store.deleteSchedule(s.id);
+    sendJson(res, 200, { ok: true });
+  });
+
   // Live city impact: today's shared rides + km, plus drivers online now.
   route('GET', '/api/city/impact', async (req, res) => {
     authUser(req);

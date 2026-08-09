@@ -62,6 +62,24 @@ class SqliteBackend {
         points INTEGER DEFAULT 0,
         created_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS scheduled_rides (
+        id TEXT PRIMARY KEY,
+        rider_id TEXT NOT NULL,
+        pickup_lat REAL NOT NULL,
+        pickup_lng REAL NOT NULL,
+        pickup_address TEXT,
+        dest_lat REAL NOT NULL,
+        dest_lng REAL NOT NULL,
+        dest_address TEXT,
+        time TEXT NOT NULL,
+        days TEXT,
+        date TEXT,
+        comment TEXT,
+        active INTEGER DEFAULT 1,
+        last_spawn_day TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_sched_rider ON scheduled_rides (rider_id);
       CREATE TABLE IF NOT EXISTS driver_profiles (
         user_id TEXT PRIMARY KEY,
         car_make TEXT NOT NULL,
@@ -253,6 +271,50 @@ class SqliteBackend {
   }
   dropCrew(cid) {
     this.db.prepare('DELETE FROM crews WHERE id = ?').run(cid);
+  }
+
+  // scheduled rides
+  insertSchedule(s) {
+    this.db
+      .prepare(
+        `INSERT INTO scheduled_rides
+         (id, rider_id, pickup_lat, pickup_lng, pickup_address, dest_lat, dest_lng, dest_address,
+          time, days, date, comment, active, last_spawn_day, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?)`
+      )
+      .run(
+        s.id, s.riderId, s.pickupLat, s.pickupLng, s.pickupAddress ?? null,
+        s.destLat, s.destLng, s.destAddress ?? null,
+        s.time, s.days ? JSON.stringify(s.days) : null, s.date ?? null, s.comment ?? null, s.createdAt
+      );
+  }
+  schedulesByRider(uid) {
+    return this.db
+      .prepare('SELECT * FROM scheduled_rides WHERE rider_id = ? ORDER BY created_at ASC')
+      .all(uid)
+      .map(rowToSchedule);
+  }
+  scheduleById(sid) {
+    return rowToSchedule(this.db.prepare('SELECT * FROM scheduled_rides WHERE id = ?').get(sid));
+  }
+  activeSchedules() {
+    return this.db.prepare('SELECT * FROM scheduled_rides WHERE active = 1').all().map(rowToSchedule);
+  }
+  updateScheduleFields(sid, patch) {
+    const map = { active: 'active', lastSpawnDay: 'last_spawn_day', time: 'time', days: 'days', date: 'date' };
+    const cols = [];
+    const vals = [];
+    for (const [k, v] of Object.entries(patch)) {
+      if (!(k in map)) continue;
+      cols.push(`${map[k]} = ?`);
+      vals.push(k === 'active' ? (v ? 1 : 0) : k === 'days' && v != null ? JSON.stringify(v) : v);
+    }
+    if (!cols.length) return;
+    vals.push(sid);
+    this.db.prepare(`UPDATE scheduled_rides SET ${cols.join(', ')} WHERE id = ?`).run(...vals);
+  }
+  dropSchedule(sid) {
+    this.db.prepare('DELETE FROM scheduled_rides WHERE id = ?').run(sid);
   }
 
   // trails (neon traces of finished rides)
@@ -501,6 +563,27 @@ function rowToUser(row) {
     places,
   };
 }
+function rowToSchedule(row) {
+  return row
+    ? {
+        id: row.id,
+        riderId: row.rider_id,
+        pickupLat: Number(row.pickup_lat),
+        pickupLng: Number(row.pickup_lng),
+        pickupAddress: row.pickup_address ?? null,
+        destLat: Number(row.dest_lat),
+        destLng: Number(row.dest_lng),
+        destAddress: row.dest_address ?? null,
+        time: row.time,
+        days: row.days ? safeParse(row.days) : null,
+        date: row.date ?? null,
+        comment: row.comment ?? null,
+        active: !!Number(row.active),
+        lastSpawnDay: row.last_spawn_day ?? null,
+        createdAt: Number(row.created_at),
+      }
+    : null;
+}
 function rowToCrew(row) {
   return row
     ? {
@@ -639,6 +722,39 @@ class JsonBackend {
   }
   dropCrew(cid) {
     this.data.crews = this._crews().filter((c) => c.id !== cid);
+    this.save();
+  }
+
+  _schedules() {
+    if (!Array.isArray(this.data.schedules)) this.data.schedules = [];
+    return this.data.schedules;
+  }
+  insertSchedule(s) {
+    this._schedules().push({ ...s, active: true, lastSpawnDay: null });
+    this.save();
+  }
+  schedulesByRider(uid) {
+    return this._schedules()
+      .filter((s) => s.riderId === uid)
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
+  scheduleById(sid) {
+    return this._schedules().find((s) => s.id === sid) || null;
+  }
+  activeSchedules() {
+    return this._schedules().filter((s) => s.active);
+  }
+  updateScheduleFields(sid, patch) {
+    const s = this.scheduleById(sid);
+    if (s) {
+      for (const k of ['active', 'lastSpawnDay', 'time', 'days', 'date']) {
+        if (k in patch) s[k] = patch[k];
+      }
+      this.save();
+    }
+  }
+  dropSchedule(sid) {
+    this.data.schedules = this._schedules().filter((s) => s.id !== sid);
     this.save();
   }
 
@@ -922,6 +1038,29 @@ export class Store {
   }
   addCrewPoints(cid, n) {
     if (cid && Number.isFinite(n) && n > 0) this.b.addCrewPoints(cid, Math.round(n));
+  }
+
+  // Scheduled & recurring rides (commuter carpools).
+  createSchedule(fields) {
+    const s = { id: id(), createdAt: now(), active: true, lastSpawnDay: null, ...fields };
+    this.b.insertSchedule(s);
+    return this.getSchedule(s.id);
+  }
+  getSchedule(sid) {
+    return this.b.scheduleById(sid);
+  }
+  listSchedules(uid) {
+    return this.b.schedulesByRider(uid);
+  }
+  listActiveSchedules() {
+    return this.b.activeSchedules();
+  }
+  updateSchedule(sid, patch) {
+    this.b.updateScheduleFields(sid, patch);
+    return this.getSchedule(sid);
+  }
+  deleteSchedule(sid) {
+    this.b.dropSchedule(sid);
   }
 
   saveTrail(rideId, points) {

@@ -78,7 +78,19 @@ export default function RideTab() {
   const [results, setResults] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [schedules, setSchedules] = useState([]);
   const geoSeq = useRef(0);
+
+  // Scheduled rides (L14): list + refresh after planner/list mutations.
+  const loadSchedules = async () => {
+    try {
+      const r = await api('GET', '/api/schedules', null, token);
+      setSchedules(r.schedules || []);
+    } catch (e) {}
+  };
+  useEffect(() => {
+    loadSchedules();
+  }, [token]);
 
   // Center on the user's real location once.
   useEffect(() => {
@@ -366,6 +378,9 @@ export default function RideTab() {
 
         {step !== 'confirm' ? (
           <View>
+            {step === 'pickup' && schedules.length ? (
+              <ScheduleList schedules={schedules} onChanged={loadSchedules} />
+            ) : null}
             {places && (places.home || places.work) ? (
               <Row style={{ marginBottom: 8 }}>
                 {places.home ? (
@@ -440,12 +455,151 @@ export default function RideTab() {
               <Button kind="ghost" title={t('common.back')} onPress={() => { setStep('dest'); setRoute(null); setAddress(dest ? dest.address : ''); }} style={{ flex: 1, marginRight: 8 }} />
               <Button title={t('ride.request')} onPress={requestRide} loading={busy} disabled={routeLoading} style={{ flex: 2 }} />
             </Row>
+            <SchedulePlanner
+              pickup={pickup}
+              dest={dest}
+              comment={comment}
+              onCreated={() => {
+                loadSchedules();
+                resetFlow();
+              }}
+            />
           </ScrollView>
         )}
         <View style={{ height: 12 }} />
         </FadeIn>
       </View>
     </View>
+  );
+}
+
+// ------------------------------------------------- scheduled rides (L14) ---
+
+const fmtDayKey = (ts) => {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+// Compact list of saved commutes: pause/resume and delete in place.
+function ScheduleList({ schedules, onChanged }) {
+  const { token } = useAuth();
+  const labels = t('sched.dow').split(',');
+  const fmt = (s) =>
+    s.date
+      ? t('sched.once', { date: s.date })
+      : s.days && s.days.length === 7
+      ? t('sched.daily')
+      : (s.days || []).map((d) => labels[d - 1]).join(' ');
+  const toggle = (s) => api('PUT', `/api/schedules/${s.id}`, { active: !s.active }, token).then(onChanged).catch(() => {});
+  const del = (s) =>
+    confirmAction({
+      title: t('sched.deleteQ'),
+      message: `${s.time} · ${s.dest.address || ''}`,
+      okLabel: t('common.remove'),
+      cancelLabel: t('common.cancel'),
+      onOk: () => api('DELETE', `/api/schedules/${s.id}`, null, token).then(onChanged).catch(() => {}),
+    });
+  return (
+    <Card style={{ marginBottom: 8, paddingVertical: 10 }}>
+      <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 6, fontSize: 13 }}>⏰ {t('sched.title')}</Text>
+      {schedules.map((s) => (
+        <Row key={s.id} style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+          <Text
+            style={{ color: s.active ? colors.text : colors.sub, flexShrink: 1, fontSize: 13, marginRight: 8 }}
+            numberOfLines={1}
+          >
+            {s.time} · {fmt(s)} · {s.dest.address || ''}
+          </Text>
+          <Row>
+            <Pressable onPress={() => toggle(s)} style={{ paddingHorizontal: 6 }}>
+              <Text style={{ fontSize: 14 }}>{s.active ? '⏸' : '▶️'}</Text>
+            </Pressable>
+            <Pressable onPress={() => del(s)} style={{ paddingHorizontal: 6 }}>
+              <Text style={{ color: colors.danger, fontSize: 14, fontWeight: '700' }}>✕</Text>
+            </Pressable>
+          </Row>
+        </Row>
+      ))}
+    </Card>
+  );
+}
+
+// "Schedule instead": HH:MM + weekday chips; no days selected = once
+// tomorrow. The server spawns the request ~10 minutes before departure.
+function SchedulePlanner({ pickup, dest, comment, onCreated }) {
+  const { token } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [time, setTime] = useState('08:30');
+  const [days, setDays] = useState([1, 2, 3, 4, 5]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const labels = t('sched.dow').split(',');
+
+  const toggleDay = (d) => setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+
+  const create = async () => {
+    setErr('');
+    setBusy(true);
+    try {
+      const body = { pickup, dest, comment: (comment || '').trim(), time: time.trim() };
+      if (days.length) body.days = days;
+      else body.date = fmtDayKey(Date.now() + 86_400_000);
+      await api('POST', '/api/schedules', body, token);
+      notify(t('sched.created'), t('sched.createdText'));
+      setOpen(false);
+      onCreated();
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return <Button kind="ghost" title={`⏰ ${t('sched.plan')}`} onPress={() => setOpen(true)} style={{ marginTop: 8, height: 42 }} />;
+  }
+  return (
+    <Card style={{ marginTop: 8 }}>
+      <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 8 }}>⏰ {t('sched.plan')}</Text>
+      <Input
+        label={t('sched.timeLabel')}
+        value={time}
+        onChangeText={setTime}
+        placeholder="08:30"
+        maxLength={5}
+      />
+      <Text style={{ color: colors.sub, fontSize: 13, marginBottom: 6 }}>{t('sched.daysLabel')}</Text>
+      <Row style={{ flexWrap: 'wrap', marginBottom: 6 }}>
+        {labels.map((lb, i) => {
+          const d = i + 1;
+          const on = days.includes(d);
+          return (
+            <Pressable
+              key={d}
+              onPress={() => toggleDay(d)}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 7,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: on ? colors.primary : colors.border,
+                backgroundColor: on ? '#04222b' : colors.card,
+                marginRight: 6,
+                marginBottom: 6,
+              }}
+            >
+              <Text style={{ color: on ? colors.primary : colors.sub, fontWeight: '700', fontSize: 12 }}>{lb}</Text>
+            </Pressable>
+          );
+        })}
+      </Row>
+      {!days.length ? <Sub style={{ fontSize: 12 }}>{t('sched.oneOffHint')}</Sub> : null}
+      <ErrorText>{err}</ErrorText>
+      <Row>
+        <Button kind="ghost" title={t('common.cancel')} onPress={() => setOpen(false)} style={{ flex: 1, marginRight: 8 }} />
+        <Button title={t('sched.create')} onPress={create} loading={busy} style={{ flex: 2 }} />
+      </Row>
+    </Card>
   );
 }
 

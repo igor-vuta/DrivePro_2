@@ -8,6 +8,7 @@ import { Store } from './store.js';
 import { Hub } from './hub.js';
 import { createApi } from './api.js';
 import { setupRides } from './rides.js';
+import { setupSchedules } from './schedules.js';
 import { acceptUpgrade } from './ws.js';
 import { createStatic } from './static.js';
 import { initPush } from './push.js';
@@ -30,6 +31,7 @@ initPush(DATA_DIR);
 const store = new Store(DATA_DIR);
 const hub = new Hub(store);
 setupRides({ store, hub });
+setupSchedules({ store, hub });
 const api = createApi({ store, secret, hub, serveStatic: createStatic(WEB_DIR) });
 
 const server = http.createServer((req, res) => {
