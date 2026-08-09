@@ -90,6 +90,26 @@ export default function WeeklyRecap() {
                   ))}
                 </View>
               ) : null}
+
+              {data.city.crews && data.city.crews.length ? (
+                <View style={{ marginTop: 8 }}>
+                  <Text
+                    style={{ fontWeight: '700', color: colors.sub, marginBottom: 6, textTransform: 'uppercase', fontSize: 12 }}
+                  >
+                    {t('weekly.crews')}
+                  </Text>
+                  {data.city.crews.map((c, i) => (
+                    <Text key={i} style={{ color: colors.text, fontSize: 15, marginBottom: 3 }}>
+                      {['🥇', '🥈', '🥉'][i]}  {c.name} — ⚡{c.points}
+                    </Text>
+                  ))}
+                  {data.me.crew && data.me.crew.rank ? (
+                    <Text style={{ color: colors.sub, fontSize: 13, marginTop: 4 }}>
+                      🏴 {t('weekly.crewRank', { name: data.me.crew.name, rank: data.me.crew.rank })}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           )}
 

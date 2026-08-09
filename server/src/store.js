@@ -50,7 +50,17 @@ class SqliteBackend {
         banned INTEGER DEFAULT 0,
         streak_days INTEGER DEFAULT 0,
         streak_best INTEGER DEFAULT 0,
-        last_ride_day TEXT
+        last_ride_day TEXT,
+        crew_id TEXT,
+        crew_joined_at INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS crews (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        code TEXT UNIQUE NOT NULL,
+        owner_id TEXT NOT NULL,
+        points INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS driver_profiles (
         user_id TEXT PRIMARY KEY,
@@ -164,6 +174,8 @@ class SqliteBackend {
       ['streak_days', 'INTEGER DEFAULT 0'],
       ['streak_best', 'INTEGER DEFAULT 0'],
       ['last_ride_day', 'TEXT'],
+      ['crew_id', 'TEXT'],
+      ['crew_joined_at', 'INTEGER'],
     ]);
     // Accounts created before verification existed stay usable.
     if (addedUsers.includes('verified')) {
@@ -173,6 +185,8 @@ class SqliteBackend {
       ['pickup_details', 'TEXT'],
       ['dest_details', 'TEXT'],
     ]);
+    // Indexes on migrated columns must come after the columns exist.
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_users_crew ON users (crew_id)');
   }
 
   // users
@@ -193,7 +207,7 @@ class SqliteBackend {
     const map = {
       name: 'name', verified: 'verified', otpCode: 'otp_code', otpExpires: 'otp_expires',
       otpSentAt: 'otp_sent_at', avatar: 'avatar', about: 'about', email: 'email', city: 'city', places: 'places',
-      otpAttempts: 'otp_attempts', banned: 'banned',
+      otpAttempts: 'otp_attempts', banned: 'banned', crewId: 'crew_id', crewJoinedAt: 'crew_joined_at',
     };
     const cols = [];
     const vals = [];
@@ -211,6 +225,34 @@ class SqliteBackend {
   }
   setStreak(uid, { days, best, lastDay }) {
     this.db.prepare('UPDATE users SET streak_days = ?, streak_best = ?, last_ride_day = ? WHERE id = ?').run(days, best, lastDay, uid);
+  }
+
+  // crews
+  insertCrew(c) {
+    this.db
+      .prepare('INSERT INTO crews (id, name, code, owner_id, points, created_at) VALUES (?, ?, ?, ?, 0, ?)')
+      .run(c.id, c.name, c.code, c.ownerId, c.createdAt);
+  }
+  crewById(cid) {
+    return rowToCrew(this.db.prepare('SELECT * FROM crews WHERE id = ?').get(cid));
+  }
+  crewByCode(code) {
+    return rowToCrew(this.db.prepare('SELECT * FROM crews WHERE code = ?').get(code));
+  }
+  crewMemberRows(cid) {
+    return this.db
+      .prepare('SELECT * FROM users WHERE crew_id = ? ORDER BY crew_joined_at ASC')
+      .all(cid)
+      .map(rowToUser);
+  }
+  addCrewPoints(cid, n) {
+    this.db.prepare('UPDATE crews SET points = COALESCE(points, 0) + ? WHERE id = ?').run(n, cid);
+  }
+  setCrewOwner(cid, uid) {
+    this.db.prepare('UPDATE crews SET owner_id = ? WHERE id = ?').run(uid, cid);
+  }
+  dropCrew(cid) {
+    this.db.prepare('DELETE FROM crews WHERE id = ?').run(cid);
   }
 
   // trails (neon traces of finished rides)
@@ -454,8 +496,22 @@ function rowToUser(row) {
     streakDays: row.streak_days != null ? Number(row.streak_days) : 0,
     streakBest: row.streak_best != null ? Number(row.streak_best) : 0,
     lastRideDay: row.last_ride_day ?? null,
+    crewId: row.crew_id ?? null,
+    crewJoinedAt: row.crew_joined_at == null ? null : Number(row.crew_joined_at),
     places,
   };
+}
+function rowToCrew(row) {
+  return row
+    ? {
+        id: row.id,
+        name: row.name,
+        code: row.code,
+        ownerId: row.owner_id,
+        points: row.points != null ? Number(row.points) : 0,
+        createdAt: Number(row.created_at),
+      }
+    : null;
 }
 function rowToDriver(row) {
   return row
@@ -524,7 +580,7 @@ class JsonBackend {
   updateUserFields(uid, patch) {
     const u = this.userById(uid);
     if (u) {
-      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places', 'otpAttempts', 'banned'];
+      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places', 'otpAttempts', 'banned', 'crewId', 'crewJoinedAt'];
       for (const k of allowed) {
         if (k in patch) u[k] = patch[k];
       }
@@ -546,6 +602,44 @@ class JsonBackend {
       u.lastRideDay = lastDay;
       this.save();
     }
+  }
+
+  _crews() {
+    if (!Array.isArray(this.data.crews)) this.data.crews = [];
+    return this.data.crews;
+  }
+  insertCrew(c) {
+    this._crews().push({ ...c, points: 0 });
+    this.save();
+  }
+  crewById(cid) {
+    return this._crews().find((c) => c.id === cid) || null;
+  }
+  crewByCode(code) {
+    return this._crews().find((c) => c.code === code) || null;
+  }
+  crewMemberRows(cid) {
+    return this.data.users
+      .filter((u) => u.crewId === cid)
+      .sort((a, b) => (a.crewJoinedAt || 0) - (b.crewJoinedAt || 0));
+  }
+  addCrewPoints(cid, n) {
+    const c = this.crewById(cid);
+    if (c) {
+      c.points = (c.points || 0) + n;
+      this.save();
+    }
+  }
+  setCrewOwner(cid, uid) {
+    const c = this.crewById(cid);
+    if (c) {
+      c.ownerId = uid;
+      this.save();
+    }
+  }
+  dropCrew(cid) {
+    this.data.crews = this._crews().filter((c) => c.id !== cid);
+    this.save();
   }
 
   _trails() {
@@ -784,6 +878,50 @@ export class Store {
     const rides = this.b.finishedRidesSince(sinceMs);
     const km = rides.reduce((s, r) => s + (r.distanceM || 0), 0) / 1000;
     return { rides: rides.length, km: Math.round(km) };
+  }
+
+  // Crews: private squads joined by invite code; finished-ride points feed
+  // the crew's all-time total.
+  createCrew(ownerId, name) {
+    const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
+    let code = null;
+    for (let i = 0; i < 25 && !code; i++) {
+      const candidate = Array.from(
+        { length: 6 },
+        () => alphabet[Math.floor(Math.random() * alphabet.length)]
+      ).join('');
+      if (!this.b.crewByCode(candidate)) code = candidate;
+    }
+    if (!code) return null;
+    const crew = { id: id(), name, code, ownerId, createdAt: now() };
+    this.b.insertCrew(crew);
+    this.b.updateUserFields(ownerId, { crewId: crew.id, crewJoinedAt: now() });
+    return this.getCrew(crew.id);
+  }
+  getCrew(cid) {
+    return cid ? this.b.crewById(cid) : null;
+  }
+  findCrewByCode(code) {
+    return code ? this.b.crewByCode(code) : null;
+  }
+  joinCrew(uid, cid) {
+    this.b.updateUserFields(uid, { crewId: cid, crewJoinedAt: now() });
+  }
+  leaveCrew(uid) {
+    const u = this.getUser(uid);
+    if (!u || !u.crewId) return;
+    const crew = this.getCrew(u.crewId);
+    this.b.updateUserFields(uid, { crewId: null, crewJoinedAt: null });
+    if (!crew) return;
+    const rest = this.b.crewMemberRows(crew.id);
+    if (!rest.length) this.b.dropCrew(crew.id);
+    else if (crew.ownerId === uid) this.b.setCrewOwner(crew.id, rest[0].id);
+  }
+  crewMembers(cid) {
+    return this.b.crewMemberRows(cid);
+  }
+  addCrewPoints(cid, n) {
+    if (cid && Number.isFinite(n) && n > 0) this.b.addCrewPoints(cid, Math.round(n));
   }
 
   saveTrail(rideId, points) {

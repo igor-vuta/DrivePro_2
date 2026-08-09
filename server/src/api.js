@@ -465,16 +465,138 @@ export function createApi({ store, secret, hub, serveStatic }) {
       });
     const drove = rides.filter((r) => r.driverId === user.id);
     const rode = rides.filter((r) => r.riderId === user.id);
+
+    // Crew standings: sum of members' points earned this week (driver points
+    // per ride + rider's +1), ranked across all crews.
+    const crewAgg = new Map(); // crewId -> { points, rides }
+    const feed = (uid, pts) => {
+      const u = uid && store.getUser(uid);
+      if (!u || !u.crewId) return;
+      const e = crewAgg.get(u.crewId) || { points: 0, rides: 0 };
+      e.points += pts;
+      e.rides += 1;
+      crewAgg.set(u.crewId, e);
+    };
+    for (const r of rides) {
+      feed(r.driverId, ptsFor(r));
+      feed(r.riderId, 1);
+    }
+    const rankedCrews = [...crewAgg.entries()].sort((a, b) => b[1].points - a[1].points);
+    const crewsTop = rankedCrews
+      .slice(0, 3)
+      .map(([cid, e]) => {
+        const c = store.getCrew(cid);
+        return c ? { name: c.name, points: e.points, rides: e.rides, members: store.crewMembers(cid).length } : null;
+      })
+      .filter(Boolean);
+    const meUser = store.getUser(user.id);
+    let myCrew = null;
+    if (meUser && meUser.crewId) {
+      const c = store.getCrew(meUser.crewId);
+      if (c) {
+        const idx = rankedCrews.findIndex(([cid]) => cid === meUser.crewId);
+        myCrew = {
+          name: c.name,
+          points: idx >= 0 ? rankedCrews[idx][1].points : 0,
+          rank: idx >= 0 ? idx + 1 : null,
+        };
+      }
+    }
+
     sendJson(res, 200, {
       since,
       me: {
         drove: drove.length,
         rode: rode.length,
         points: drove.reduce((s, r) => s + ptsFor(r), 0) + rode.length,
-        streak: (store.getUser(user.id) || {}).streakDays || 0,
+        streak: (meUser || {}).streakDays || 0,
+        crew: myCrew,
       },
-      city: { rides: rides.length, km: Math.round(km), drivers: byDriver.size, top },
+      city: { rides: rides.length, km: Math.round(km), drivers: byDriver.size, top, crews: crewsTop },
     });
+  });
+
+  // ---- crews: private squads joined by invite code (L13) ----
+  const CREW_MAX = Number(process.env.DRIVEPRO_CREW_MAX || 20);
+  const weekRides = () => store.listFinishedSince(Date.now() - 7 * 24 * 3600 * 1000);
+  const ridePts = (r) => {
+    const km = (r.distanceM || 0) / 1000;
+    const minutes = Math.max(1, ((r.finishedAt || 0) - (r.startedAt || r.finishedAt || 0)) / 60000);
+    return Math.max(1, Math.min(5000, Math.round(km * minutes)));
+  };
+  const crewView = (crew, forMember) => ({
+    id: crew.id,
+    name: crew.name,
+    points: crew.points || 0,
+    createdAt: crew.createdAt,
+    ...(forMember ? { code: crew.code, ownerId: crew.ownerId } : {}),
+  });
+  const myCrewPayload = (user) => {
+    const crew = store.getCrew(user.crewId);
+    if (!crew) return { crew: null };
+    const rides = weekRides();
+    const week = new Map(); // uid -> { points, rides }
+    for (const r of rides) {
+      if (r.driverId) {
+        const e = week.get(r.driverId) || { points: 0, rides: 0 };
+        e.points += ridePts(r);
+        e.rides += 1;
+        week.set(r.driverId, e);
+      }
+      const e = week.get(r.riderId) || { points: 0, rides: 0 };
+      e.points += 1;
+      e.rides += 1;
+      week.set(r.riderId, e);
+    }
+    let weekPoints = 0;
+    let weekRideCount = 0;
+    const members = store.crewMembers(crew.id).map((m) => {
+      const w = week.get(m.id) || { points: 0, rides: 0 };
+      weekPoints += w.points;
+      weekRideCount += w.rides;
+      const pub = directoryUser(store, m.id);
+      return { ...pub, weekPoints: w.points, isOwner: m.id === crew.ownerId };
+    });
+    return { crew: crewView(crew, true), members, week: { points: weekPoints, rides: weekRideCount } };
+  };
+
+  route('POST', '/api/crews', async (req, res) => {
+    const user = authUser(req);
+    if (user.crewId && store.getCrew(user.crewId)) throw httpError(400, 'You are already in a crew.', 'already_in_crew');
+    const body = await readJson(req);
+    const name = cleanStr(body.name, 30);
+    if (name.length < 2) throw httpError(400, 'Give your crew a name.', 'crew_name_required');
+    const crew = store.createCrew(user.id, name);
+    if (!crew) throw httpError(500, 'Could not create the crew. Try again.');
+    sendJson(res, 200, myCrewPayload(store.getUser(user.id)));
+  });
+
+  route('POST', '/api/crews/join', async (req, res) => {
+    const user = authUser(req);
+    if (user.crewId && store.getCrew(user.crewId)) throw httpError(400, 'You are already in a crew.', 'already_in_crew');
+    const body = await readJson(req);
+    const code = String(body.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const crew = code ? store.findCrewByCode(code) : null;
+    if (!crew) throw httpError(404, 'No crew with this code.', 'crew_not_found');
+    if (store.crewMembers(crew.id).length >= CREW_MAX) throw httpError(400, 'This crew is full.', 'crew_full');
+    store.joinCrew(user.id, crew.id);
+    sendJson(res, 200, myCrewPayload(store.getUser(user.id)));
+  });
+
+  route('POST', '/api/crews/leave', async (req, res) => {
+    const user = authUser(req);
+    if (!user.crewId || !store.getCrew(user.crewId)) throw httpError(400, 'You are not in a crew.', 'not_in_crew');
+    store.leaveCrew(user.id);
+    sendJson(res, 200, { ok: true, crew: null });
+  });
+
+  route('GET', '/api/crews/mine', async (req, res) => {
+    const user = authUser(req);
+    if (!user.crewId || !store.getCrew(user.crewId)) {
+      sendJson(res, 200, { crew: null });
+      return;
+    }
+    sendJson(res, 200, myCrewPayload(user));
   });
 
   // Live city impact: today's shared rides + km, plus drivers online now.

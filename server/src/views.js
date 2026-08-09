@@ -5,6 +5,7 @@ export function publicUser(store, userId) {
   if (!u) return null;
   const rating = store.ratingSummary(userId);
   const driver = store.getDriverProfile(userId);
+  const crew = u.crewId ? store.getCrew(u.crewId) : null;
   return {
     id: u.id,
     name: u.name,
@@ -16,6 +17,7 @@ export function publicUser(store, userId) {
     points: u.points || 0,
     streakDays: u.streakDays || 0,
     streakBest: u.streakBest || 0,
+    crew: crew ? { id: crew.id, name: crew.name } : null,
     email: u.email || null,
     places: u.places || null,
     rating: rating.avg,

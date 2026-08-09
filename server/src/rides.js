@@ -218,9 +218,15 @@ export function setupRides({ store, hub }) {
     const riderMult = streakMultiplier(riderStreak ? riderStreak.days : 0);
     const base = Math.max(1, Math.min(5000, Math.round(km * minutes)));
     const pointsEarned = Math.round(base * driverMult);
+    const riderPoints = Math.round(1 * riderMult);
     store.addPoints(user.id, pointsEarned);
     store.finishTrail(updated.id, finishedAt);
-    store.addPoints(updated.riderId, Math.round(1 * riderMult)); // riders climb too, slowly
+    store.addPoints(updated.riderId, riderPoints); // riders climb too, slowly
+    // Points feed crew totals (either seat).
+    const driverUser = store.getUser(user.id);
+    if (driverUser && driverUser.crewId) store.addCrewPoints(driverUser.crewId, pointsEarned);
+    const riderUser = store.getUser(updated.riderId);
+    if (riderUser && riderUser.crewId) store.addCrewPoints(riderUser.crewId, riderPoints);
     pushToUser(store, updated.riderId, {
       title: '🏁 Поездка завершена',
       body: 'Спасибо, что едете вместе. Оцените поездку!',

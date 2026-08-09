@@ -61,6 +61,7 @@ export default function UserProfileModal({ userId, onClose }) {
               </View>
               {profile.points ? <Sub style={{ marginBottom: 2 }}>⚡ {profile.points} {t('profile.points')}</Sub> : null}
               {profile.city ? <Sub style={{ marginBottom: 2 }}>📍 {profile.city}</Sub> : null}
+              {profile.crew ? <Sub style={{ marginBottom: 2 }}>🏴 {profile.crew.name}</Sub> : null}
               {profile.about ? <Sub>{profile.about}</Sub> : null}
               {profile.isDriver && profile.car ? (
                 <Card style={{ marginTop: 4 }}>
