@@ -13,7 +13,7 @@ pkill -f "node .*server/src/index.js" 2>/dev/null || true
 pkill -f "cloudflared tunnel" 2>/dev/null || true
 sleep 1
 
-[ -f "$DIR/app/dist/index.html" ] || echo "note: web app not built yet - run: cd app && npx expo export -p web"
+[ -f "$DIR/app/dist/index.html" ] || echo "note: web app not built yet - run: cd app && npx expo export -p web && node tools/postexport.mjs"
 
 node "$DIR/server/src/index.js" > "$SLOG" 2>&1 &
 SERVER_PID=$!
