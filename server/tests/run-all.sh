@@ -5,6 +5,11 @@
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 
+# The test environment is explicit, so a developer with NODE_ENV=production
+# exported in their shell cannot silently change what is being tested (it
+# would switch the OTP echo off and break every suite that verifies a phone).
+export NODE_ENV=test
+
 fail=0
 node server/src/index.js >/tmp/drivepro-ci-server.log 2>&1 &
 SRV=$!
@@ -23,7 +28,7 @@ else
 fi
 kill "$SRV" 2>/dev/null || true
 
-for n in 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do
+for n in 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19; do
   printf 'smoke%s: ' "$n"
   if node "server/tests/smoke$n.mjs" >"/tmp/smoke$n.out" 2>&1; then
     echo PASS

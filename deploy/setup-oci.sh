@@ -63,7 +63,13 @@ if [ ! -f "$ENV_FILE" ]; then
   cat > "$ENV_FILE" <<EOF
 PORT=4000
 DATA_DIR=$DATA_DIR
+NODE_ENV=production
 ADMIN_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '+/=')
+# TEMPORARY - no SMS provider is wired yet (roadmap L24), so verification
+# codes are still echoed back to the client. DELETE this line the moment
+# real SMS delivery lands: with NODE_ENV=production the echo is off by
+# default, which is the only safe setting for real users.
+OTP_ECHO=1
 EOF
   chmod 600 "$ENV_FILE"
 fi

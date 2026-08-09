@@ -4,6 +4,19 @@ Work these as layers (L17, L18, …): one signed commit per item or coherent
 group, smoke test per layer where logic changes, push → CI tests & deploys.
 Conventions live in CLAUDE.md.
 
+## Running order
+
+| Layer | Items | Rationale |
+| ----- | ----- | --------- |
+| ~~L17~~ | ~~13 env separation, 14 admin Enter~~ | ✅ shipped — small, and the OTP-echo gate must exist before real SMS |
+| L18 | 6 password rules, 5 phone mask, 3 forgot password | one coherent auth surface |
+| L19 | 7 `100dvh`/safe-area, 8 full-bleed map, 11 placeholders | pure client; the most visible daily annoyances |
+| L20 | 9 offers vs navigator, 10 button transitions | biggest UX change; wants L19's layout underneath |
+| L21 | 12 registration guide | the last layer that adds new strings |
+| L22 | 1 Kazakh + RU/ҚАЗ/EN picker | one translation sweep, after the string surface stops moving |
+| L23 | 2 Android APK via EAS | **needs an Expo account login** |
+| L24 | 4 real SMS provider, then passkeys | **needs a paid KZ SMS provider + keys**; flips prod's `OTP_ECHO` off |
+
 ## A. Language & identity
 
 1. **Language picker order + Kazakh** — RU first (default), then KK, then EN.
@@ -66,12 +79,16 @@ Conventions live in CLAUDE.md.
 
 ## E. Ops & bugs
 
-13. **Dev / test / prod separation** — document and enforce: dev =
-    `./start.sh` (tunnel, dev OTP echo on), test = CI `run-all.sh`,
-    prod = VM (dev OTP echo must be OFF once real SMS lands — gate
-    `OTP_ECHO` behind `NODE_ENV`/env flag). Optional: a `staging` branch
-    that deploys to a second port on the same VM.
-14. **Bug: admin token Enter does nothing** — `/admin` page (HTML served
-    from `server/src/api.js`): the token input only works via the button
-    click handler; pressing Enter submits nothing. Wire the input's
-    `keydown`/form `submit` to the same `load()` call.
+13. ~~**Dev / test / prod separation**~~ — ✅ L17. `OTP_ECHO` now defaults
+    off under `NODE_ENV=production` with an explicit override and a loud
+    boot warning; `run-all.sh` pins `NODE_ENV=test`; `update.sh` backfills
+    the new env keys; environments table in `deploy/DEPLOY.md`. Still open
+    as an option: a `staging` branch deploying to a second port on the VM.
+14. ~~**Bug: admin token Enter does nothing**~~ — ✅ L17, and it was worse
+    than reported: a `\'` inside the `ADMIN_HTML` **template literal**
+    collapsed to a bare quote, so the served `<script>` was a syntax error
+    and *nothing* on the panel worked — Enter, the button and Ban alike.
+    Inline handlers now quote with `&quot;`; the token input lives in a
+    `<form onsubmit>` so Enter and the button take one path; bad tokens say
+    so instead of failing silently. `smoke19.mjs` compiles the served
+    script, which is what catches this class of bug.

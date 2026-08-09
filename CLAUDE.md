@@ -46,6 +46,11 @@ theme (all tokens in `app/src/ui.js` — bg #06070d, cyan #00e5ff, magenta
 - Prod: Oracle Cloud VM (Ubuntu, x86), systemd service `drivepro`, repo at
   `/opt/drivepro/repo`, all state in `/opt/drivepro/data`, Caddy TLS at
   https://drivepro-almaty.duckdns.org. Runbook: `deploy/DEPLOY.md`.
+- Environments: dev = `./start.sh` (no `NODE_ENV`), test = `run-all.sh`
+  (`NODE_ENV=test`), prod = the VM (`NODE_ENV=production`). The OTP echo
+  (`devCode` in auth responses) is off by default under
+  `NODE_ENV=production`; `OTP_ECHO=1|0` overrides. Prod sets `OTP_ECHO=1`
+  only until real SMS lands — see the Environments table in DEPLOY.md.
 - CI/CD: `.github/workflows/deploy.yml` — push to main ⇒ full smoke suite
   ⇒ SSH auto-deploy via `deploy/update.sh` (secrets `DEPLOY_HOST`,
   `DEPLOY_SSH_KEY`).
@@ -57,4 +62,6 @@ kit) · L10 web push (VAPID + RFC 8291, sw.js) · L11 identity/install (icon,
 PWA manifest, eas.json) · L12 streaks (×1.25/1.5/1.75/2 at 3/7/14/30 days)
 + live city impact · L13 invite-code crews + weekly standings · L14
 scheduled & recurring rides (sweeper spawns ~10 min before departure) ·
-L15 deploy kit · L16 CI/CD.
+L15 deploy kit · L16 CI/CD · L17 env separation + admin panel fix.
+
+Remaining work and its running order live in `ROADMAP.md`.

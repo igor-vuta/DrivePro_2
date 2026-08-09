@@ -777,6 +777,10 @@ export function createApi({ store, secret, hub, serveStatic }) {
 }
 
 // Dark one-file operator panel; token stays in the browser's localStorage.
+// NOTE: this is a template literal, so a `\'` written here reaches the browser
+// as a bare `'` and silently breaks the whole <script>. Use HTML entities
+// (&quot;) for quotes inside inline handlers instead of backslash escapes.
+// smoke19 compiles the served script to catch exactly that.
 const ADMIN_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>DrivePro · admin</title><style>
 body{background:#06070d;color:#e9f2ff;font-family:-apple-system,system-ui,sans-serif;margin:0;padding:24px}
@@ -788,9 +792,10 @@ table{border-collapse:collapse;width:100%;margin-top:18px;font-size:13px}
 td,th{padding:8px 10px;border-bottom:1px solid #1c2438;text-align:left}
 th{color:#8b96b8;font-weight:600;text-transform:uppercase;font-size:11px}
 .badge{color:#f5c518}.banned{color:#ff3b5c;font-weight:700}.ok{color:#00ffa3}
+.err{color:#ff3b5c;min-height:16px}
 </style></head><body>
 <h1>DRIVEPRO <span class="sub">operator panel</span></h1>
-<div id="login"><p class="sub">Admin token</p><input id="tok" type="password"/> <button onclick="save()">Enter</button></div>
+<form id="login" onsubmit="save(event)"><p class="sub">Admin token</p><input id="tok" type="password" autofocus autocomplete="current-password"/> <button type="submit">Enter</button><p class="sub err" id="err"></p></form>
 <div id="panel" style="display:none">
   <p class="sub" id="stats"></p>
   <table><thead><tr><th>Name</th><th>Phone</th><th>⚡</th><th>Rides</th><th>Status</th><th></th></tr></thead><tbody id="rows"></tbody></table>
@@ -800,12 +805,15 @@ th{color:#8b96b8;font-weight:600;text-transform:uppercase;font-size:11px}
 </div>
 <script>
 const tok = () => localStorage.getItem('admtok') || '';
-function save(){ localStorage.setItem('admtok', document.getElementById('tok').value.trim()); load(); }
+const err = (m) => { document.getElementById('err').textContent = m || ''; };
+// Submitting the form covers both the button and the Enter key.
+function save(e){ if(e) e.preventDefault(); const v = document.getElementById('tok').value.trim(); if(!v){ err('Enter the admin token.'); return; } localStorage.setItem('admtok', v); load(); }
 async function ban(id, b){ await fetch('/api/admin/users/'+id+'/ban',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':tok()},body:JSON.stringify({banned:b})}); load(); }
 async function load(){
   if(!tok()) return;
   const r = await fetch('/api/admin/overview',{headers:{'x-admin-token':tok()}});
-  if(!r.ok){ localStorage.removeItem('admtok'); return; }
+  if(!r.ok){ localStorage.removeItem('admtok'); err(r.status === 401 ? 'Invalid token.' : 'Error ' + r.status); return; }
+  err('');
   const d = await r.json();
   document.getElementById('login').style.display='none';
   document.getElementById('panel').style.display='block';
@@ -816,7 +824,7 @@ async function load(){
   document.getElementById('rows').innerHTML = d.users.map(u =>
     '<tr><td>'+u.name+'</td><td>'+u.phone+'</td><td class="badge">'+u.points+'</td><td>'+u.rides+'</td>'+
     '<td class="'+(u.banned?'banned':'ok')+'">'+(u.banned?'BANNED':(u.verified?'active':'unverified'))+'</td>'+
-    '<td><button class="ghost" onclick="ban(\''+u.id+'\','+(!u.banned)+')">'+(u.banned?'Unban':'Ban')+'</button></td></tr>'
+    '<td><button class="ghost" onclick="ban(&quot;'+u.id+'&quot;,'+(!u.banned)+')">'+(u.banned?'Unban':'Ban')+'</button></td></tr>'
   ).join('');
 }
 load();

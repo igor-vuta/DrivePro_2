@@ -64,6 +64,33 @@ All state (SQLite DB, JWT secret, VAPID push keys) lives in
 `/opt/drivepro/data` — back up that one folder. Restoring it on a fresh VM
 keeps every account, ride, streak, crew and push subscription.
 
+## Environments
+
+Three environments, deliberately separated so nothing developer-only can
+reach real users:
+
+| Env      | How it runs                       | `NODE_ENV`   | OTP echo |
+| -------- | --------------------------------- | ------------ | -------- |
+| **dev**  | `./start.sh` (server + tunnel)    | unset        | ON       |
+| **test** | `bash server/tests/run-all.sh`    | `test`       | ON       |
+| **prod** | systemd `drivepro` on the VM      | `production` | see below |
+
+The OTP echo returns the verification code in the API response
+(`devCode`), which is what makes local testing possible without SMS — and
+which would also let anyone verify a phone number they do not own. It is
+therefore **off by default whenever `NODE_ENV=production`**. `OTP_ECHO`
+overrides the default in both directions (`1` on, `0` off).
+
+> **Prod is currently running with `OTP_ECHO=1`** because no SMS provider
+> is wired yet (roadmap L24). The line in `/etc/drivepro.env` is marked
+> TEMPORARY: delete it the moment real SMS delivery lands, and the safe
+> default takes over. While it is set, every boot logs
+> `!! OTP_ECHO is ON in production` — check `journalctl -u drivepro`.
+
+`deploy/update.sh` backfills `NODE_ENV` and `OTP_ECHO` into an existing
+`/etc/drivepro.env` (setup-oci.sh only writes that file when it is absent,
+so VMs provisioned earlier would otherwise never get the new keys).
+
 ## Auto-deploy on push (GitHub Actions)
 
 `.github/workflows/deploy.yml` runs the full smoke suite on every push to
