@@ -226,6 +226,7 @@ class SqliteBackend {
       name: 'name', verified: 'verified', otpCode: 'otp_code', otpExpires: 'otp_expires',
       otpSentAt: 'otp_sent_at', avatar: 'avatar', about: 'about', email: 'email', city: 'city', places: 'places',
       otpAttempts: 'otp_attempts', banned: 'banned', crewId: 'crew_id', crewJoinedAt: 'crew_joined_at',
+      passwordHash: 'password_hash',
     };
     const cols = [];
     const vals = [];
@@ -663,7 +664,7 @@ class JsonBackend {
   updateUserFields(uid, patch) {
     const u = this.userById(uid);
     if (u) {
-      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places', 'otpAttempts', 'banned', 'crewId', 'crewJoinedAt'];
+      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places', 'otpAttempts', 'banned', 'crewId', 'crewJoinedAt', 'passwordHash'];
       for (const k of allowed) {
         if (k in patch) u[k] = patch[k];
       }

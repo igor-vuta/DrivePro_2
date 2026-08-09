@@ -62,6 +62,7 @@ kit) · L10 web push (VAPID + RFC 8291, sw.js) · L11 identity/install (icon,
 PWA manifest, eas.json) · L12 streaks (×1.25/1.5/1.75/2 at 3/7/14/30 days)
 + live city impact · L13 invite-code crews + weekly standings · L14
 scheduled & recurring rides (sweeper spawns ~10 min before departure) ·
-L15 deploy kit · L16 CI/CD · L17 env separation + admin panel fix.
+L15 deploy kit · L16 CI/CD · L17 env separation + admin panel fix · L18
+auth hardening (password rules, phone mask, OTP password reset).
 
 Remaining work and its running order live in `ROADMAP.md`.

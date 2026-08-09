@@ -66,6 +66,25 @@ export function normPhone(raw) {
   return plus + digits;
 }
 
+export const PASSWORD_MIN = 8;
+
+// Password rules, shared by registration and password reset. Returns a
+// `snake_code` (which has a matching err.<code> string in both languages) or
+// null when the password is acceptable. Login is deliberately NOT checked:
+// accounts created under the old 6-character rule keep working.
+export function passwordProblem(password, phone) {
+  if (typeof password !== 'string' || password.length < PASSWORD_MIN) return 'password_short';
+  // \p{L} so Cyrillic and Kazakh letters count just like Latin ones.
+  if (!/\p{L}/u.test(password) || !/[0-9]/.test(password)) return 'password_weak';
+  const phoneDigits = String(phone || '').replace(/\D/g, '');
+  if (phoneDigits.length >= 7) {
+    const pwDigits = password.replace(/\D/g, '');
+    // The whole number, or the memorable tail of it, must not be the password.
+    if (pwDigits.includes(phoneDigits) || pwDigits.includes(phoneDigits.slice(-7))) return 'password_has_phone';
+  }
+  return null;
+}
+
 export function cleanStr(v, max = 200) {
   if (typeof v !== 'string') return '';
   return v.trim().slice(0, max);

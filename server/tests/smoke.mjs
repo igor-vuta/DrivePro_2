@@ -87,7 +87,7 @@ let rider, driver;
   check('verify issues session', v.status === 200 && v.json.token && v.json.user.name === 'Rita Rider', JSON.stringify(v.json));
   rider = v.json;
 
-  const dup = await api('POST', '/api/register', { phone: riderPhone, password: 'x12345', name: 'Dup' });
+  const dup = await api('POST', '/api/register', { phone: riderPhone, password: 'test1234', name: 'Dup' });
   check('duplicate phone rejected', dup.status === 409);
 
   const bad = await api('POST', '/api/register', { phone: '12', password: 'test1234', name: 'X Y' });

@@ -298,6 +298,21 @@ export function AuthProvider({ children }) {
         setToken(data.token);
       },
 
+      // Password reset: request a code, then confirm it with the new password.
+      // Confirming logs straight in, so it returns a session like verify does.
+      async requestReset(phone) {
+        const data = await api('POST', '/api/reset/request', { phone });
+        return data.devCode || null;
+      },
+
+      async confirmReset(phone, code, password) {
+        const data = await api('POST', '/api/reset/confirm', { phone, code, password });
+        await AsyncStorage.setItem(TOKEN_KEY, data.token);
+        setPendingVerification(null);
+        setMe(data.user);
+        setToken(data.token);
+      },
+
       async resendCode() {
         if (!pendingVerification) return;
         const data = await api('POST', '/api/resend', { phone: pendingVerification.phone });

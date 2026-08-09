@@ -118,6 +118,36 @@ export function Input({ label, style, containerStyle, ...props }) {
   );
 }
 
+// Live phone mask: "+7 777 777 7777" as you type. Kazakh and Russian numbers
+// are routinely written with the 8 trunk prefix, so a complete 8XXXXXXXXXX is
+// rewritten to +7 - only at full length, where it is unambiguous. Numbers from
+// anywhere else keep their digits with no invented grouping. The server's
+// normPhone() strips separators again, so the display format is free.
+export function formatPhone(raw) {
+  const s = String(raw == null ? '' : raw);
+  let d = s.replace(/\D/g, '');
+  if (!d) return s.trimStart().startsWith('+') ? '+' : '';
+  if (d[0] === '8' && d.length === 11) d = `7${d.slice(1)}`;
+  if (d[0] !== '7') return `+${d.slice(0, 15)}`;
+  const rest = d.slice(1, 11);
+  const groups = [rest.slice(0, 3), rest.slice(3, 6), rest.slice(6, 10)].filter(Boolean);
+  return `+7${groups.length ? ` ${groups.join(' ')}` : ''}`;
+}
+
+export function PhoneInput({ value, onChangeText, ...props }) {
+  return (
+    <Input
+      value={value}
+      onChangeText={(v) => onChangeText(formatPhone(v))}
+      placeholder="+7 777 777 7777"
+      keyboardType="phone-pad"
+      autoComplete="tel"
+      maxLength={20}
+      {...props}
+    />
+  );
+}
+
 export function ErrorText({ children }) {
   if (!children) return null;
   return <Text style={s.error}>{String(children)}</Text>;

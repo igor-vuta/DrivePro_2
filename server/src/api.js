@@ -1,4 +1,7 @@
-import { readJson, sendJson, httpError, normPhone, cleanStr, isLat, isLng, isValidEmail } from './util.js';
+import {
+  readJson, sendJson, httpError, normPhone, cleanStr, isLat, isLng, isValidEmail,
+  passwordProblem, PASSWORD_MIN,
+} from './util.js';
 import { hashPassword, verifyPassword, signToken, verifyToken } from './auth.js';
 import { publicUser, rideCounterpart, directoryUser } from './views.js';
 import { reverseGeocode, searchAddress, route as geoRoute } from './geo.js';
@@ -86,6 +89,36 @@ export function createApi({ store, secret, hub, serveStatic }) {
     return code;
   };
 
+  const PASSWORD_ERRORS = {
+    password_short: `Password must be at least ${PASSWORD_MIN} characters.`,
+    password_weak: 'Password must contain both letters and digits.',
+    password_has_phone: 'Password must not contain your phone number.',
+  };
+
+  const requirePassword = (password, phone) => {
+    const problem = passwordProblem(password, phone);
+    if (problem) throw httpError(400, PASSWORD_ERRORS[problem], problem);
+  };
+
+  // Consume a one-time code: expiry, wrong-code attempts and the L8 lockout.
+  // Shared by phone verification and password reset so both burn a code the
+  // same way after OTP_MAX_ATTEMPTS wrong guesses.
+  const consumeOtp = (user, code) => {
+    if (!user.otpCode || !user.otpExpires || user.otpExpires < Date.now()) {
+      throw httpError(400, 'The code has expired. Request a new one.', 'code_expired');
+    }
+    if (user.otpCode !== code) {
+      const attempts = (user.otpAttempts || 0) + 1;
+      if (attempts >= OTP_MAX_ATTEMPTS) {
+        // Burn the code entirely: guessing is over, a new one must be requested.
+        store.updateUser(user.id, { otpCode: null, otpExpires: null, otpAttempts: 0 });
+        throw httpError(429, 'Too many wrong codes. Request a new one.', 'code_locked');
+      }
+      store.updateUser(user.id, { otpAttempts: attempts });
+      throw httpError(400, 'Wrong code. Check and try again.', 'code_wrong');
+    }
+  };
+
   const verificationResponse = (res, status, user, code) => {
     sendJson(res, status, {
       needsVerification: true,
@@ -103,7 +136,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const password = typeof body.password === 'string' ? body.password : '';
     if (!phone) throw httpError(400, 'Enter a valid phone number.', 'invalid_phone');
     if (name.length < 2) throw httpError(400, 'Enter your name.', 'name_required');
-    if (password.length < 6) throw httpError(400, 'Password must be at least 6 characters.', 'password_short');
+    requirePassword(password, phone);
     const existing = store.findUserByPhone(phone);
     if (existing && existing.verified) throw httpError(409, 'This phone number is already registered.', 'phone_taken');
     let user;
@@ -130,19 +163,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
       sendJson(res, 200, sessionPayload(user));
       return;
     }
-    if (!user.otpCode || !user.otpExpires || user.otpExpires < Date.now()) {
-      throw httpError(400, 'The code has expired. Request a new one.', 'code_expired');
-    }
-    if (user.otpCode !== code) {
-      const attempts = (user.otpAttempts || 0) + 1;
-      if (attempts >= OTP_MAX_ATTEMPTS) {
-        // Burn the code entirely: guessing is over, a new one must be requested.
-        store.updateUser(user.id, { otpCode: null, otpExpires: null, otpAttempts: 0 });
-        throw httpError(429, 'Too many wrong codes. Request a new one.', 'code_locked');
-      }
-      store.updateUser(user.id, { otpAttempts: attempts });
-      throw httpError(400, 'Wrong code. Check and try again.', 'code_wrong');
-    }
+    consumeOtp(user, code);
     store.updateUser(user.id, { verified: true, otpCode: null, otpExpires: null, otpAttempts: 0 });
     sendJson(res, 200, sessionPayload(store.getUser(user.id)));
   });
@@ -178,6 +199,48 @@ export function createApi({ store, secret, hub, serveStatic }) {
       return;
     }
     sendJson(res, 200, sessionPayload(user));
+  });
+
+  // Password reset. Proving control of the phone with a one-time code is the
+  // whole authentication - someone who forgot their password cannot supply the
+  // old one - so it reuses the verification code machinery: same cooldown
+  // between sends, same 5-wrong-guesses lockout.
+  route('POST', '/api/reset/request', async (req, res) => {
+    rateLimit(req, 'reset', 10);
+    const body = await readJson(req);
+    const phone = normPhone(body.phone);
+    const user = phone ? store.findUserByPhone(phone) : null;
+    if (!user) throw httpError(404, 'No account with this phone number.', 'no_account');
+    if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
+    if (user.otpSentAt && Date.now() - user.otpSentAt < OTP_RESEND_COOLDOWN_MS) {
+      throw httpError(429, 'Wait a moment before requesting another code.', 'resend_too_soon');
+    }
+    const code = issueOtp(user);
+    verificationResponse(res, 200, user, code);
+  });
+
+  route('POST', '/api/reset/confirm', async (req, res) => {
+    rateLimit(req, 'reset_confirm', 30);
+    const body = await readJson(req);
+    const phone = normPhone(body.phone);
+    const code = cleanStr(body.code, 8);
+    const password = typeof body.password === 'string' ? body.password : '';
+    const user = phone ? store.findUserByPhone(phone) : null;
+    if (!user) throw httpError(404, 'No account with this phone number.', 'no_account');
+    if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
+    // Checked before the code so a rejected password never burns an attempt.
+    requirePassword(password, phone);
+    consumeOtp(user, code);
+    // Receiving the code proves the phone belongs to them, so an account that
+    // never finished verification is verified by completing a reset.
+    store.updateUser(user.id, {
+      passwordHash: hashPassword(password),
+      verified: true,
+      otpCode: null,
+      otpExpires: null,
+      otpAttempts: 0,
+    });
+    sendJson(res, 200, sessionPayload(store.getUser(user.id)));
   });
 
   route('GET', '/api/me', async (req, res) => {

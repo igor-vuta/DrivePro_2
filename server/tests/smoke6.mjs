@@ -102,10 +102,10 @@ function connectWs(token) {
 
 let rider;
 {
-  const r = await api('POST', '/api/register', { phone: '+15554440001', password: 'secret9', name: 'Vera Verify' });
+  const r = await api('POST', '/api/register', { phone: '+15554440001', password: 'secret99', name: 'Vera Verify' });
   check('register returns verification challenge', r.status === 201 && r.json.needsVerification && /^\d{4}$/.test(r.json.devCode));
 
-  const before = await api('POST', '/api/login', { phone: '+15554440001', password: 'secret9' });
+  const before = await api('POST', '/api/login', { phone: '+15554440001', password: 'secret99' });
   check('login before verification returns challenge', before.status === 403 && before.json.needsVerification);
 
   const wrong = await api('POST', '/api/verify', { phone: '+15554440001', code: '0000' === r.json.devCode ? '1111' : '0000' });
@@ -118,10 +118,10 @@ let rider;
   check('correct code verifies and signs in', ok.status === 200 && ok.json.token && ok.json.user.name === 'Vera Verify');
   rider = ok.json;
 
-  const again = await api('POST', '/api/login', { phone: '+15554440001', password: 'secret9' });
+  const again = await api('POST', '/api/login', { phone: '+15554440001', password: 'secret99' });
   check('login works after verification', again.status === 200 && again.json.token);
 
-  const reReg = await api('POST', '/api/register', { phone: '+15554440001', password: 'other66', name: 'Sneak' });
+  const reReg = await api('POST', '/api/register', { phone: '+15554440001', password: 'other666', name: 'Sneak' });
   check('verified phone cannot re-register', reReg.status === 409 && reReg.json.code === 'phone_taken');
 
   const resendVerified = await api('POST', '/api/resend', { phone: '+15554440001' });
@@ -160,7 +160,7 @@ let rider;
   check('place can be removed', clear.status === 200 && !clear.json.user.places.home);
 
   // Public directory hides private data but shows about + avatar.
-  const reg2r = await api('POST', '/api/register', { phone: '+15554440002', password: 'secret9', name: 'Paul Peek' });
+  const reg2r = await api('POST', '/api/register', { phone: '+15554440002', password: 'secret99', name: 'Paul Peek' });
   const peek = (await api('POST', '/api/verify', { phone: '+15554440002', code: reg2r.json.devCode })).json;
   const pub = await api('GET', `/api/users/${rider.user.id}`, null, peek.token);
   check(
@@ -171,7 +171,7 @@ let rider;
 
 // ------------------------------------- address details + coordinate limits ---
 
-const regD = await api('POST', '/api/register', { phone: '+15554440003', password: 'secret9', name: 'Dora Drive' });
+const regD = await api('POST', '/api/register', { phone: '+15554440003', password: 'secret99', name: 'Dora Drive' });
 const driver = (await api('POST', '/api/verify', { phone: '+15554440003', code: regD.json.devCode })).json;
 await api('PUT', '/api/me/driver', { carMake: 'VW', carModel: 'ID.3', carColor: 'Silver', plate: 'EV 01' }, driver.token);
 

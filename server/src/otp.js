@@ -7,7 +7,9 @@ import crypto from 'node:crypto';
 // the client in dev responses so testing needs no real SMS.
 
 export const OTP_TTL_MS = 10 * 60 * 1000;
-export const OTP_RESEND_COOLDOWN_MS = 30 * 1000;
+// Overridable so tests can drive the resend/reset flow without waiting 30s,
+// the same seam DRIVEPRO_SCHED_SWEEP_MS gives the schedule sweeper.
+export const OTP_RESEND_COOLDOWN_MS = Number(process.env.DRIVEPRO_OTP_COOLDOWN_MS || 30 * 1000);
 
 export const IS_PROD = process.env.NODE_ENV === 'production';
 

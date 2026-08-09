@@ -28,7 +28,7 @@ else
 fi
 kill "$SRV" 2>/dev/null || true
 
-for n in 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19; do
+for n in 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
   printf 'smoke%s: ' "$n"
   if node "server/tests/smoke$n.mjs" >"/tmp/smoke$n.out" 2>&1; then
     echo PASS
@@ -38,5 +38,17 @@ for n in 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19; do
     fail=1
   fi
 done
+
+# store.js keeps two backends in sync behind one facade, but every suite above
+# runs on SQLite. Re-run the auth suite on the JSON fallback so a field added
+# to one backend's allowlist and not the other cannot pass unnoticed.
+printf 'smoke20 (json store): '
+if DRIVEPRO_STORAGE=json node server/tests/smoke20.mjs >/tmp/smoke20-json.out 2>&1; then
+  echo PASS
+else
+  echo FAIL
+  tail -12 /tmp/smoke20-json.out
+  fail=1
+fi
 
 exit "$fail"

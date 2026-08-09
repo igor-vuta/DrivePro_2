@@ -9,7 +9,7 @@ Conventions live in CLAUDE.md.
 | Layer | Items | Rationale |
 | ----- | ----- | --------- |
 | ~~L17~~ | ~~13 env separation, 14 admin Enter~~ | ✅ shipped — small, and the OTP-echo gate must exist before real SMS |
-| L18 | 6 password rules, 5 phone mask, 3 forgot password | one coherent auth surface |
+| ~~L18~~ | ~~6 password rules, 5 phone mask, 3 forgot password~~ | ✅ shipped — one coherent auth surface |
 | L19 | 7 `100dvh`/safe-area, 8 full-bleed map, 11 placeholders | pure client; the most visible daily annoyances |
 | L20 | 9 offers vs navigator, 10 button transitions | biggest UX change; wants L19's layout underneath |
 | L21 | 12 registration guide | the last layer that adds new strings |
@@ -34,22 +34,25 @@ Conventions live in CLAUDE.md.
 
 ## C. Auth & onboarding
 
-3. **Forgot password** — OTP-based reset: `POST /api/reset/request`
-   (re-uses the OTP machinery in `server/src/otp.js` + lockout rules from
-   L8) and `POST /api/reset/confirm` (new password). Client: link on the
-   login card in `AuthScreen.js`.
+3. ~~**Forgot password**~~ — ✅ L18. `POST /api/reset/request` +
+   `/api/reset/confirm`, reusing the OTP machinery, the resend cooldown and
+   the L8 lockout; completing a reset also verifies the phone. Sub-flow on
+   the login card. Note: existing JWTs stay valid after a reset — there is
+   no token version to invalidate them, worth adding with passkeys (#4).
 4. **Real OTP + second factor** — replace the dev-echo OTP with a real SMS
    provider (Twilio/Vonage/SMSC — pick by KZ delivery + pricing; keys via
    env, never committed). Then passkeys (WebAuthn) as optional strong auth:
    `navigator.credentials` on web; store credential public keys in a new
    table.
-5. **Phone input formatting** — live delimiter mask in the phone fields
-   (`+7 777 777 7777` while typing), normalize before submit (server's
-   `normPhone` already strips separators). One shared `PhoneInput`
-   component in `app/src/ui.js`.
-6. **Strong password validation** — client + server: min 8, require
-   letter + digit at minimum, reject the phone number inside the password;
-   clear RU/KK/EN error strings.
+5. ~~**Phone input formatting**~~ — ✅ L18. `PhoneInput` + `formatPhone` in
+   `app/src/ui.js`; a complete `8XXXXXXXXXX` is rewritten to `+7`. Still
+   only wired into the auth screens — reuse it anywhere else a phone is
+   typed.
+6. ~~**Strong password validation**~~ — ✅ L18. `passwordProblem()` in
+   `server/src/util.js`, mirrored client-side: min 8, letter (`\p{L}`, so
+   Cyrillic counts) + digit, and not your own phone number. Enforced on
+   register and reset; login is untouched so old accounts keep working.
+   KK strings land with the rest in L22.
 12. **Registration guide** — 2–3 step first-run explainer (what DrivePro
     is, how points/streaks work, permissions it will ask for), shown once
     (AsyncStorage flag), skippable.
