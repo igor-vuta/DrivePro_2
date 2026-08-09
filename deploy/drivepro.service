@@ -1,0 +1,21 @@
+[Unit]
+Description=DrivePro server (API + realtime + web app)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=drivepro
+Group=drivepro
+EnvironmentFile=/etc/drivepro.env
+WorkingDirectory=/opt/drivepro/repo
+ExecStart=/usr/bin/node /opt/drivepro/repo/server/src/index.js
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/drivepro/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

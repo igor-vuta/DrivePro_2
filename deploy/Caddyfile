@@ -1,0 +1,6 @@
+# DrivePro reverse proxy: TLS from Let's Encrypt, websockets included.
+# {{DOMAIN}} is substituted by deploy/setup-oci.sh.
+{{DOMAIN}} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:4000
+}
