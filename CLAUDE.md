@@ -1,0 +1,60 @@
+# DrivePro — working agreements
+
+Carpooling PWA: zero-dependency Node 22.5+ server (`server/`), Expo React
+Native web app (`app/`), Russian as default language, dark cyberpunk-luxury
+theme (all tokens in `app/src/ui.js` — bg #06070d, cyan #00e5ff, magenta
+#ff2bd6, gold #f5c518).
+
+## Git rules (strict)
+
+- Every commit SSH-signed. Signing key: `~/.ssh/id_ed25519_signing`
+  (passphrase-free copy for tooling: `~/Developer/secure-keys/id_ed25519_signing`).
+- Sole author and committer: `igor-vuta <261066289+igor-vuta@users.noreply.github.com>`.
+  NO Co-Authored-By or any other trailers, ever.
+- One commit per layer/feature; message style `L<N> <name>: <what shipped>`.
+  Push after each — CI then tests and auto-deploys.
+
+## Tests — must pass before any commit
+
+- `bash server/tests/run-all.sh` runs every smoke suite (handles the live
+  server that `smoke.mjs` needs). Requires Node 22.5+.
+- Every new layer ships its own `server/tests/smoke<N>.mjs` in the existing
+  style: spawn the server on a unique 41xx/42xx port with a `.tmp-data<N>`
+  DATA_DIR, `check()` assertions, `N passed, M failed` summary, exit code.
+
+## Web build
+
+- Rebuild whenever `app/src/**` or `app/public/**` changes:
+  `cd app && npx expo export -p web && node tools/postexport.mjs`
+- `app/dist` is committed on purpose (hosts serve it with no Expo
+  toolchain). The export renames the hashed bundle — commit the rename,
+  never leave two bundles.
+- Icons regenerate with `python3 app/tools/make-icons.py` (Pillow + numpy).
+
+## Server conventions
+
+- Zero npm dependencies, ever. Storage is `node:sqlite` with a JSON-file
+  fallback: `server/src/store.js` has two backends + a facade — keep all
+  three in sync. Schema changes go in the CREATE TABLE *and* `_migrate()`;
+  indexes on migrated columns only after `_migrate()` adds the columns.
+- Every user-facing string goes through `app/src/i18n.js`, EN + RU.
+- API errors: `httpError(status, message, 'snake_code')` with a matching
+  `err.<snake_code>` key in both i18n languages.
+
+## Deployment
+
+- Prod: Oracle Cloud VM (Ubuntu, x86), systemd service `drivepro`, repo at
+  `/opt/drivepro/repo`, all state in `/opt/drivepro/data`, Caddy TLS at
+  https://drivepro-almaty.duckdns.org. Runbook: `deploy/DEPLOY.md`.
+- CI/CD: `.github/workflows/deploy.yml` — push to main ⇒ full smoke suite
+  ⇒ SSH auto-deploy via `deploy/update.sh` (secrets `DEPLOY_HOST`,
+  `DEPLOY_SSH_KEY`).
+
+## State (as of L16)
+
+L1–L9 core (auth/OTP, rides, matching, convoy, navigator, safety, trust
+kit) · L10 web push (VAPID + RFC 8291, sw.js) · L11 identity/install (icon,
+PWA manifest, eas.json) · L12 streaks (×1.25/1.5/1.75/2 at 3/7/14/30 days)
++ live city impact · L13 invite-code crews + weekly standings · L14
+scheduled & recurring rides (sweeper spawns ~10 min before departure) ·
+L15 deploy kit · L16 CI/CD.
