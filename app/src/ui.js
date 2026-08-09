@@ -15,6 +15,11 @@ import {
 } from 'react-native';
 
 const NATIVE = Platform.OS !== 'web';
+const WEB = Platform.OS === 'web';
+
+// Horizontal padding every Screen applies; SCREEN_PAD is exported so full-
+// bleed children can cancel it instead of repeating the magic number.
+export const SCREEN_PAD = 16;
 
 // Cyberpunk-luxury design system: deep night surfaces, neon cyan primaries,
 // magenta trails, gold for points. Every screen inherits from these tokens.
@@ -77,6 +82,12 @@ export function Sub({ children, style }) {
 
 export function Card({ children, style }) {
   return <View style={[s.card, style]}>{children}</View>;
+}
+
+// Cancels the Screen's horizontal padding so a child (the map) reaches both
+// edges while the panels around it stay inset.
+export function Bleed({ children, style }) {
+  return <View style={[{ flex: 1, marginHorizontal: -SCREEN_PAD }, style]}>{children}</View>;
 }
 
 export function Button({ title, onPress, disabled, loading, kind = 'primary', style }) {
@@ -238,7 +249,16 @@ export function Avatar({ user, size = 44, style }) {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  screenInner: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
+  screenInner: {
+    flex: 1,
+    paddingHorizontal: SCREEN_PAD,
+    paddingTop: 8,
+    // On iOS native, SafeAreaView already handles the home indicator. On web
+    // it is an ordinary View, so the inset has to come from CSS - env() is a
+    // raw CSS value react-native-web passes straight through, and it resolves
+    // to 0px anywhere without a notch.
+    ...(WEB ? { paddingBottom: 'env(safe-area-inset-bottom, 0px)' } : {}),
+  },
   title: { fontSize: 26, fontWeight: '800', letterSpacing: 0.4, color: colors.text, marginBottom: 4 },
   titleGlow: {
     color: '#dffbff',

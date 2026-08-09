@@ -10,8 +10,8 @@ Conventions live in CLAUDE.md.
 | ----- | ----- | --------- |
 | ~~L17~~ | ~~13 env separation, 14 admin Enter~~ | ✅ shipped — small, and the OTP-echo gate must exist before real SMS |
 | ~~L18~~ | ~~6 password rules, 5 phone mask, 3 forgot password~~ | ✅ shipped — one coherent auth surface |
-| L19 | 7 `100dvh`/safe-area, 8 full-bleed map, 11 placeholders | pure client; the most visible daily annoyances |
-| L20 | 9 offers vs navigator, 10 button transitions | biggest UX change; wants L19's layout underneath |
+| ~~L19~~ | ~~7 `100dvh`/safe-area, 11 placeholders~~ (8 partly) | ✅ shipped — pure client; the most visible daily annoyances |
+| L20 | 9 offers vs navigator, 8 floating panels, 10 button transitions | biggest UX change; wants L19's layout underneath |
 | L21 | 12 registration guide | the last layer that adds new strings |
 | L22 | 1 Kazakh + RU/ҚАЗ/EN picker | one translation sweep, after the string surface stops moving |
 | L23 | 2 Android APK via EAS | **needs an Expo account login** |
@@ -59,13 +59,18 @@ Conventions live in CLAUDE.md.
 
 ## D. UI / UX
 
-7. **Bottom-margin overlap in the web app** — mobile browser viewport bug:
-   the map/content sits under the browser chrome. Switch the root height
-   to `100dvh` (postexport style block / `app/dist` reset), add
-   `env(safe-area-inset-bottom)` padding to bottom panels.
-8. **Use the full screen** — audit `Screen` padding in `app/src/ui.js` and
-   the `marginHorizontal: -16` map trick in RideTab/DriveTab; the map
-   should bleed edge-to-edge, panels float above it.
+7. ~~**Bottom-margin overlap in the web app**~~ — ✅ L19. `postexport.mjs`
+   emits `html,body,#root{height:100%;height:100dvh}` after Expo's reset,
+   plus `overscroll-behavior:none`; `Screen` adds
+   `env(safe-area-inset-bottom)` padding on web (SafeAreaView is a plain
+   View there). `smoke21` asserts the shipped `index.html` keeps all of it.
+   ⚠️ **Verified in desktop Chrome only** — the overlap it fixes needs a
+   real mobile browser with a collapsing URL bar to confirm.
+8. **Use the full screen** — *partly done in L19*: the duplicated
+   `marginHorizontal: -16` is now a `Bleed` component built on the exported
+   `SCREEN_PAD`, and the map still reaches both edges. What remains is the
+   design change — panels floating *over* the map instead of sitting in a
+   column below it. Overlaps #9, so do them together in L20.
 9. **Driver: offers vs navigator** — while driving a route, incoming offers
    are unusable because the navigator map owns the screen. Split into two
    views: a full-screen navigator page and a separate offers list/page,
@@ -75,10 +80,10 @@ Conventions live in CLAUDE.md.
     (`FadeIn`, spring presses in `ui.js`) to: request ride, go online,
     accept offer, finish ride. Keep durations ≤240ms, use the existing
     easing curves.
-11. **Professional placeholder data** — sweep all `placeholder=` strings
-    (e.g. car `Volkswagen/Golf`, plate `AB12 CDE` → KZ-style
-    `777 ABC 02`), and the RU placeholders in ride fields; keep them
-    consistent across EN/RU/KK.
+11. ~~**Professional placeholder data**~~ — ✅ L19. Car placeholders moved
+    out of `ProfileScreen.js` into i18n (`Toyota` / `Camry` / `White` /
+    `777 ABC 02`, 02 = Almaty), city example London → Almaty, name example
+    Igor → Aigerim. KK versions land with the rest in L22.
 
 ## E. Ops & bugs
 

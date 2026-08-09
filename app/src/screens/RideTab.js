@@ -3,7 +3,7 @@ import { ActivityIndicator, Keyboard, Linking, Pressable, ScrollView, Share, Tex
 import { notify, confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
-import { Card, Button, Input, Sub, ErrorText, Row, Avatar, FadeIn, colors } from '../ui';
+import { Card, Button, Input, Sub, ErrorText, Row, Avatar, FadeIn, Bleed, SCREEN_PAD, colors } from '../ui';
 import { useAuth } from '../state';
 import { api } from '../api';
 import { wsClient } from '../ws';
@@ -334,7 +334,7 @@ export default function RideTab() {
   const places = me && me.places ? me.places : null;
 
   return (
-    <View style={{ flex: 1, marginHorizontal: -16 }}>
+    <Bleed>
       <View style={{ flex: 1 }}>
         <MapView
           ref={mapRef}
@@ -372,7 +372,7 @@ export default function RideTab() {
         ) : null}
       </View>
 
-      <View style={{ paddingHorizontal: 16, paddingTop: 10, backgroundColor: colors.bg }}>
+      <View style={{ paddingHorizontal: SCREEN_PAD, paddingTop: 10, backgroundColor: colors.bg }}>
         <FadeIn keyId={step} from={18}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 8 }}>{stepTitle}</Text>
 
@@ -469,7 +469,7 @@ export default function RideTab() {
         <View style={{ height: 12 }} />
         </FadeIn>
       </View>
-    </View>
+    </Bleed>
   );
 }
 
@@ -679,11 +679,11 @@ function DriverOnTheWay({ ride, driver, driverLoc, onCancel }) {
       : t('ride.onTrip');
 
   return (
-    <View style={{ flex: 1, marginHorizontal: -16 }}>
+    <Bleed>
       <View style={{ flex: 1 }}>
         <MapView ref={mapRef} initialCenter={{ lat: target.lat, lng: target.lng }} markers={markers} />
       </View>
-      <View style={{ paddingHorizontal: 16, paddingTop: 10, backgroundColor: colors.bg }}>
+      <View style={{ paddingHorizontal: SCREEN_PAD, paddingTop: 10, backgroundColor: colors.bg }}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 6 }}>{heading}</Text>
         <Card style={{ marginBottom: 10 }}>
           <Row style={{ marginBottom: 2 }}>
@@ -721,6 +721,6 @@ function DriverOnTheWay({ ride, driver, driverLoc, onCancel }) {
         </Card>
       </View>
       <UserProfileModal userId={profileUserId} onClose={() => setProfileUserId(null)} />
-    </View>
+    </Bleed>
   );
 }

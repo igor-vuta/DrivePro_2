@@ -33,7 +33,17 @@ if (!html.includes(MARK)) {
     '<link rel="icon" href="/favicon.ico" sizes="48x48" />',
     '<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />',
     '<link rel="apple-touch-icon" href="/apple-touch-icon.png" />',
-    '<style>html,body{background:#06070d}</style>',
+    // The Expo reset sizes html/body/#root with height:100%, which on mobile
+    // browsers resolves against the *large* viewport - the one that assumes
+    // the collapsing URL bar is hidden - so the bottom of the app sits under
+    // the browser chrome. 100dvh tracks the visible viewport instead. The
+    // 100% declaration stays first as the fallback for browsers without dvh.
+    // Comes after #expo-reset in the head, so it wins on equal specificity.
+    '<style>',
+    '      html,body{background:#06070d}',
+    '      html,body,#root{height:100%;height:100dvh}',
+    '      body{overscroll-behavior:none}',
+    '    </style>',
   ]
     .map((t) => `    ${t}`)
     .join('\n');

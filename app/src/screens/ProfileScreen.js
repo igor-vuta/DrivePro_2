@@ -199,10 +199,10 @@ export default function ProfileScreen({ goBack, openHistory }) {
         <Card>
           <Text style={{ fontWeight: '700', marginBottom: 4, color: colors.text }}>{t('profile.driver')}</Text>
           <Sub>{t('profile.fillCar')}</Sub>
-          <Input label={t('profile.carMake')} value={carMake} onChangeText={setCarMake} placeholder="Volkswagen" autoCapitalize="words" maxLength={40} />
-          <Input label={t('profile.carModel')} value={carModel} onChangeText={setCarModel} placeholder="Golf" autoCapitalize="words" maxLength={40} />
-          <Input label={t('profile.colour')} value={carColor} onChangeText={setCarColor} placeholder="Black" autoCapitalize="words" maxLength={30} />
-          <Input label={t('profile.plate')} value={plate} onChangeText={setPlate} placeholder="AB12 CDE" autoCapitalize="characters" maxLength={16} />
+          <Input label={t('profile.carMake')} value={carMake} onChangeText={setCarMake} placeholder={t('profile.carMakePh')} autoCapitalize="words" maxLength={40} />
+          <Input label={t('profile.carModel')} value={carModel} onChangeText={setCarModel} placeholder={t('profile.carModelPh')} autoCapitalize="words" maxLength={40} />
+          <Input label={t('profile.colour')} value={carColor} onChangeText={setCarColor} placeholder={t('profile.colourPh')} autoCapitalize="words" maxLength={30} />
+          <Input label={t('profile.plate')} value={plate} onChangeText={setPlate} placeholder={t('profile.platePh')} autoCapitalize="characters" maxLength={16} />
           <ErrorText>{carErr}</ErrorText>
           <Button
             title={me.isDriver ? t('profile.updateCar') : t('profile.saveCar')}
