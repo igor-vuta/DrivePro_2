@@ -1,0 +1,45 @@
+name: test & deploy
+
+# Every push to main: run the full smoke suite; if green, SSH into the
+# Oracle VM and run deploy/update.sh (git pull + service restart).
+# Needs two repository secrets: DEPLOY_HOST (domain or IP) and
+# DEPLOY_SSH_KEY (private key whose .pub is in the VM's authorized_keys).
+# Until those secrets exist, the deploy job politely skips itself.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run all smoke suites
+        run: bash server/tests/run-all.sh
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update the server over SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "DEPLOY_HOST / DEPLOY_SSH_KEY secrets not set - skipping deploy."
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+            ubuntu@"$DEPLOY_HOST" 'sudo bash /opt/drivepro/repo/deploy/update.sh'

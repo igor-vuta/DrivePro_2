@@ -64,6 +64,23 @@ All state (SQLite DB, JWT secret, VAPID push keys) lives in
 `/opt/drivepro/data` — back up that one folder. Restoring it on a fresh VM
 keeps every account, ride, streak, crew and push subscription.
 
+## Auto-deploy on push (GitHub Actions)
+
+`.github/workflows/deploy.yml` runs the full smoke suite on every push to
+`main` and, if green, SSHes into the VM and runs `deploy/update.sh`.
+One-time setup:
+
+1. Make a dedicated deploy key on your machine:
+   `ssh-keygen -t ed25519 -f ~/.ssh/drivepro_deploy -N '' -C drivepro-deploy`
+2. Authorize it on the VM:
+   `ssh ubuntu@<vm> 'cat >> ~/.ssh/authorized_keys' < ~/.ssh/drivepro_deploy.pub`
+3. In the GitHub repo → Settings → Secrets and variables → Actions, add:
+   - `DEPLOY_HOST` — the DuckDNS domain (or the VM IP)
+   - `DEPLOY_SSH_KEY` — the *contents* of `~/.ssh/drivepro_deploy` (private key)
+
+Until the secrets exist the deploy job skips itself, so the workflow is safe
+to merge first. Tests run on every push either way.
+
 ## Troubleshooting
 
 - **Site unreachable, but `curl localhost:4000/api/health` works on the VM**
