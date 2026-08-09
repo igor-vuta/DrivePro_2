@@ -84,6 +84,7 @@ export class Hub {
     const driverLoc = activeRide && activeRide.driverId ? this.drivers.get(activeRide.driverId) : null;
     conn.send({
       type: 'hello',
+      cityImpact: this.impactProvider ? this.impactProvider() : null,
       user: publicUser(this.store, user.id),
       driverActive: this.drivers.has(user.id),
       activeRide,
@@ -109,6 +110,12 @@ export class Hub {
     if (!set) return false;
     for (const c of set) c.send(msg);
     return set.size > 0;
+  }
+
+  broadcast(msg) {
+    for (const set of this.conns.values()) {
+      for (const c of set) c.send(msg);
+    }
   }
 
   onlineDriverIds() {
@@ -164,11 +171,13 @@ export class Hub {
         reqId: msg.reqId,
       });
       if (this.onDriverReady) this.onDriverReady(user.id, conn);
+      if (this.onPresenceChange) this.onPresenceChange();
     });
 
     this.on('driver:deactivate', (user, msg, conn) => {
       this.drivers.delete(user.id);
       conn.send({ type: 'driver:status', active: false, reqId: msg.reqId });
+      if (this.onPresenceChange) this.onPresenceChange();
     });
 
     this.on('driver:location', (user, msg) => {
@@ -204,6 +213,7 @@ export class Hub {
       this.driverDropTimers.delete(userId);
       if (!this.conns.has(userId)) {
         this.drivers.delete(userId);
+        if (this.onPresenceChange) this.onPresenceChange();
       }
     }, DRIVER_GRACE_MS);
     if (t.unref) t.unref();

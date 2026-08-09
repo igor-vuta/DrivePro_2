@@ -14,6 +14,8 @@ export function publicUser(store, userId) {
     about: u.about || null,
     city: u.city || null,
     points: u.points || 0,
+    streakDays: u.streakDays || 0,
+    streakBest: u.streakBest || 0,
     email: u.email || null,
     places: u.places || null,
     rating: rating.avg,

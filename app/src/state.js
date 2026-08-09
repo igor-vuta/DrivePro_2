@@ -26,6 +26,7 @@ export function AuthProvider({ children }) {
   const [langPref, setLangPref] = useState('auto'); // 'auto' | 'en' | 'ru'
   const [lang, setLangState] = useState('ru');
   const [wsConnected, setWsConnected] = useState(false);
+  const [cityImpact, setCityImpact] = useState(null); // { rides, km, driversOnline } for today
   const meRef = useRef(null);
   useEffect(() => {
     meRef.current = me;
@@ -118,6 +119,7 @@ export function AuthProvider({ children }) {
     const offConn = wsClient.on('connection', ({ connected }) => setWsConnected(connected));
     const offHello = wsClient.on('hello', (msg) => {
       if (msg.user) setMe(msg.user);
+      if (msg.cityImpact) setCityImpact(msg.cityImpact);
       setDriverActive(!!msg.driverActive);
       setActiveRide(msg.activeRide || null);
       setCounterpart(msg.counterpart || null);
@@ -147,14 +149,23 @@ export function AuthProvider({ children }) {
         setDriverLoc(null);
         const c = iAmDriver ? (entry && entry.rider) || counterpartRef.current : counterpartRef.current;
         setCounterpart(null);
+        const s = msg.streak || null;
         if (msg.pointsEarned && iAmDriver) {
-          notify(t('rate.finished'), t('drive.pointsEarned', { n: msg.pointsEarned }));
-          api('GET', '/api/me', null, token)
-            .then((data) => {
-              if (data && data.user) setMe(data.user);
-            })
-            .catch(() => {});
+          notify(
+            t('rate.finished'),
+            s && s.mult > 1
+              ? t('drive.pointsEarnedStreak', { n: msg.pointsEarned, mult: s.mult, days: s.days })
+              : t('drive.pointsEarned', { n: msg.pointsEarned })
+          );
+        } else if (!iAmDriver && s && s.days >= 2) {
+          notify(t('streak.title'), t('streak.kept', { days: s.days }));
         }
+        // Points and the flame both moved - refresh the profile either way.
+        api('GET', '/api/me', null, token)
+          .then((data) => {
+            if (data && data.user) setMe(data.user);
+          })
+          .catch(() => {});
         // A driver still carrying passengers keeps driving - they can rate
         // later from the history screen.
         if (!iAmDriver || remaining.length === 0) {
@@ -185,6 +196,7 @@ export function AuthProvider({ children }) {
       }
     });
     const offDriverLoc = wsClient.on('ride:driver_location', (msg) => setDriverLoc({ lat: msg.lat, lng: msg.lng }));
+    const offImpact = wsClient.on('city:impact', (msg) => setCityImpact(msg.impact || null));
     const offRating = wsClient.on('rating:received', async () => {
       try {
         const data = await api('GET', '/api/me', null, token);
@@ -224,6 +236,7 @@ export function AuthProvider({ children }) {
       offCreated();
       offUpdate();
       offDriverLoc();
+      offImpact();
       offRating();
       offCancelled();
       wsClient.disconnect();
@@ -246,6 +259,7 @@ export function AuthProvider({ children }) {
       langPref,
       lang,
       wsConnected,
+      cityImpact,
       setActiveRide,
       setDriverActive,
 
@@ -339,7 +353,7 @@ export function AuthProvider({ children }) {
         if (data && data.user) setMe(data.user);
       },
     }),
-    [booting, token, me, driverActive, activeRide, driverRides, counterpart, driverLoc, pendingRating, pendingVerification, langPref, lang, wsConnected]
+    [booting, token, me, driverActive, activeRide, driverRides, counterpart, driverLoc, pendingRating, pendingVerification, langPref, lang, wsConnected, cityImpact]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

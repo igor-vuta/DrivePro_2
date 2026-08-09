@@ -471,9 +471,16 @@ export function createApi({ store, secret, hub, serveStatic }) {
         drove: drove.length,
         rode: rode.length,
         points: drove.reduce((s, r) => s + ptsFor(r), 0) + rode.length,
+        streak: (store.getUser(user.id) || {}).streakDays || 0,
       },
       city: { rides: rides.length, km: Math.round(km), drivers: byDriver.size, top },
     });
+  });
+
+  // Live city impact: today's shared rides + km, plus drivers online now.
+  route('GET', '/api/city/impact', async (req, res) => {
+    authUser(req);
+    sendJson(res, 200, hub && hub.impactProvider ? hub.impactProvider() : { rides: 0, km: 0, driversOnline: 0 });
   });
 
   // Neon trails: traces of rides finished in the last 24h, drawn on the map.

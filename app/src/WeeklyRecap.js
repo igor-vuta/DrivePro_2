@@ -65,6 +65,7 @@ export default function WeeklyRecap() {
               {line(`🚗  ${t('weekly.youDrove', { n: data.me.drove })}`, 'd')}
               {line(`🙋  ${t('weekly.youRode', { n: data.me.rode })}`, 'r')}
               {data.me.points ? line(`⚡  ${t('weekly.youEarned', { n: data.me.points })}`, 'p') : null}
+              {data.me.streak ? line(`🔥  ${t('weekly.youStreak', { n: data.me.streak })}`, 's') : null}
 
               <Text
                 style={{ fontWeight: '700', color: colors.sub, marginVertical: 6, textTransform: 'uppercase', fontSize: 12 }}

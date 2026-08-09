@@ -1,6 +1,7 @@
 import { isFiniteNum, isLat, isLng, cleanStr, cleanAddressDetails, haversineMeters, pointToPolyline } from './util.js';
 import { publicUser, rideCounterpart } from './views.js';
 import { pushToUser } from './push.js';
+import { streakMultiplier, startOfDay } from './streaks.js';
 
 // Ride lifecycle over websocket messages. This module registers the
 // rider-side handlers (request/cancel) and pushes offers to online drivers.
@@ -46,6 +47,17 @@ export function sweepStaleRides(store, hub, nowMs = Date.now()) {
 export function setupRides({ store, hub }) {
   const sweep = setInterval(() => sweepStaleRides(store, hub), SWEEP_EVERY_MS);
   if (sweep.unref) sweep.unref();
+
+  // Live city impact: today's shared rides + km, plus drivers online now.
+  // Seeded in the websocket 'hello', re-broadcast on every finish and
+  // whenever driver presence changes.
+  const cityImpact = () => ({
+    ...store.cityImpactSince(startOfDay()),
+    driversOnline: hub.drivers.size,
+  });
+  hub.impactProvider = cityImpact;
+  const broadcastImpact = () => hub.broadcast({ type: 'city:impact', impact: cityImpact() });
+  hub.onPresenceChange = broadcastImpact;
 
   // Rider requests a ride.
   hub.on('ride:request', (user, msg, conn) => {
@@ -199,18 +211,35 @@ export function setupRides({ store, hub }) {
     const updated = store.updateRide(ride.id, { status: 'finished', finishedAt });
     const km = (updated.distanceM || 0) / 1000;
     const minutes = Math.max(1, (finishedAt - (updated.startedAt || finishedAt)) / 60000);
-    const pointsEarned = Math.max(1, Math.min(5000, Math.round(km * minutes)));
+    // Any shared ride keeps the daily flame alive - both seats count.
+    const driverStreak = store.touchStreak(user.id, finishedAt);
+    const riderStreak = store.touchStreak(updated.riderId, finishedAt);
+    const driverMult = streakMultiplier(driverStreak ? driverStreak.days : 0);
+    const riderMult = streakMultiplier(riderStreak ? riderStreak.days : 0);
+    const base = Math.max(1, Math.min(5000, Math.round(km * minutes)));
+    const pointsEarned = Math.round(base * driverMult);
     store.addPoints(user.id, pointsEarned);
     store.finishTrail(updated.id, finishedAt);
-    store.addPoints(updated.riderId, 1); // riders climb too, slowly
+    store.addPoints(updated.riderId, Math.round(1 * riderMult)); // riders climb too, slowly
     pushToUser(store, updated.riderId, {
       title: '🏁 Поездка завершена',
       body: 'Спасибо, что едете вместе. Оцените поездку!',
       tag: `ride-${updated.id}`,
       url: '/',
     });
-    hub.sendTo(updated.riderId, { type: 'ride:update', ride: updated });
-    hub.sendTo(updated.driverId, { type: 'ride:update', ride: updated, pointsEarned, reqId: msg.reqId });
+    hub.sendTo(updated.riderId, {
+      type: 'ride:update',
+      ride: updated,
+      streak: riderStreak ? { days: riderStreak.days, mult: riderMult } : null,
+    });
+    hub.sendTo(updated.driverId, {
+      type: 'ride:update',
+      ride: updated,
+      pointsEarned,
+      streak: driverStreak ? { days: driverStreak.days, mult: driverMult } : null,
+      reqId: msg.reqId,
+    });
+    broadcastImpact();
   });
 
   // While a ride is active, relay the driver's live position to the rider.

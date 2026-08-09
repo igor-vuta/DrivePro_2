@@ -40,6 +40,7 @@ function connectWs(token) {
     const waiters = [];
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
+      if (msg.type === 'city:impact') return; // ambient live-counter broadcast (L12), not a reply
       const w = waiters.shift();
       if (w) w(msg);
       else queue.push(msg);

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { id, now } from './util.js';
+import { dayKey, prevDayKey } from './streaks.js';
 
 // Storage layer with two interchangeable backends:
 //  - SQLite via node:sqlite (Node >= 22.5)
@@ -46,7 +47,10 @@ class SqliteBackend {
         places TEXT,
         points INTEGER DEFAULT 0,
         otp_attempts INTEGER DEFAULT 0,
-        banned INTEGER DEFAULT 0
+        banned INTEGER DEFAULT 0,
+        streak_days INTEGER DEFAULT 0,
+        streak_best INTEGER DEFAULT 0,
+        last_ride_day TEXT
       );
       CREATE TABLE IF NOT EXISTS driver_profiles (
         user_id TEXT PRIMARY KEY,
@@ -157,6 +161,9 @@ class SqliteBackend {
       ['points', 'INTEGER DEFAULT 0'],
       ['otp_attempts', 'INTEGER DEFAULT 0'],
       ['banned', 'INTEGER DEFAULT 0'],
+      ['streak_days', 'INTEGER DEFAULT 0'],
+      ['streak_best', 'INTEGER DEFAULT 0'],
+      ['last_ride_day', 'TEXT'],
     ]);
     // Accounts created before verification existed stay usable.
     if (addedUsers.includes('verified')) {
@@ -201,6 +208,9 @@ class SqliteBackend {
   }
   addPoints(uid, n) {
     this.db.prepare('UPDATE users SET points = COALESCE(points, 0) + ? WHERE id = ?').run(n, uid);
+  }
+  setStreak(uid, { days, best, lastDay }) {
+    this.db.prepare('UPDATE users SET streak_days = ?, streak_best = ?, last_ride_day = ? WHERE id = ?').run(days, best, lastDay, uid);
   }
 
   // trails (neon traces of finished rides)
@@ -441,6 +451,9 @@ function rowToUser(row) {
     points: row.points != null ? Number(row.points) : 0,
     otpAttempts: row.otp_attempts != null ? Number(row.otp_attempts) : 0,
     banned: !!row.banned,
+    streakDays: row.streak_days != null ? Number(row.streak_days) : 0,
+    streakBest: row.streak_best != null ? Number(row.streak_best) : 0,
+    lastRideDay: row.last_ride_day ?? null,
     places,
   };
 }
@@ -522,6 +535,15 @@ class JsonBackend {
     const u = this.userById(uid);
     if (u) {
       u.points = (u.points || 0) + n;
+      this.save();
+    }
+  }
+  setStreak(uid, { days, best, lastDay }) {
+    const u = this.userById(uid);
+    if (u) {
+      u.streakDays = days;
+      u.streakBest = best;
+      u.lastRideDay = lastDay;
       this.save();
     }
   }
@@ -741,6 +763,27 @@ export class Store {
   addPoints(uid, n) {
     if (Number.isFinite(n) && n > 0) this.b.addPoints(uid, Math.round(n));
     return this.getUser(uid);
+  }
+
+  // Register "this user shared a ride today" and roll their daily streak:
+  // same day keeps it, yesterday extends it, anything older restarts at 1.
+  touchStreak(uid, ts = now()) {
+    const u = this.getUser(uid);
+    if (!u) return null;
+    const today = dayKey(ts);
+    let days;
+    if (u.lastRideDay === today) days = u.streakDays || 1;
+    else if (u.lastRideDay === prevDayKey(today)) days = (u.streakDays || 0) + 1;
+    else days = 1;
+    const best = Math.max(days, u.streakBest || 0);
+    this.b.setStreak(uid, { days, best, lastDay: today });
+    return { days, best, extended: u.lastRideDay !== today };
+  }
+
+  cityImpactSince(sinceMs) {
+    const rides = this.b.finishedRidesSince(sinceMs);
+    const km = rides.reduce((s, r) => s + (r.distanceM || 0), 0) / 1000;
+    return { rides: rides.length, km: Math.round(km) };
   }
 
   saveTrail(rideId, points) {

@@ -49,6 +49,12 @@ const en = {
   'home.profile': 'Profile',
   'home.ride': 'Ride',
   'home.drive': 'Drive',
+  'home.cityToday': 'City today',
+  'home.cityLine': '{rides} rides · {km} km · {drivers} at the wheel',
+
+  // streaks
+  'streak.title': '🔥 Streak',
+  'streak.kept': 'Day {days} in a row — the flame is alive!',
 
   // ride tab
   'ride.setPickup': 'Set pickup point',
@@ -126,6 +132,7 @@ const en = {
   'drive.activeAsRider': 'You have an active ride as a rider — see the Ride tab.',
   'drive.to': 'To: {addr}',
   'drive.pointsEarned': '+{n} points for the trip',
+  'drive.pointsEarnedStreak': '+{n} points for the trip (×{mult} — streak day {days})',
   'drive.waitingFor': 'waiting {m} min',
   'drive.routeTitle': 'My route',
   'drive.routeHint': 'Set where you are heading - you will only see requests along your path.',
@@ -167,6 +174,7 @@ const en = {
   'weekly.youDrove': '{n} rides as driver',
   'weekly.youRode': '{n} rides as rider',
   'weekly.youEarned': '+{n} points',
+  'weekly.youStreak': 'Streak: {n} days',
   'weekly.city': 'The city',
   'weekly.cityRides': '{n} shared rides',
   'weekly.cityKm': '{n} km travelled together',
@@ -331,6 +339,12 @@ const ru = {
   'home.profile': 'Профиль',
   'home.ride': 'Поездка',
   'home.drive': 'За рулём',
+  'home.cityToday': 'Город сегодня',
+  'home.cityLine': '{rides} поездок · {km} км · {drivers} за рулём',
+
+  // streaks
+  'streak.title': '🔥 Серия',
+  'streak.kept': 'День {days} подряд — огонь не гаснет!',
 
   'ride.setPickup': 'Точка подачи',
   'ride.setDest': 'Куда едем',
@@ -406,6 +420,7 @@ const ru = {
   'drive.activeAsRider': 'У вас активная поездка как у пассажира — откройте вкладку «Поездка».',
   'drive.to': 'Куда: {addr}',
   'drive.pointsEarned': '+{n} баллов за поездку',
+  'drive.pointsEarnedStreak': '+{n} баллов за поездку (×{mult} — {days}-й день серии)',
   'drive.waitingFor': 'ждёт {m} мин',
   'drive.routeTitle': 'Мой маршрут',
   'drive.routeHint': 'Укажите, куда едете — вы увидите только заказы вдоль вашего пути.',
@@ -491,6 +506,7 @@ const ru = {
   'weekly.youDrove': '{n} поездок за рулём',
   'weekly.youRode': '{n} поездок пассажиром',
   'weekly.youEarned': '+{n} баллов',
+  'weekly.youStreak': 'Серия: {n} дней',
   'weekly.city': 'Город',
   'weekly.cityRides': '{n} совместных поездок',
   'weekly.cityKm': '{n} км вместе',
