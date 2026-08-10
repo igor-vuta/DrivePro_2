@@ -12,7 +12,7 @@ Conventions live in CLAUDE.md.
 | ~~L18~~ | ~~6 password rules, 5 phone mask, 3 forgot password~~ | ✅ shipped — one coherent auth surface |
 | ~~L19~~ | ~~7 `100dvh`/safe-area, 11 placeholders~~ (8 partly) | ✅ shipped — pure client; the most visible daily annoyances |
 | ~~L20~~ | ~~9 offers vs navigator, 8 floating panels, 10 transitions~~ | ✅ shipped — plus a crash fix, see below |
-| L21 | 12 registration guide | the last layer that adds new strings |
+| ~~L21~~ | ~~12 registration guide~~ | ✅ shipped — the last layer that adds new strings |
 | L22 | 1 Kazakh + RU/ҚАЗ/EN picker | one translation sweep, after the string surface stops moving |
 | L23 | 2 Android APK via EAS | **needs an Expo account login** |
 | L24 | 4 real SMS provider, then passkeys | **needs a paid KZ SMS provider + keys**; flips prod's `OTP_ECHO` off |
@@ -53,9 +53,14 @@ Conventions live in CLAUDE.md.
    Cyrillic counts) + digit, and not your own phone number. Enforced on
    register and reset; login is untouched so old accounts keep working.
    KK strings land with the rest in L22.
-12. **Registration guide** — 2–3 step first-run explainer (what DrivePro
-    is, how points/streaks work, permissions it will ask for), shown once
-    (AsyncStorage flag), skippable.
+12. ~~**Registration guide**~~ — ✅ L21. Four steps in `GuideScreen.js`:
+    what DrivePro is (people read it as a taxi app), then each role, then
+    points/streaks — the reward loop means nothing before you know what
+    earns them. Shown once (`drivepro.guideDone`), skippable, and placed
+    between verification and the permission ask so that ask arrives with
+    context. It deliberately does not list permissions itself; the existing
+    screen does that next. `smoke23` also enforces EN/RU key parity across
+    the whole dictionary, which is the guard L22 will lean on.
 
 ## D. UI / UX
 
@@ -82,6 +87,11 @@ Conventions live in CLAUDE.md.
     the convoy growing after an accept, requesting a ride, and each ride
     status change through to finish; the sheet animates its own open/close.
 
+11. ~~**Professional placeholder data**~~ — ✅ L19. Car placeholders moved
+    out of `ProfileScreen.js` into i18n (`Toyota` / `Camry` / `White` /
+    `777 ABC 02`, 02 = Almaty), city example London → Almaty, name example
+    Igor → Aigerim. KK versions land with the rest in L22.
+
 ### Found while building L20
 
 - ~~**Crash: stopping a location watch killed the web app**~~ — ✅ fixed in
@@ -94,10 +104,6 @@ Conventions live in CLAUDE.md.
 - **Plural forms** — `t()` only interpolates, so counts use a colon form
   (`Offers: 2`). RU needs three plural forms and KK differs again; add real
   plural support with the KK dictionary in L22.
-11. ~~**Professional placeholder data**~~ — ✅ L19. Car placeholders moved
-    out of `ProfileScreen.js` into i18n (`Toyota` / `Camry` / `White` /
-    `777 ABC 02`, 02 = Almaty), city example London → Almaty, name example
-    Igor → Aigerim. KK versions land with the rest in L22.
 
 ## E. Ops & bugs
 

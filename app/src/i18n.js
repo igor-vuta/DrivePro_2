@@ -42,6 +42,19 @@ const en = {
   'reset.confirm': 'Set new password',
   'reset.back': 'Back to log in',
 
+  // first-run guide (shown once, between signing up and the permission ask)
+  'guide.what.title': 'Not a taxi',
+  'guide.what.text': 'Neighbours sharing rides they are already making. No fares, ever.',
+  'guide.rider.title': 'Need a ride',
+  'guide.rider.text': 'Set two points on the map — we find someone already heading that way.',
+  'guide.driver.title': 'Have a seat',
+  'guide.driver.text': 'Set your route and pick up riders along the corridor you already drive.',
+  'guide.points.title': 'Points & streaks',
+  'guide.points.text': 'Every shared ride earns points, for both seats. Ride daily and a flame multiplies them — up to ×2.',
+  'guide.next': 'Next',
+  'guide.start': 'Start',
+  'guide.skip': 'Skip',
+
   // verify
   'verify.title': 'Verify your phone',
   'verify.sentTo': 'We sent a 4-digit code to {phone}',
@@ -394,6 +407,18 @@ const ru = {
   'reset.sendCode': 'Отправить код',
   'reset.confirm': 'Сохранить пароль',
   'reset.back': 'Вернуться ко входу',
+
+  'guide.what.title': 'Это не такси',
+  'guide.what.text': 'Соседи берут попутчиков в поездки, которые и так совершают. Без тарифов.',
+  'guide.rider.title': 'Нужна поездка',
+  'guide.rider.text': 'Отметьте две точки на карте — мы найдём того, кто уже едет в ту сторону.',
+  'guide.driver.title': 'Есть свободное место',
+  'guide.driver.text': 'Укажите свой маршрут и подбирайте попутчиков по пути.',
+  'guide.points.title': 'Баллы и серии',
+  'guide.points.text': 'Каждая совместная поездка даёт баллы — обоим. Ездите каждый день, и огонёк умножит их — до ×2.',
+  'guide.next': 'Далее',
+  'guide.start': 'Начать',
+  'guide.skip': 'Пропустить',
 
   'verify.title': 'Подтвердите телефон',
   'verify.sentTo': 'Мы отправили 4-значный код на {phone}',

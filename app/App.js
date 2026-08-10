@@ -11,6 +11,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import RateScreen from './src/screens/RateScreen';
 import PermissionsScreen from './src/screens/PermissionsScreen';
+import GuideScreen from './src/screens/GuideScreen';
 import { DialogHost } from './src/dialogs';
 import { Button, FadeIn, colors } from './src/ui';
 import { t } from './src/i18n';
@@ -20,11 +21,13 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const PERM_KEY = 'drivepro.permDone';
+const GUIDE_KEY = 'drivepro.guideDone';
 
 function Root() {
   const { booting, token, pendingRating, pendingVerification } = useAuth();
   const [screen, setScreen] = useState('home'); // 'home' | 'profile' | 'history'
   const [permState, setPermState] = useState('unknown'); // 'unknown' | 'needed' | 'done'
+  const [guideState, setGuideState] = useState('unknown'); // 'unknown' | 'needed' | 'done'
 
   // Android hardware back: history -> profile -> home.
   useEffect(() => {
@@ -73,6 +76,29 @@ function Root() {
     };
   }, [token]);
 
+  // The guide explains what the app is; the permission screen then asks for
+  // what it needs. Both are once-only, and the guide comes first so the ask
+  // arrives with context.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    AsyncStorage.getItem(GUIDE_KEY)
+      .then((done) => {
+        if (!cancelled) setGuideState(done ? 'done' : 'needed');
+      })
+      .catch(() => {
+        if (!cancelled) setGuideState('done'); // never block sign-in on storage
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const finishGuide = async () => {
+    await AsyncStorage.setItem(GUIDE_KEY, '1').catch(() => {});
+    setGuideState('done');
+  };
+
   const finishPermissions = async () => {
     await AsyncStorage.setItem(PERM_KEY, '1').catch(() => {});
     setPermState('done');
@@ -88,13 +114,14 @@ function Root() {
 
   if (!token) return pendingVerification ? <VerifyScreen /> : <AuthScreen />;
 
-  if (permState === 'unknown') {
+  if (permState === 'unknown' || guideState === 'unknown') {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
         <ActivityIndicator size="large" color={colors.text} />
       </View>
     );
   }
+  if (guideState === 'needed') return <GuideScreen onDone={finishGuide} />;
   if (permState === 'needed') return <PermissionsScreen onDone={finishPermissions} />;
 
   if (pendingRating) return <RateScreen />;

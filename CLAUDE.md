@@ -66,6 +66,7 @@ L15 deploy kit · L16 CI/CD · L17 env separation + admin panel fix · L18
 auth hardening (password rules, phone mask, OTP password reset) · L19
 mobile viewport (100dvh + safe area), `Bleed`/`SCREEN_PAD`, KZ placeholders ·
 L20 driver full-screen map + floating offer sheet, `Pop`/`Chip` motion,
-expo-location web teardown crash fixed (`app/src/location.js`).
+expo-location web teardown crash fixed (`app/src/location.js`) · L21
+first-run guide (4 steps, once, before the permission ask).
 
 Remaining work and its running order live in `ROADMAP.md`.
