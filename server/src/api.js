@@ -11,6 +11,9 @@ import {
   telegramConfigured, telegramBotUsername, createLinkRequest, readLinkRequest, deepLink,
 } from './telegram.js';
 import { generateSecret, verifyTotp, otpauthUrl, TOTP_STEP_S } from './totp.js';
+import {
+  newChallenge, registrationOptions, assertionOptions, verifyRegistration, verifyAssertion, rpId,
+} from './webauthn.js';
 
 const MAX_AVATAR_CHARS = 400_000; // ~300 KB of base64 image data
 const OTP_MAX_ATTEMPTS = 5;
@@ -89,6 +92,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
       storage: store.backendName,
       // The app hides the Telegram option unless the bot is actually up.
       telegram: Boolean(telegramConfigured() && telegramBotUsername()),
+      rpId: rpId(),
       time: Date.now(),
     });
   });
@@ -295,6 +299,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
       totpEnabled: false,
       totpLastStep: null,
     });
+    store.removeAllPasskeys(user.id);
     sendJson(res, 200, sessionPayload(store.getUser(user.id)));
   });
 
@@ -332,6 +337,130 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const user = store.getUser(rec.userId);
     if (!user) throw httpError(404, 'No account with this phone number.', 'no_account');
     sendJson(res, 200, { status: 'verified', ...sessionPayload(user) });
+  });
+
+  // ------------------------------------------------------------ passkeys ---
+  //
+  // WebAuthn: the device holds a private key and signs a challenge, so there
+  // is no shared secret to steal and nothing to type. Optional, like TOTP -
+  // the verified phone is still the identity, and a password reset over it
+  // removes every passkey, so a lost device is recoverable.
+  //
+  // Challenges live in memory for a minute. They only need to survive the
+  // round trip to the authenticator, and losing them on restart just means
+  // the user taps the button again.
+  const challenges = new Map(); // challenge -> { userId, phone, at }
+  const CHALLENGE_TTL_MS = 60_000;
+  const sweepChallenges = () => {
+    const t = Date.now();
+    for (const [k, v] of challenges) if (t - v.at > CHALLENGE_TTL_MS) challenges.delete(k);
+  };
+  const takeChallenge = (challenge) => {
+    sweepChallenges();
+    const rec = challenges.get(challenge);
+    // One use only: a replayed challenge would let a captured assertion be
+    // presented twice.
+    if (rec) challenges.delete(challenge);
+    return rec || null;
+  };
+
+  route('POST', '/api/passkey/register/options', async (req, res) => {
+    const user = authUser(req);
+    const challenge = newChallenge();
+    challenges.set(challenge, { userId: user.id, phone: user.phone, at: Date.now() });
+    sendJson(res, 200, registrationOptions({ user, challenge }));
+  });
+
+  route('POST', '/api/passkey/register', async (req, res) => {
+    const user = authUser(req);
+    const body = await readJson(req);
+    const challenge = String(body.challenge || '');
+    const rec = takeChallenge(challenge);
+    if (!rec || rec.userId !== user.id) throw httpError(400, 'This request expired. Try again.', 'challenge_expired');
+    let reg;
+    try {
+      reg = verifyRegistration({
+        attestationObject: Buffer.from(String(body.attestationObject || ''), 'base64url'),
+        clientDataJSON: Buffer.from(String(body.clientDataJSON || ''), 'base64url'),
+        expectedChallenge: challenge,
+      });
+    } catch (e) {
+      console.error('[webauthn] registration rejected:', e.message);
+      throw httpError(400, 'Could not register this device.', 'passkey_invalid');
+    }
+    if (store.getPasskey(reg.credentialId)) throw httpError(409, 'This device is already registered.', 'passkey_exists');
+    store.addPasskey(user.id, { ...reg, label: cleanStr(body.label, 40) || null });
+    sendJson(res, 200, { ok: true, credentialId: reg.credentialId });
+  });
+
+  route('GET', '/api/passkeys', async (req, res) => {
+    const user = authUser(req);
+    sendJson(res, 200, {
+      passkeys: store.listPasskeys(user.id).map((p) => ({
+        credentialId: p.credentialId,
+        label: p.label,
+        createdAt: p.createdAt,
+        lastUsedAt: p.lastUsedAt,
+      })),
+    });
+  });
+
+  route('DELETE', '/api/passkeys/:id', async (req, res, params) => {
+    const user = authUser(req);
+    const pk = store.getPasskey(params.id);
+    if (!pk || pk.userId !== user.id) throw httpError(404, 'No such passkey.', 'passkey_not_found');
+    store.removePasskey(params.id, user.id);
+    sendJson(res, 200, { ok: true });
+  });
+
+  // Login. The phone identifies which credentials to offer; the signature is
+  // what actually authenticates, so no password is involved.
+  route('POST', '/api/passkey/login/options', async (req, res) => {
+    rateLimit(req, 'passkey_opts', 60);
+    const body = await readJson(req);
+    const phone = normPhone(body.phone);
+    const user = phone ? store.findUserByPhone(phone) : null;
+    if (!user) throw httpError(404, 'No account with this phone number.', 'no_account');
+    if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
+    const creds = store.listPasskeys(user.id);
+    if (!creds.length) throw httpError(404, 'No passkey on this account.', 'no_passkey');
+    const challenge = newChallenge();
+    challenges.set(challenge, { userId: user.id, phone: user.phone, at: Date.now() });
+    sendJson(res, 200, assertionOptions({ challenge, allowCredentials: creds.map((c) => c.credentialId) }));
+  });
+
+  route('POST', '/api/passkey/login', async (req, res) => {
+    rateLimit(req, 'passkey_login', 60);
+    const body = await readJson(req);
+    const challenge = String(body.challenge || '');
+    const rec = takeChallenge(challenge);
+    if (!rec) throw httpError(400, 'This request expired. Try again.', 'challenge_expired');
+    const pk = store.getPasskey(String(body.credentialId || ''));
+    // The credential must belong to the account the challenge was issued for,
+    // or one user's device could sign in as another.
+    if (!pk || pk.userId !== rec.userId) throw httpError(401, 'Unknown passkey.', 'passkey_unknown');
+    const user = store.getUser(pk.userId);
+    if (!user) throw httpError(401, 'Unknown passkey.', 'passkey_unknown');
+    if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
+    let result;
+    try {
+      result = verifyAssertion({
+        authenticatorData: Buffer.from(String(body.authenticatorData || ''), 'base64url'),
+        clientDataJSON: Buffer.from(String(body.clientDataJSON || ''), 'base64url'),
+        signature: Buffer.from(String(body.signature || ''), 'base64url'),
+        expectedChallenge: challenge,
+        publicKeyPem: pk.publicKey,
+        alg: pk.alg,
+        storedSignCount: pk.signCount,
+      });
+    } catch (e) {
+      console.error('[webauthn] assertion rejected:', e.message);
+      throw httpError(401, 'That passkey did not verify.', 'passkey_invalid');
+    }
+    store.touchPasskey(pk.credentialId, result.signCount);
+    // A passkey is already a strong factor, so it stands alone - asking for a
+    // TOTP on top would be theatre.
+    sendJson(res, 200, sessionPayload(user));
   });
 
   // ---------------------------------------------------------------- totp ---
@@ -394,6 +523,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
       // Only ever about yourself - whether someone else uses an authenticator
       // is not public, so this sits beside the profile rather than in it.
       totpEnabled: !!user.totpEnabled,
+      passkeys: store.listPasskeys(user.id).length,
       driverActive: hub ? hub.drivers.has(user.id) : false,
       activeRide,
       counterpart: rideCounterpart(store, activeRide, user.id),

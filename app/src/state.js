@@ -6,6 +6,7 @@ import { api } from './api';
 import { wsClient } from './ws';
 import { t, setLang, resolveLang } from './i18n';
 import { setupPush } from './push';
+import { registerPasskey, loginWithPasskey } from './passkey';
 
 const TOKEN_KEY = 'drivepro.token';
 const LANG_KEY = 'drivepro.lang';
@@ -28,6 +29,7 @@ export function AuthProvider({ children }) {
   const [wsConnected, setWsConnected] = useState(false);
   const [cityImpact, setCityImpact] = useState(null); // { rides, km, driversOnline } for today
   const [totpEnabled, setTotpEnabled] = useState(false);
+  const [passkeyCount, setPasskeyCount] = useState(0);
   const meRef = useRef(null);
   useEffect(() => {
     meRef.current = me;
@@ -65,6 +67,7 @@ export function AuthProvider({ children }) {
           setToken(saved);
           setMe(data.user);
           setTotpEnabled(!!data.totpEnabled);
+          setPasskeyCount(data.passkeys || 0);
           setDriverActive(!!data.driverActive);
           setActiveRide(data.activeRide || null);
           setCounterpart(data.counterpart || null);
@@ -94,6 +97,7 @@ export function AuthProvider({ children }) {
           .then((data) => {
             setMe(data.user);
             setTotpEnabled(!!data.totpEnabled);
+            setPasskeyCount(data.passkeys || 0);
             setDriverActive(!!data.driverActive);
             setActiveRide(data.activeRide || null);
             setCounterpart(data.counterpart || null);
@@ -260,6 +264,7 @@ export function AuthProvider({ children }) {
       setPendingRating,
       pendingVerification,
       totpEnabled,
+      passkeyCount,
       langPref,
       lang,
       wsConnected,
@@ -325,6 +330,32 @@ export function AuthProvider({ children }) {
 
       // Telegram verification: ask for a deep link, then poll until the bot
       // has confirmed the number with Telegram. No code is ever typed.
+      // Passkeys. A registered device signs a challenge, so login needs no
+      // password at all; the verified phone still governs recovery.
+      async addPasskey(label) {
+        await registerPasskey(token, label);
+        const list = await api('GET', '/api/passkeys', null, token);
+        setPasskeyCount(list.passkeys.length);
+        return list.passkeys;
+      },
+      async listPasskeys() {
+        const r = await api('GET', '/api/passkeys', null, token);
+        setPasskeyCount(r.passkeys.length);
+        return r.passkeys;
+      },
+      async removePasskey(id) {
+        await api('DELETE', `/api/passkeys/${encodeURIComponent(id)}`, null, token);
+        const list = await api('GET', '/api/passkeys', null, token);
+        setPasskeyCount(list.passkeys.length);
+        return list.passkeys;
+      },
+      async passkeyLogin(phone) {
+        const data = await loginWithPasskey(phone);
+        await AsyncStorage.setItem(TOKEN_KEY, data.token);
+        setMe(data.user);
+        setToken(data.token);
+      },
+
       // Authenticator (TOTP). Optional, and never a replacement for the
       // verified phone - resetting the password over it clears this.
       async totpSetup() {
@@ -410,7 +441,7 @@ export function AuthProvider({ children }) {
         if (data && data.user) setMe(data.user);
       },
     }),
-    [booting, token, me, driverActive, activeRide, driverRides, counterpart, driverLoc, pendingRating, pendingVerification, totpEnabled, langPref, lang, wsConnected, cityImpact]
+    [booting, token, me, driverActive, activeRide, driverRides, counterpart, driverLoc, pendingRating, pendingVerification, totpEnabled, passkeyCount, langPref, lang, wsConnected, cityImpact]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

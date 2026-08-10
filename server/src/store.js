@@ -147,6 +147,17 @@ class SqliteBackend {
         reason TEXT,
         created_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS passkeys (
+        credential_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        public_key TEXT NOT NULL,
+        alg INTEGER NOT NULL,
+        sign_count INTEGER DEFAULT 0,
+        label TEXT,
+        created_at INTEGER NOT NULL,
+        last_used_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_passkeys_user ON passkeys (user_id);
       CREATE TABLE IF NOT EXISTS push_subs (
         endpoint TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -474,6 +485,28 @@ class SqliteBackend {
     const row = this.db.prepare('SELECT ride_id FROM shares WHERE share_id = ?').get(shareId);
     return row ? row.ride_id : null;
   }
+  insertPasskey(p) {
+    this.db
+      .prepare(
+        'INSERT OR REPLACE INTO passkeys (credential_id, user_id, public_key, alg, sign_count, label, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      )
+      .run(p.credentialId, p.userId, p.publicKey, p.alg, p.signCount || 0, p.label || null, p.createdAt);
+  }
+  passkeysByUser(userId) {
+    return this.db.prepare('SELECT * FROM passkeys WHERE user_id = ? ORDER BY created_at').all(userId).map(rowToPasskey);
+  }
+  passkeyById(credentialId) {
+    return rowToPasskey(this.db.prepare('SELECT * FROM passkeys WHERE credential_id = ?').get(credentialId));
+  }
+  touchPasskey(credentialId, signCount, ts) {
+    this.db.prepare('UPDATE passkeys SET sign_count = ?, last_used_at = ? WHERE credential_id = ?').run(signCount, ts, credentialId);
+  }
+  deletePasskey(credentialId, userId) {
+    this.db.prepare('DELETE FROM passkeys WHERE credential_id = ? AND user_id = ?').run(credentialId, userId);
+  }
+  deletePasskeysFor(userId) {
+    this.db.prepare('DELETE FROM passkeys WHERE user_id = ?').run(userId);
+  }
   putPushSub(userId, endpoint, subJson, ts) {
     this.db
       .prepare('INSERT OR REPLACE INTO push_subs (endpoint, user_id, sub_json, created_at) VALUES (?, ?, ?, ?)')
@@ -532,6 +565,20 @@ class SqliteBackend {
       .all(uid, limit)
       .map((r) => ({ stars: Number(r.stars), comment: r.comment, createdAt: Number(r.created_at) }));
   }
+}
+
+function rowToPasskey(row) {
+  if (!row) return null;
+  return {
+    credentialId: row.credential_id,
+    userId: row.user_id,
+    publicKey: row.public_key,
+    alg: Number(row.alg),
+    signCount: row.sign_count == null ? 0 : Number(row.sign_count),
+    label: row.label ?? null,
+    createdAt: Number(row.created_at),
+    lastUsedAt: row.last_used_at == null ? null : Number(row.last_used_at),
+  };
 }
 
 function safeParse(v) {
@@ -904,6 +951,59 @@ class JsonBackend {
     if (!Array.isArray(this.data.pushSubs)) this.data.pushSubs = [];
     return this.data.pushSubs;
   }
+  insertPasskey(p) {
+    this.db
+      .prepare(
+        'INSERT OR REPLACE INTO passkeys (credential_id, user_id, public_key, alg, sign_count, label, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      )
+      .run(p.credentialId, p.userId, p.publicKey, p.alg, p.signCount || 0, p.label || null, p.createdAt);
+  }
+  passkeysByUser(userId) {
+    return this.db.prepare('SELECT * FROM passkeys WHERE user_id = ? ORDER BY created_at').all(userId).map(rowToPasskey);
+  }
+  passkeyById(credentialId) {
+    return rowToPasskey(this.db.prepare('SELECT * FROM passkeys WHERE credential_id = ?').get(credentialId));
+  }
+  touchPasskey(credentialId, signCount, ts) {
+    this.db.prepare('UPDATE passkeys SET sign_count = ?, last_used_at = ? WHERE credential_id = ?').run(signCount, ts, credentialId);
+  }
+  deletePasskey(credentialId, userId) {
+    this.db.prepare('DELETE FROM passkeys WHERE credential_id = ? AND user_id = ?').run(credentialId, userId);
+  }
+  deletePasskeysFor(userId) {
+    this.db.prepare('DELETE FROM passkeys WHERE user_id = ?').run(userId);
+  }
+  _passkeys() {
+    if (!Array.isArray(this.data.passkeys)) this.data.passkeys = [];
+    return this.data.passkeys;
+  }
+  insertPasskey(p) {
+    this.data.passkeys = this._passkeys().filter((x) => x.credentialId !== p.credentialId);
+    this.data.passkeys.push({ ...p });
+    this.save();
+  }
+  passkeysByUser(userId) {
+    return this._passkeys().filter((x) => x.userId === userId).sort((a, b) => a.createdAt - b.createdAt);
+  }
+  passkeyById(credentialId) {
+    return this._passkeys().find((x) => x.credentialId === credentialId) || null;
+  }
+  touchPasskey(credentialId, signCount, ts) {
+    const p = this.passkeyById(credentialId);
+    if (p) {
+      p.signCount = signCount;
+      p.lastUsedAt = ts;
+      this.save();
+    }
+  }
+  deletePasskey(credentialId, userId) {
+    this.data.passkeys = this._passkeys().filter((x) => !(x.credentialId === credentialId && x.userId === userId));
+    this.save();
+  }
+  deletePasskeysFor(userId) {
+    this.data.passkeys = this._passkeys().filter((x) => x.userId !== userId);
+    this.save();
+  }
   putPushSub(userId, endpoint, subJson, ts) {
     this.data.pushSubs = this._pushsubs().filter((x) => x.endpoint !== endpoint);
     this.data.pushSubs.push({ userId, endpoint, subJson, ts });
@@ -1170,6 +1270,26 @@ export class Store {
   // the p256dh/auth keys) and a native Expo registration ({ kind: 'expo' }
   // whose endpoint is the Expo token). Storing the kind inside sub_json keeps
   // both store backends on one schema.
+  addPasskey(userId, { credentialId, publicKey, alg, signCount, label }) {
+    if (!credentialId || !publicKey) return false;
+    this.b.insertPasskey({ credentialId, userId, publicKey, alg, signCount: signCount || 0, label: label || null, createdAt: now() });
+    return true;
+  }
+  listPasskeys(userId) {
+    return this.b.passkeysByUser(userId);
+  }
+  getPasskey(credentialId) {
+    return this.b.passkeyById(credentialId);
+  }
+  touchPasskey(credentialId, signCount) {
+    this.b.touchPasskey(credentialId, signCount, now());
+  }
+  removePasskey(credentialId, userId) {
+    this.b.deletePasskey(credentialId, userId);
+  }
+  removeAllPasskeys(userId) {
+    this.b.deletePasskeysFor(userId);
+  }
   savePushSub(userId, sub) {
     if (!sub || typeof sub.endpoint !== 'string' || !sub.endpoint) return false;
     if (sub.kind === 'expo') {

@@ -80,6 +80,7 @@ L26 Telegram (`server/src/telegram.js`, long-polled bot, deep-link nonce,
 phone proven by Telegram's contact sharing; also delivers codes once linked) ·
 L27 TOTP (`server/src/totp.js`, RFC 4226/6238, zero deps; optional second
 factor — the verified phone stays identity and recovery, and a password reset
-over it clears the secret).
+over it clears the secret) · L28 passkeys (`server/src/webauthn.js`, own CBOR
++ COSE + signature verification, zero deps; `rpId` from `PUBLIC_ORIGIN`).
 
 Remaining work and its running order live in `ROADMAP.md`.

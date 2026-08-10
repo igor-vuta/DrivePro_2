@@ -6,6 +6,7 @@ import { Screen, Title, Sub, Card, Input, Button, ErrorText, Row, Avatar, Segmen
 import { useAuth } from '../state';
 import { api } from '../api';
 import { t, errMsg, getLang } from '../i18n';
+import { passkeysSupported } from '../passkey';
 
 const MAX_AVATAR_CHARS = 380_000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -496,7 +497,30 @@ function PlacesCard() {
 // account's identity, and resetting the password over it clears any secret
 // here - which is why there are no recovery codes to lose.
 function SecurityCard() {
-  const { totpEnabled, totpSetup, totpEnable, totpDisable } = useAuth();
+  const { totpEnabled, totpSetup, totpEnable, totpDisable, addPasskey, listPasskeys, removePasskey } = useAuth();
+  const [keys, setKeys] = useState(null);
+  const [pkErr, setPkErr] = useState('');
+  const [pkBusy, setPkBusy] = useState(false);
+
+  useEffect(() => {
+    if (!passkeysSupported()) return;
+    listPasskeys()
+      .then(setKeys)
+      .catch(() => setKeys([]));
+  }, []);
+
+  const runPk = async (fn) => {
+    setPkErr('');
+    setPkBusy(true);
+    try {
+      setKeys(await fn());
+    } catch (e) {
+      // A cancelled browser prompt is not an error worth shouting about.
+      if (!/cancel|abort|NotAllowed/i.test(String(e && e.message))) setPkErr(errMsg(e));
+    } finally {
+      setPkBusy(false);
+    }
+  };
   const [secret, setSecret] = useState(null);
   const [otpauth, setOtpauth] = useState(null);
   const [code, setCode] = useState('');
@@ -548,6 +572,28 @@ function SecurityCard() {
     <Card>
       <Text style={{ fontWeight: '700', marginBottom: 4, color: colors.text }}>{t('totp.title')}</Text>
       <Sub>{totpEnabled ? t('totp.on') : t('totp.off')}</Sub>
+
+      {passkeysSupported() ? (
+        <View style={{ marginBottom: 14 }}>
+          <Text style={{ fontWeight: '700', color: colors.text, marginTop: 4 }}>{t('passkey.title')}</Text>
+          <Sub>{keys && keys.length ? t('passkey.count', { n: keys.length }) : t('passkey.none')}</Sub>
+          {(keys || []).map((k) => (
+            <Row key={k.credentialId} style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+              <Text style={{ color: colors.text, flex: 1 }} numberOfLines={1}>
+                {k.label || t('passkey.unnamed')}
+              </Text>
+              <Button
+                kind="ghost"
+                title={t('common.remove')}
+                onPress={() => runPk(() => removePasskey(k.credentialId))}
+                style={{ height: 34, paddingHorizontal: 12, marginTop: 0 }}
+              />
+            </Row>
+          ))}
+          <ErrorText>{pkErr}</ErrorText>
+          <Button kind="ghost" title={t('passkey.add')} onPress={() => runPk(() => addPasskey(t('passkey.thisDevice')))} loading={pkBusy} />
+        </View>
+      ) : null}
 
       {totpEnabled ? (
         <View>

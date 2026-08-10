@@ -20,7 +20,7 @@ Conventions live in CLAUDE.md.
 | — | 2 native builds (Android APK / iOS TestFlight) | **deferred**: staying a PWA while it is a demo |
 | ~~L26~~ | ~~4c Telegram verification + delivery~~ | ✅ shipped — free, no approvals, works where KZ SMS does not |
 | ~~L27~~ | ~~TOTP authenticator (auth step 1)~~ | ✅ shipped — RFC 4226/6238, zero deps |
-| L28 | Passkeys / WebAuthn (auth step 2) | free, no provider |
+| ~~L28~~ | ~~Passkeys / WebAuthn (auth step 2)~~ | ✅ shipped — zero deps, verified with a virtual authenticator |
 | L29 | Self-hosted OSRM: car + foot + bike | needed before walk/cycle routing can be real |
 | L30 | Design system: new palette, light+dark, airier spacing, brand assets | |
 | L31 | Map-first restructure | the map becomes the app |
@@ -131,11 +131,15 @@ was inert on web — so every screen padded the notch and the home indicator
      carriers demand a registered sender ID and refuse long codes — Twilio
      refused a UK test number outright.
      ⚠️ Verified against a stub only; not yet run against a real bot.
-   - **Passkeys / TOTP / recovery codes** — still open, and all free: no
-     provider needed. Recovery codes first (they make the other two safe to
-     rely on), then TOTP (RFC 6238, ~40 lines on node:crypto), then
-     WebAuthn. `rpId` would be `drivepro-almaty.duckdns.org`, which pins
-     credentials to that hostname.
+   - ~~**TOTP**~~ — ✅ L27, and ~~**passkeys**~~ — ✅ L28. Both optional,
+     both zero-dependency, neither replacing the phone. No recovery codes:
+     re-proving the phone is the recovery, and it clears the TOTP secret and
+     every passkey. `rpId` comes from `PUBLIC_ORIGIN`
+     (`drivepro-almaty.duckdns.org`), so passkeys are pinned to that
+     hostname — **moving domains invalidates them all**.
+     ⚠️ The browser half of passkeys is unverified: the server is tested
+     against a virtual authenticator producing real P-256 signatures, but
+     nobody has yet tapped Face ID against it.
 5. ~~**Phone input formatting**~~ — ✅ L18. `PhoneInput` + `formatPhone` in
    `app/src/ui.js`; a complete `8XXXXXXXXXX` is rewritten to `+7`. Still
    only wired into the auth screens — reuse it anywhere else a phone is

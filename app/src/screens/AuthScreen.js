@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { Screen, Title, Sub, Card, Input, PhoneInput, Button, ErrorText, Segmented } from '../ui';
 import { useAuth } from '../state';
 import { t, errMsg } from '../i18n';
+import { passkeysSupported } from '../passkey';
 
 function validPhone(raw) {
   const digits = String(raw).replace(/\D/g, '');
@@ -23,7 +24,7 @@ function passwordProblem(password, phone) {
 }
 
 export default function AuthScreen() {
-  const { login, register, requestReset, confirmReset } = useAuth();
+  const { login, register, requestReset, confirmReset, passkeyLogin } = useAuth();
   const [mode, setMode] = useState('login');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -94,6 +95,14 @@ export default function AuthScreen() {
       return;
     }
     await run(() => register(phone, password, name));
+  };
+
+  const usePasskey = async () => {
+    if (!validPhone(phone)) {
+      setError(t('auth.vPhone'));
+      return;
+    }
+    await run(() => passkeyLogin(phone));
   };
 
   const sendResetCode = async () => {
@@ -241,6 +250,9 @@ export default function AuthScreen() {
             loading={busy}
             disabled={!phone || !password || (mode === 'register' && name.trim().length < 2)}
           />
+          {mode === 'login' && passkeysSupported() ? (
+            <Button kind="ghost" title={t('passkey.login')} onPress={usePasskey} loading={busy} style={{ marginTop: 8 }} />
+          ) : null}
           {mode === 'login' ? (
             <Button
               kind="ghost"
