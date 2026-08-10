@@ -71,6 +71,8 @@ first-run guide (4 steps, once, before the permission ask) · L22 Kazakh
 (`kk` dictionary, Авто/РУ/ҚАЗ/EN picker, kk→ru→en fallback) + real plural
 forms (`app/src/plurals.js`, `key.one/.few/.many` selected by `params.n`) ·
 L23 layout fix: `#root` is `position:fixed; inset:0` (no viewport-height
-units — `100dvh` reports short inside an iOS standalone PWA).
+units — `100dvh` reports short inside an iOS standalone PWA) · L24 native
+push (Expo push tokens beside web push; `push_subs` tells them apart by
+`kind` in the JSON, no schema change; `EXPO_PUSH_URL` is a test seam).
 
 Remaining work and its running order live in `ROADMAP.md`.

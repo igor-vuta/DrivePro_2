@@ -1153,8 +1153,17 @@ export class Store {
     return this.b.rideByShare(shareId);
   }
 
+  // Two shapes share this table: a Web Push subscription (endpoint URL plus
+  // the p256dh/auth keys) and a native Expo registration ({ kind: 'expo' }
+  // whose endpoint is the Expo token). Storing the kind inside sub_json keeps
+  // both store backends on one schema.
   savePushSub(userId, sub) {
-    if (!sub || typeof sub.endpoint !== 'string' || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) return false;
+    if (!sub || typeof sub.endpoint !== 'string' || !sub.endpoint) return false;
+    if (sub.kind === 'expo') {
+      if (!/^Expo(nent)?PushToken\[[^\]]+\]$/.test(sub.endpoint)) return false;
+    } else if (!sub.keys || !sub.keys.p256dh || !sub.keys.auth) {
+      return false;
+    }
     this.b.putPushSub(userId, sub.endpoint, JSON.stringify(sub), now());
     return true;
   }

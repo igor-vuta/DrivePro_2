@@ -86,19 +86,89 @@ export async function sendWebPush(sub, payloadObj) {
   return res.status;
 }
 
+// ------------------------------------------------------------ Expo push ---
+//
+// Native builds cannot use Web Push: there is no service worker and no
+// PushManager. They register an Expo push token instead, which Expo relays to
+// APNs or FCM. Subscriptions of both kinds share the push_subs table - an Expo
+// token is unique, so it stands in for the endpoint - and are told apart by
+// `kind` inside the stored JSON, which avoids a schema migration across both
+// store backends.
+//
+// Overridable so tests can point it at a local stub instead of Expo.
+const EXPO_PUSH_URL = process.env.EXPO_PUSH_URL || 'https://exp.host/--/api/v2/push/send';
+const EXPO_BATCH = 100; // Expo's documented maximum per request
+
+export const isExpoToken = (s) => typeof s === 'string' && /^Expo(nent)?PushToken\[[^\]]+\]$/.test(s);
+
+// Returns Expo's tickets, one per token, in the order given. An unreachable
+// Expo (or a non-JSON reply) yields [] - callers treat that as "nothing to
+// prune" rather than dropping subscriptions on a transient failure.
+export async function sendExpoPush(tokens, payload) {
+  const list = (tokens || []).filter(isExpoToken);
+  if (!list.length) return [];
+  const tickets = [];
+  for (let i = 0; i < list.length; i += EXPO_BATCH) {
+    const chunk = list.slice(i, i + EXPO_BATCH);
+    const messages = chunk.map((to) => ({
+      to,
+      title: payload.title,
+      body: payload.body,
+      sound: 'default',
+      ...(payload.tag ? { collapseId: payload.tag } : {}),
+      ...(payload.url ? { data: { url: payload.url } } : {}),
+    }));
+    try {
+      const res = await fetch(EXPO_PUSH_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(messages),
+      });
+      if (!res.ok) {
+        tickets.push(...chunk.map(() => null));
+        continue;
+      }
+      const json = await res.json();
+      const data = Array.isArray(json && json.data) ? json.data : [];
+      tickets.push(...chunk.map((_, n) => data[n] || null));
+    } catch {
+      tickets.push(...chunk.map(() => null));
+    }
+  }
+  return tickets;
+}
+
 // Fire-and-forget to every subscription a user has; dead ones are pruned.
 export function pushToUser(store, userId, payload) {
-  if (!vapid || !userId) return;
+  if (!userId) return;
   let subs = [];
   try {
     subs = store.pushSubsFor(userId);
   } catch {
     return;
   }
-  for (const s of subs) {
-    sendWebPush(s, payload)
-      .then((status) => {
-        if (status === 404 || status === 410) store.dropPushSub(s.endpoint);
+  const expo = subs.filter((s) => s && s.kind === 'expo');
+  const web = subs.filter((s) => s && s.kind !== 'expo');
+
+  if (vapid) {
+    for (const s of web) {
+      sendWebPush(s, payload)
+        .then((status) => {
+          if (status === 404 || status === 410) store.dropPushSub(s.endpoint);
+        })
+        .catch(() => {});
+    }
+  }
+
+  if (expo.length) {
+    sendExpoPush(expo.map((s) => s.endpoint), payload)
+      .then((tickets) => {
+        // Only DeviceNotRegistered is permanent; the rest may be transient.
+        tickets.forEach((t, i) => {
+          if (t && t.status === 'error' && t.details && t.details.error === 'DeviceNotRegistered') {
+            store.dropPushSub(expo[i].endpoint);
+          }
+        });
       })
       .catch(() => {});
   }

@@ -14,8 +14,10 @@ Conventions live in CLAUDE.md.
 | ~~L20~~ | ~~9 offers vs navigator, 8 floating panels, 10 transitions~~ | ✅ shipped — plus a crash fix, see below |
 | ~~L21~~ | ~~12 registration guide~~ | ✅ shipped — the last layer that adds new strings |
 | ~~L22~~ | ~~1 Kazakh + RU/ҚАЗ/EN picker, real plurals~~ | ✅ shipped — one sweep, after the string surface stopped moving |
-| L23 | 2 Android APK via EAS | **needs an Expo account login** |
-| L24 | 4 real SMS provider, then passkeys | **needs a paid KZ SMS provider + keys**; flips prod's `OTP_ECHO` off |
+| ~~L23~~ | ~~layout fix (see #7)~~ | ✅ shipped — corrected L19's viewport sizing |
+| ~~L24~~ | ~~native push (expo-notifications beside web push)~~ | ✅ shipped — code only; activates on the first EAS build |
+| L25 | 2 native builds: Android APK + iOS TestFlight | **needs an Expo login, and $99/yr Apple Developer for iOS** |
+| L26 | 4 real SMS provider, then passkeys | **needs a paid KZ SMS provider + keys**; flips prod's `OTP_ECHO` off |
 
 ## A. Language & identity
 
@@ -35,11 +37,23 @@ Conventions live in CLAUDE.md.
 
 ## B. Native app
 
-2. **Real phone app, not web app** — Android first via the existing
-   `app/eas.json` (`eas build -p android --profile preview` → APK;
-   package `com.igorvuta.drivepro`). Needs an Expo account login. Native
-   push (expo-notifications) is a separate follow-up — web push (L10)
-   doesn't run inside the native shell.
+*(L24 — native push — is done; see below. The builds themselves are L25.)*
+
+2. **Real phone app, not web app** — `app/app.json` already carries both
+   identities (`com.igorvuta.drivepro`, iOS location usage string), so this
+   is an accounts problem, not a code one.
+   - **Android** — `eas build -p android --profile preview` → APK you can
+     send to anyone. Free; needs `eas login` only.
+   - **iOS** — every build must be signed against an Apple account. For
+     testers that means the **Apple Developer Program ($99/yr)** and
+     TestFlight (100 internal testers, builds expire after 90 days). The
+     free routes are Simulator-only builds or an Xcode sideload that dies
+     after 7 days, so neither reaches other people.
+   - Native push landed separately in L24, so a native build is no longer a
+     downgrade from the PWA.
+   - Before any **public** App Store release: privacy policy URL and in-app
+     account deletion (Apple 5.1.1(v), mandatory once you offer signup) —
+     the app has neither today.
 
 ## C. Auth & onboarding
 

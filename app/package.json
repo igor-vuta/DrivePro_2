@@ -9,17 +9,18 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "expo": "~54.0.35",
-    "expo-status-bar": "~3.0.9",
-    "expo-constants": "~18.0.13",
-    "expo-location": "~19.0.8",
-    "expo-image-picker": "~17.0.11",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "react-native-webview": "13.15.0",
+    "expo": "~54.0.35",
+    "expo-constants": "~18.0.13",
+    "expo-image-picker": "~17.0.11",
+    "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.17",
+    "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-web": "~0.21.0",
-    "react-dom": "19.1.0"
+    "react-native-webview": "13.15.0"
   },
   "private": true
 }
