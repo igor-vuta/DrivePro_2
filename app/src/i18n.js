@@ -384,6 +384,7 @@ const en = {
   'err.schedule_not_found': 'This schedule no longer exists.',
   'err.banned': 'This account is suspended.',
   'err.rate_limited': 'Too many attempts. Try again later.',
+  'err.sms_failed': 'Could not send the code. Try again in a moment.',
   'err.code_locked': 'Too many wrong codes. Request a new one.',
   'err.network': "Can't reach the server at {url}. Is it running?",
 };
@@ -757,6 +758,7 @@ const ru = {
   'err.schedule_not_found': 'Это расписание уже не существует.',
   'err.banned': 'Этот аккаунт заблокирован.',
   'err.rate_limited': 'Слишком много попыток. Попробуйте позже.',
+  'err.sms_failed': 'Не удалось отправить код. Попробуйте ещё раз.',
   'err.code_locked': 'Слишком много неверных кодов. Запросите новый.',
   'err.network': 'Не удаётся связаться с сервером {url}. Он запущен?',
 };
@@ -1123,6 +1125,7 @@ const kk = {
   'err.schedule_not_found': 'Бұл кесте енді жоқ.',
   'err.banned': 'Бұл аккаунт бұғатталған.',
   'err.rate_limited': 'Тым көп әрекет. Кейінірек қайталаңыз.',
+  'err.sms_failed': 'Кодты жіберу мүмкін болмады. Сәл кейін қайталаңыз.',
   'err.code_locked': 'Тым көп қате код. Жаңасын сұратыңыз.',
   'err.network': '{url} серверімен байланысу мүмкін емес. Ол қосулы ма?',
 };

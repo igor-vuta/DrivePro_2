@@ -9,11 +9,13 @@ sudo -u drivepro git -C /opt/drivepro/repo pull --ff-only
 ENV_FILE=/etc/drivepro.env
 if [ -f "$ENV_FILE" ]; then
   grep -q '^NODE_ENV=' "$ENV_FILE" || printf 'NODE_ENV=production\n' >> "$ENV_FILE"
-  grep -q '^OTP_ECHO=' "$ENV_FILE" || cat >> "$ENV_FILE" <<'EOF'
-# TEMPORARY - no SMS provider is wired yet (roadmap L24), so verification
-# codes are still echoed back to the client. DELETE this line the moment
-# real SMS delivery lands: with NODE_ENV=production the echo is off by
-# default, which is the only safe setting for real users.
+  # Only seeded on a VM that has never had SMS: with a Twilio provider
+  # configured the echo turns itself off, so this line should be deleted -
+  # see the Environments section of DEPLOY.md.
+  grep -q '^OTP_ECHO=' "$ENV_FILE" || grep -q '^TWILIO_ACCOUNT_SID=' "$ENV_FILE" || cat >> "$ENV_FILE" <<'EOF'
+# TEMPORARY - no SMS provider configured, so verification codes are echoed
+# back to the client and anyone can verify a number they do not own. DELETE
+# this line once TWILIO_* is set; the safe default then takes over.
 OTP_ECHO=1
 EOF
 fi

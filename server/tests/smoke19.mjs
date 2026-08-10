@@ -98,7 +98,7 @@ check('prod banner has no warning', !prod.banner.includes('!!'), prod.banner);
 const prodEcho = await boot('c', 4132, { NODE_ENV: 'production', OTP_ECHO: '1' });
 const prodEchoReg = await registerOn(prodEcho, '+15559990003');
 check('OTP_ECHO=1 re-enables the echo in production', typeof prodEchoReg.json.devCode === 'string');
-check('prod echo prints a loud warning', /!! OTP_ECHO is ON in production/.test(prodEcho.banner), prodEcho.banner);
+check('prod echo prints a loud warning', /!! OTP_ECHO is ON and this is production/.test(prodEcho.banner), prodEcho.banner);
 
 const devQuiet = await boot('d', 4133, { NODE_ENV: '', OTP_ECHO: '0' });
 const devQuietReg = await registerOn(devQuiet, '+15559990004');

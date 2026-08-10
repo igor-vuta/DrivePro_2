@@ -58,6 +58,7 @@ same process. HTTPS is what makes *Add to Home Screen* and web push work.
 | Caddy logs      | `journalctl -u caddy -f`                                   |
 | Restart         | `sudo systemctl restart drivepro`                          |
 | Admin token     | `sudo grep ADMIN_TOKEN /etc/drivepro.env` → open `/admin`  |
+| SMS / OTP mode  | `journalctl -u drivepro -n 30 \| grep -E 'SMS\|OTP'`        |
 | Backup data     | `sudo tar czf drivepro-data.tgz -C /opt/drivepro data`     |
 
 All state (SQLite DB, JWT secret, VAPID push keys) lives in
@@ -81,11 +82,40 @@ which would also let anyone verify a phone number they do not own. It is
 therefore **off by default whenever `NODE_ENV=production`**. `OTP_ECHO`
 overrides the default in both directions (`1` on, `0` off).
 
-> **Prod is currently running with `OTP_ECHO=1`** because no SMS provider
-> is wired yet (roadmap L24). The line in `/etc/drivepro.env` is marked
-> TEMPORARY: delete it the moment real SMS delivery lands, and the safe
-> default takes over. While it is set, every boot logs
-> `!! OTP_ECHO is ON in production` — check `journalctl -u drivepro`.
+Configuring a real SMS provider turns the echo off **by itself** — you do
+not need `NODE_ENV` or `OTP_ECHO` for that. An explicit `OTP_ECHO=1` still
+wins, but every boot then logs `!! OTP_ECHO is ON and …`.
+
+### Turning on real SMS (Twilio)
+
+Add the credentials to `/etc/drivepro.env` **on the VM** and restart. They
+never belong in the repo:
+
+```bash
+sudo tee -a /etc/drivepro.env >/dev/null <<'EOF'
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your-auth-token
+TWILIO_FROM=+1XXXXXXXXXX
+EOF
+# and remove the temporary echo, which is no longer needed:
+sudo sed -i '/^OTP_ECHO=1$/d' /etc/drivepro.env
+sudo systemctl restart drivepro
+journalctl -u drivepro -n 20 | grep -E 'SMS|OTP'
+```
+
+You should see `SMS: twilio AC…` and `echo to clients OFF`. Use
+`TWILIO_MESSAGING_SERVICE_SID=MG…` instead of `TWILIO_FROM` if you send
+through a Messaging Service. `SMS_TEMPLATE` overrides the message text
+(`{code}` is substituted).
+
+Two Twilio facts that bite in Kazakhstan:
+
+- A **trial** account only delivers to numbers you have verified in the
+  console. Everyone else gets error `21608`, which the app surfaces as
+  `sms_failed` rather than pretending a code was sent.
+- KZ operators generally require a **registered alphanumeric sender ID**
+  for A2P traffic. Without it, delivery to `+7 7…` numbers may be silently
+  dropped by the carrier even though Twilio accepts the message.
 
 `deploy/update.sh` backfills `NODE_ENV` and `OTP_ECHO` into an existing
 `/etc/drivepro.env` (setup-oci.sh only writes that file when it is absent,

@@ -16,8 +16,9 @@ Conventions live in CLAUDE.md.
 | ~~L22~~ | ~~1 Kazakh + RU/ҚАЗ/EN picker, real plurals~~ | ✅ shipped — one sweep, after the string surface stopped moving |
 | ~~L23~~ | ~~layout fix (see #7)~~ | ✅ shipped — corrected L19's viewport sizing |
 | ~~L24~~ | ~~native push (expo-notifications beside web push)~~ | ✅ shipped — code only; activates on the first EAS build |
-| L25 | 2 native builds: Android APK + iOS TestFlight | **needs an Expo login, and $99/yr Apple Developer for iOS** |
-| L26 | 4 real SMS provider, then passkeys | **needs a paid KZ SMS provider + keys**; flips prod's `OTP_ECHO` off |
+| ~~L25~~ | ~~4a real SMS via Twilio~~ | ✅ shipped — credentials go in `/etc/drivepro.env`, never the repo |
+| — | 2 native builds (Android APK / iOS TestFlight) | **deferred**: staying a PWA while it is a demo |
+| L26 | 4b passkeys, TOTP, recovery codes | free, no provider — the remaining auth hardening |
 
 ## A. Language & identity
 
@@ -62,11 +63,22 @@ Conventions live in CLAUDE.md.
    the L8 lockout; completing a reset also verifies the phone. Sub-flow on
    the login card. Note: existing JWTs stay valid after a reset — there is
    no token version to invalidate them, worth adding with passkeys (#4).
-4. **Real OTP + second factor** — replace the dev-echo OTP with a real SMS
-   provider (Twilio/Vonage/SMSC — pick by KZ delivery + pricing; keys via
-   env, never committed). Then passkeys (WebAuthn) as optional strong auth:
-   `navigator.credentials` on web; store credential public keys in a new
-   table.
+4. **Real OTP + second factor**
+   - ~~**Real SMS**~~ — ✅ L25. `server/src/sms.js` posts to Twilio's REST
+     API (zero dependencies: form-encoded POST + HTTP Basic). Configuring
+     `TWILIO_*` switches the provider from `mock` to `twilio` **and turns
+     the OTP echo off by itself** — the hole where anyone could verify a
+     number they do not own closes as soon as the credentials are set. A
+     provider refusal surfaces as `sms_failed` instead of pretending a code
+     was sent, and does not start the resend cooldown. `TWILIO_API_URL` is
+     a test seam; smoke26 never touches the real API.
+     ⚠️ Not yet verified against live Twilio — see DEPLOY.md for the trial
+     -account and KZ sender-ID caveats.
+   - **Passkeys / TOTP / recovery codes** — still open, and all free: no
+     provider needed. Recovery codes first (they make the other two safe to
+     rely on), then TOTP (RFC 6238, ~40 lines on node:crypto), then
+     WebAuthn. `rpId` would be `drivepro-almaty.duckdns.org`, which pins
+     credentials to that hostname.
 5. ~~**Phone input formatting**~~ — ✅ L18. `PhoneInput` + `formatPhone` in
    `app/src/ui.js`; a complete `8XXXXXXXXXX` is rewritten to `+7`. Still
    only wired into the auth screens — reuse it anywhere else a phone is

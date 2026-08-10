@@ -82,10 +82,24 @@ export function createApi({ store, secret, hub, serveStatic }) {
     sendJson(res, 200, { ok: true, name: 'DrivePro', storage: store.backendName, time: Date.now() });
   });
 
-  const issueOtp = (user) => {
+  // Awaits delivery: if the provider refuses, the caller must hear about it
+  // rather than being told a code is on its way.
+  //
+  // otpSentAt is only stamped once the provider has accepted the message,
+  // because it drives the resend cooldown - a send that never left must not
+  // make the user wait 30 seconds before they may try again. The code itself
+  // is stored first, so a message that was delivered despite an error
+  // response still verifies.
+  const issueOtp = async (user) => {
     const code = generateCode();
-    store.updateUser(user.id, { otpCode: code, otpExpires: Date.now() + OTP_TTL_MS, otpSentAt: Date.now(), otpAttempts: 0 });
-    sendCode(user.phone, code);
+    store.updateUser(user.id, { otpCode: code, otpExpires: Date.now() + OTP_TTL_MS, otpAttempts: 0 });
+    try {
+      await sendCode(user.phone, code);
+    } catch (e) {
+      console.error(`[sms] delivery failed for ${user.phone}:`, e.message);
+      throw httpError(502, 'Could not send the code. Try again in a moment.', 'sms_failed');
+    }
+    store.updateUser(user.id, { otpSentAt: Date.now() });
     return code;
   };
 
@@ -123,7 +137,8 @@ export function createApi({ store, secret, hub, serveStatic }) {
     sendJson(res, status, {
       needsVerification: true,
       phone: user.phone,
-      // Mock-OTP convenience for development; disable with OTP_ECHO=0.
+      // Only present with a mock provider in dev - see otp.js. Never set
+      // once real SMS is configured.
       ...(OTP_ECHO ? { devCode: code } : {}),
     });
   };
@@ -147,7 +162,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
     } else {
       user = store.createUser({ phone, passwordHash: hashPassword(password), name, verified: false });
     }
-    const code = issueOtp(user);
+    const code = await issueOtp(user);
     verificationResponse(res, 201, user, code);
   });
 
@@ -178,7 +193,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
     if (user.otpSentAt && Date.now() - user.otpSentAt < OTP_RESEND_COOLDOWN_MS) {
       throw httpError(429, 'Wait a moment before requesting another code.', 'resend_too_soon');
     }
-    const code = issueOtp(user);
+    const code = await issueOtp(user);
     verificationResponse(res, 200, user, code);
   });
 
@@ -194,7 +209,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
     if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
     if (!user.verified) {
       const code =
-        user.otpSentAt && Date.now() - user.otpSentAt < OTP_RESEND_COOLDOWN_MS ? user.otpCode : issueOtp(user);
+        user.otpSentAt && Date.now() - user.otpSentAt < OTP_RESEND_COOLDOWN_MS ? user.otpCode : await issueOtp(user);
       verificationResponse(res, 403, user, code);
       return;
     }
@@ -215,7 +230,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
     if (user.otpSentAt && Date.now() - user.otpSentAt < OTP_RESEND_COOLDOWN_MS) {
       throw httpError(429, 'Wait a moment before requesting another code.', 'resend_too_soon');
     }
-    const code = issueOtp(user);
+    const code = await issueOtp(user);
     verificationResponse(res, 200, user, code);
   });
 

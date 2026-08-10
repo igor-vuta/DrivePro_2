@@ -14,6 +14,7 @@ import { createStatic } from './static.js';
 import { initPush } from './push.js';
 import { verifyToken } from './auth.js';
 import { otpModeBanner } from './otp.js';
+import { smsBanner } from './sms.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -80,5 +81,6 @@ server.listen(PORT, '0.0.0.0', () => {
       ? `  Web app: serving ${WEB_DIR}`
       : `  Web app: not built yet (cd app && npx expo export -p web)`
   );
+  console.log(smsBanner());
   console.log(otpModeBanner());
 });
