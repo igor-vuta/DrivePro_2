@@ -64,6 +64,8 @@ PWA manifest, eas.json) · L12 streaks (×1.25/1.5/1.75/2 at 3/7/14/30 days)
 scheduled & recurring rides (sweeper spawns ~10 min before departure) ·
 L15 deploy kit · L16 CI/CD · L17 env separation + admin panel fix · L18
 auth hardening (password rules, phone mask, OTP password reset) · L19
-mobile viewport (100dvh + safe area), `Bleed`/`SCREEN_PAD`, KZ placeholders.
+mobile viewport (100dvh + safe area), `Bleed`/`SCREEN_PAD`, KZ placeholders ·
+L20 driver full-screen map + floating offer sheet, `Pop`/`Chip` motion,
+expo-location web teardown crash fixed (`app/src/location.js`).
 
 Remaining work and its running order live in `ROADMAP.md`.

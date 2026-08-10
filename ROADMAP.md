@@ -11,7 +11,7 @@ Conventions live in CLAUDE.md.
 | ~~L17~~ | ~~13 env separation, 14 admin Enter~~ | ✅ shipped — small, and the OTP-echo gate must exist before real SMS |
 | ~~L18~~ | ~~6 password rules, 5 phone mask, 3 forgot password~~ | ✅ shipped — one coherent auth surface |
 | ~~L19~~ | ~~7 `100dvh`/safe-area, 11 placeholders~~ (8 partly) | ✅ shipped — pure client; the most visible daily annoyances |
-| L20 | 9 offers vs navigator, 8 floating panels, 10 button transitions | biggest UX change; wants L19's layout underneath |
+| ~~L20~~ | ~~9 offers vs navigator, 8 floating panels, 10 transitions~~ | ✅ shipped — plus a crash fix, see below |
 | L21 | 12 registration guide | the last layer that adds new strings |
 | L22 | 1 Kazakh + RU/ҚАЗ/EN picker | one translation sweep, after the string surface stops moving |
 | L23 | 2 Android APK via EAS | **needs an Expo account login** |
@@ -66,20 +66,34 @@ Conventions live in CLAUDE.md.
    View there). `smoke21` asserts the shipped `index.html` keeps all of it.
    ⚠️ **Verified in desktop Chrome only** — the overlap it fixes needs a
    real mobile browser with a collapsing URL bar to confirm.
-8. **Use the full screen** — *partly done in L19*: the duplicated
-   `marginHorizontal: -16` is now a `Bleed` component built on the exported
-   `SCREEN_PAD`, and the map still reaches both edges. What remains is the
-   design change — panels floating *over* the map instead of sitting in a
-   column below it. Overlaps #9, so do them together in L20.
-9. **Driver: offers vs navigator** — while driving a route, incoming offers
-   are unusable because the navigator map owns the screen. Split into two
-   views: a full-screen navigator page and a separate offers list/page,
-   with a badge + vibration when new offers arrive (extend the L7 corridor
-   toast into a persistent list).
-10. **Transition animations on key buttons** — extend the L6 motion system
-    (`FadeIn`, spring presses in `ui.js`) to: request ride, go online,
-    accept offer, finish ride. Keep durations ≤240ms, use the existing
-    easing curves.
+8. ~~**Use the full screen**~~ — ✅ L19 + L20. L19 turned the duplicated
+   `marginHorizontal: -16` into `Bleed`/`SCREEN_PAD`; L20 made the online
+   driver's map full-screen with the status, follow and go-offline controls
+   as floating `Chip`s and the km/ETA strip floating above the sheet.
+   The rider's RideTab still stacks map-over-panels — fine there, since
+   picking a point wants the form visible.
+9. ~~**Driver: offers vs navigator**~~ — ✅ L20, as a bottom sheet rather
+   than a second page: offers live in a panel floating over the map,
+   collapsed to a header with the count, tapped (or auto-opened on arrival,
+   with a buzz) to expand. Applies to both the online map and the convoy
+   view, so a corridor rider mid-convoy no longer hides below the fold.
+10. ~~**Transition animations on key buttons**~~ — ✅ L20. New `Pop` in
+    `ui.js` (200ms, existing `Easing.out(Easing.cubic)`) on going online,
+    the convoy growing after an accept, requesting a ride, and each ride
+    status change through to finish; the sheet animates its own open/close.
+
+### Found while building L20
+
+- ~~**Crash: stopping a location watch killed the web app**~~ — ✅ fixed in
+  L20. expo-location 19.0.8's *web* `LocationEventEmitter` is the modern
+  expo-modules-core `EventEmitter`, which has no `removeSubscription()`,
+  so `subscription.remove()` threw and React unmounted everything. Drivers
+  hit it on accept, go-offline and leaving the Drive tab. `stopWatching()`
+  in `app/src/location.js` swallows exactly that error; `smoke22` pins the
+  contract. Remove the shim when expo-location fixes the web emitter.
+- **Plural forms** — `t()` only interpolates, so counts use a colon form
+  (`Offers: 2`). RU needs three plural forms and KK differs again; add real
+  plural support with the KK dictionary in L22.
 11. ~~**Professional placeholder data**~~ — ✅ L19. Car placeholders moved
     out of `ProfileScreen.js` into i18n (`Toyota` / `Camry` / `White` /
     `777 ABC 02`, 02 = Almaty), city example London → Almaty, name example

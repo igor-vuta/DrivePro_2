@@ -1,14 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Text, Vibration, View } from 'react-native';
+import {
+  Animated, Easing, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text,
+  useWindowDimensions, Vibration, View,
+} from 'react-native';
 import { notify, confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
-import { Card, Button, Sub, StatusDot, Row, Avatar, Input, Segmented, FadeIn, colors } from '../ui';
+import { Card, Button, Sub, StatusDot, Row, Avatar, Input, Segmented, FadeIn, Pop, Chip, Bleed, SCREEN_PAD, colors } from '../ui';
 import { useAuth } from '../state';
 import { api } from '../api';
 import { wsClient } from '../ws';
 import UserProfileModal from '../UserProfileModal';
 import { t, errMsg, getLang } from '../i18n';
+import { stopWatching } from '../location';
 
 // Priority: requester's points plus strong aging so nobody starves - a
 // request waiting ~4 minutes outranks most point balances.
@@ -84,6 +88,102 @@ function stars(user) {
   return user && user.rating != null ? `★ ${user.rating} (${user.ratingCount})` : t('common.noRatings');
 }
 
+const SHEET_PEEK = 54; // header height when collapsed
+
+const st = StyleSheet.create({
+  topChips: {
+    position: 'absolute',
+    top: 10,
+    left: SCREEN_PAD,
+    right: SCREEN_PAD,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  // Sits just above the collapsed sheet so the two never overlap.
+  navStrip: {
+    position: 'absolute',
+    left: SCREEN_PAD,
+    right: SCREEN_PAD,
+    bottom: SHEET_PEEK + 10,
+    backgroundColor: 'rgba(10,14,26,0.9)',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: 10,
+  },
+  sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.card,
+    borderTopWidth: 1,
+    borderColor: colors.border,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    shadowColor: '#000000',
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: -6 },
+  },
+  sheetHeader: {
+    height: SHEET_PEEK,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SCREEN_PAD,
+  },
+  grabber: {
+    width: 34,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginRight: 10,
+  },
+});
+
+// Offers panel that floats over the driver's map instead of pushing it off
+// screen. Collapsed it is a header showing the count; tapping expands it to a
+// scrollable list. Height is animated (not a native-driver property, hence
+// useNativeDriver:false) so arriving offers and the panel feel like one motion.
+function OfferSheet({ count, expanded, onToggle, children }) {
+  const { height: winH } = useWindowDimensions();
+  const maxH = Math.max(180, Math.round(winH * 0.5));
+  const open = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(open, {
+      toValue: expanded ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [expanded, maxH]);
+
+  const label = count === 0 ? t('drive.waiting') : t('drive.offerCount', { n: count });
+  return (
+    <View style={[st.sheet, { paddingBottom: Platform.OS === 'web' ? 'env(safe-area-inset-bottom, 0px)' : 0 }]}>
+      <Pressable onPress={count === 0 ? undefined : onToggle} style={st.sheetHeader}>
+        <View style={st.grabber} />
+        <Text style={{ color: count ? colors.gold : colors.sub, fontWeight: '800', fontSize: 15, flex: 1 }}>
+          {count ? '⚡ ' : ''}
+          {label}
+        </Text>
+        {count ? (
+          <Text style={{ color: colors.primary, fontWeight: '800', fontSize: 15 }}>{expanded ? '▼' : '▲'}</Text>
+        ) : null}
+      </Pressable>
+      {/* maxHeight, not height: one offer takes one card's worth of screen and
+          the map keeps the rest, while a long list still stops at half. */}
+      <Animated.View
+        style={{ maxHeight: open.interpolate({ inputRange: [0, 1], outputRange: [0, maxH] }), overflow: 'hidden' }}
+      >
+        <ScrollView contentContainerStyle={{ paddingHorizontal: SCREEN_PAD, paddingBottom: 12 }}>{children}</ScrollView>
+      </Animated.View>
+    </View>
+  );
+}
+
 function fmtDetails(d) {
   if (!d) return null;
   const parts = [];
@@ -111,6 +211,7 @@ export default function DriveTab({ openProfile }) {
   const [routeErr, setRouteErr] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [navFollow, setNavFollow] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const watchRef = useRef(null);
   const navMapRef = useRef(null);
   const pendingAcceptRef = useRef(null);
@@ -132,13 +233,27 @@ export default function DriveTab({ openProfile }) {
     convoyRef.current = convoy.length;
   }, [convoy.length]);
 
+  // Nothing left to show: collapse so the map gets the space back.
+  useEffect(() => {
+    if (!offers.length) setSheetOpen(false);
+  }, [offers.length]);
+
   // Order feed subscriptions.
   useEffect(() => {
     const offOffer = wsClient.on('ride:offer', (msg) => {
-      setOffers((prev) => (prev.some((o) => o.ride.id === msg.ride.id) ? prev : [msg, ...prev]));
-      // Mid-convoy: make the new corridor rider impossible to miss.
+      let added = false;
+      setOffers((prev) => {
+        if (prev.some((o) => o.ride.id === msg.ride.id)) return prev;
+        added = true;
+        return [msg, ...prev];
+      });
+      if (!added) return;
+      // The offers panel sits collapsed over the map, so a new rider has to
+      // announce itself: buzz, and pop the panel open the first time.
+      Vibration.vibrate(convoyRef.current > 0 ? [0, 250, 120, 250] : 200);
+      setSheetOpen(true);
+      // Mid-convoy the driver is looking at the road, not the phone.
       if (convoyRef.current > 0) {
-        Vibration.vibrate([0, 250, 120, 250]);
         notify(`⚡ ${t('drive.newAlong')}`, `${msg.ride.pickupAddress || ''} → ${msg.ride.destAddress || ''}`);
       }
     });
@@ -197,21 +312,21 @@ export default function DriveTab({ openProfile }) {
               wsClient.send({ type: 'driver:location', lat: latitude, lng: longitude });
             }
           );
-          if (cancelled) sub.remove();
+          if (cancelled) stopWatching(sub);
           else watchRef.current = sub;
         } catch (e) {
           // non-fatal
         }
       }
       if (!shouldWatch && watchRef.current) {
-        watchRef.current.remove();
+        stopWatching(watchRef.current);
         watchRef.current = null;
       }
     })();
     return () => {
       cancelled = true;
       if (watchRef.current) {
-        watchRef.current.remove();
+        stopWatching(watchRef.current);
         watchRef.current = null;
       }
     };
@@ -417,92 +532,106 @@ export default function DriveTab({ openProfile }) {
         token={token}
       />
       {convoy.length ? (
-        <ScrollView>
-          <ConvoyView rides={convoy} myCoords={coords} token={token} openProfile={setProfileUserId} />
-          {offers.length ? (
-            <Text style={{ color: colors.gold, fontWeight: '800', fontSize: 15, marginBottom: 8 }}>
-              ⚡ {t('drive.newAlong')}
-            </Text>
-          ) : null}
-          {offerCards}
-        </ScrollView>
-      ) : (
-      <>
-      <Card>
-        <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>
-            {driverActive ? t('drive.online') : t('drive.offline')}
-          </Text>
-          <StatusDot on={driverActive} labelOn={t('drive.taking')} labelOff={t('drive.notTaking')} />
-        </Row>
-        <Sub>{me.car ? `${me.car.color} ${me.car.make} ${me.car.model} · ${me.car.plate}` : ''}</Sub>
-        {driverActive ? (
-          <Button title={t('drive.goOffline')} onPress={goOffline} kind="ghost" />
-        ) : (
-          <Button title={t('drive.goOnline')} onPress={goOnline} loading={busyToggle} />
-        )}
-      </Card>
-
-      {driverActive && routePlan ? (
-        <Card style={{ padding: 10 }}>
-          <Row style={{ justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 6 }}>
-            <Text style={{ fontWeight: '800', color: colors.text, fontSize: 16 }}>🧭 {t('drive.navTitle')}</Text>
-            <Pressable onPress={() => setNavFollow((f) => !f)} hitSlop={10}>
-              <Text style={{ color: navFollow ? colors.primary : colors.sub, fontWeight: '700', fontSize: 13 }}>
-                🎯 {t('drive.navFollow')}
-              </Text>
-            </Pressable>
-          </Row>
-          <View style={{ height: 230, borderRadius: 12, overflow: 'hidden', marginBottom: 10 }}>
+        // Carrying passengers: the convoy map owns the screen and offers stay
+        // one tap away in the sheet instead of below the fold.
+        <Pop keyId={`convoy-${convoy.length}`}>
+          <View style={{ flex: 1 }}>
+            <ScrollView contentContainerStyle={{ paddingBottom: SHEET_PEEK + 12 }}>
+              <ConvoyView rides={convoy} myCoords={coords} token={token} openProfile={setProfileUserId} />
+            </ScrollView>
+            <OfferSheet count={offers.length} expanded={sheetOpen} onToggle={() => setSheetOpen((v) => !v)}>
+              {offerCards}
+            </OfferSheet>
+          </View>
+        </Pop>
+      ) : driverActive ? (
+        // Online and free: full-screen navigator, controls floating over it.
+        <Pop keyId="online">
+          <Bleed>
             <MapView
               ref={navMapRef}
-              initialCenter={coords || routePlan.dest}
+              initialCenter={coords || (routePlan ? routePlan.dest : { lat: 43.2389, lng: 76.8897 })}
               initialZoom={15}
               markers={[
                 ...(coords ? [{ id: 'me', lat: coords.lat, lng: coords.lng, kind: 'car' }] : []),
-                { id: 'dest', lat: routePlan.dest.lat, lng: routePlan.dest.lng, kind: 'dest' },
+                ...(routePlan ? [{ id: 'dest', lat: routePlan.dest.lat, lng: routePlan.dest.lng, kind: 'dest' }] : []),
               ]}
-              polyline={routePlan.points}
+              polyline={routePlan ? routePlan.points : undefined}
             />
-          </View>
-          {(() => {
-            const left = remainingKm(coords, routePlan.points);
-            const total = routeTotalKm(routePlan.points);
-            const pct = left != null && total > 0 ? Math.max(0, Math.min(100, Math.round((1 - left / total) * 100))) : 0;
-            return (
-              <View style={{ paddingHorizontal: 6 }}>
-                <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-                  <Text style={{ color: colors.text, fontWeight: '700' }}>
-                    {left != null ? t('drive.navLeft', { km: left.toFixed(1) }) : '…'}
-                  </Text>
-                  <Text style={{ color: colors.sub }}>
-                    {left != null ? t('drive.navEta', { min: Math.max(1, Math.round(left * 2.1)) }) : ''}
-                  </Text>
-                </Row>
-                <View style={{ height: 6, borderRadius: 3, backgroundColor: '#0a0e1a', overflow: 'hidden', marginBottom: 6 }}>
-                  <View
-                    style={{
-                      width: `${pct}%`,
-                      height: 6,
-                      backgroundColor: colors.primary,
-                      borderRadius: 3,
-                      shadowColor: colors.primary,
-                      shadowOpacity: 0.8,
-                      shadowRadius: 6,
-                      shadowOffset: { width: 0, height: 0 },
-                    }}
-                  />
-                </View>
-                <Sub style={{ marginBottom: 2 }}>
-                  {t('drive.to', { addr: routePlan.dest.address })} · {t('drive.routeCorridor')} {fmtKm(routePlan.radiusM)}
-                </Sub>
-              </View>
-            );
-          })()}
-        </Card>
-      ) : null}
 
-      {!driverActive ? (
+            <View style={st.topChips} pointerEvents="box-none">
+              <Chip tone="active">{`● ${t('drive.taking')}`}</Chip>
+              <Row>
+                {routePlan ? (
+                  <Chip
+                    tone={navFollow ? 'active' : 'default'}
+                    onPress={() => setNavFollow((f) => !f)}
+                    style={{ marginRight: 8 }}
+                  >
+                    {`🎯 ${t('drive.navFollow')}`}
+                  </Chip>
+                ) : null}
+                <Chip tone="danger" onPress={goOffline}>
+                  {`⏻ ${t('drive.goOffline')}`}
+                </Chip>
+              </Row>
+            </View>
+
+            {routePlan
+              ? (() => {
+                  const left = remainingKm(coords, routePlan.points);
+                  const total = routeTotalKm(routePlan.points);
+                  const pct =
+                    left != null && total > 0 ? Math.max(0, Math.min(100, Math.round((1 - left / total) * 100))) : 0;
+                  return (
+                    <View style={st.navStrip} pointerEvents="none">
+                      <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+                        <Text style={{ color: colors.text, fontWeight: '700' }}>
+                          {left != null ? t('drive.navLeft', { km: left.toFixed(1) }) : '…'}
+                        </Text>
+                        <Text style={{ color: colors.sub }}>
+                          {left != null ? t('drive.navEta', { min: Math.max(1, Math.round(left * 2.1)) }) : ''}
+                        </Text>
+                      </Row>
+                      <View style={{ height: 6, borderRadius: 3, backgroundColor: '#0a0e1a', overflow: 'hidden', marginBottom: 6 }}>
+                        <View
+                          style={{
+                            width: `${pct}%`,
+                            height: 6,
+                            backgroundColor: colors.primary,
+                            borderRadius: 3,
+                            shadowColor: colors.primary,
+                            shadowOpacity: 0.8,
+                            shadowRadius: 6,
+                            shadowOffset: { width: 0, height: 0 },
+                          }}
+                        />
+                      </View>
+                      <Sub style={{ marginBottom: 0 }} numberOfLines={1}>
+                        {t('drive.to', { addr: routePlan.dest.address })} · {t('drive.routeCorridor')}{' '}
+                        {fmtKm(routePlan.radiusM)}
+                      </Sub>
+                    </View>
+                  );
+                })()
+              : null}
+
+            <OfferSheet count={offers.length} expanded={sheetOpen} onToggle={() => setSheetOpen((v) => !v)}>
+              {offerCards}
+            </OfferSheet>
+          </Bleed>
+        </Pop>
+      ) : (
+      <ScrollView>
+      <Card>
+        <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>{t('drive.offline')}</Text>
+          <StatusDot on={false} labelOn={t('drive.taking')} labelOff={t('drive.notTaking')} />
+        </Row>
+        <Sub>{me.car ? `${me.car.color} ${me.car.make} ${me.car.model} · ${me.car.plate}` : ''}</Sub>
+        <Button title={t('drive.goOnline')} onPress={goOnline} loading={busyToggle} />
+      </Card>
+
         <Card>
           <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 4 }}>{t('drive.routeTitle')}</Text>
           <Sub>{routePlan ? t('drive.routeSet') : t('drive.routeHint')}</Sub>
@@ -575,18 +704,7 @@ export default function DriveTab({ openProfile }) {
             </View>
           )}
         </Card>
-      ) : null}
-
-      {driverActive ? (
-        offers.length === 0 ? (
-          <Card>
-            <Sub style={{ marginBottom: 0 }}>{t('drive.waiting')}</Sub>
-          </Card>
-        ) : (
-          <ScrollView>{offerCards}</ScrollView>
-        )
-      ) : null}
-      </>
+      </ScrollView>
       )}
     </View>
   );

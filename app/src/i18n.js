@@ -149,6 +149,9 @@ const en = {
   'drive.goOnline': 'Go online',
   'drive.goOffline': 'Go offline',
   'drive.waiting': 'Waiting for orders…',
+  // Colon form so one string stays grammatical for any count - RU needs three
+  // plural forms and KK differs again; real plural support waits for L22.
+  'drive.offerCount': 'Offers: {n}',
   'drive.away': '{d} away',
   'drive.trip': 'Trip {d}',
   'drive.dismiss': 'Dismiss',
@@ -495,6 +498,7 @@ const ru = {
   'drive.goOnline': 'Выйти на линию',
   'drive.goOffline': 'Уйти с линии',
   'drive.waiting': 'Ожидание заказов…',
+  'drive.offerCount': 'Заказы: {n}',
   'drive.away': '{d} до подачи',
   'drive.trip': 'Поездка {d}',
   'drive.dismiss': 'Скрыть',

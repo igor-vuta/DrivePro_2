@@ -72,6 +72,32 @@ export function FadeIn({ children, keyId, delay = 0, from = 14, style }) {
   );
 }
 
+// Confirmation motion for the moments that change what the driver or rider is
+// doing - going online, requesting, accepting, finishing. Scales up from 96%
+// while fading in, so the new state announces itself without a jump.
+export function Pop({ children, keyId, style }) {
+  const v = React.useRef(new Animated.Value(0)).current;
+  React.useEffect(() => {
+    v.setValue(0);
+    Animated.timing(v, {
+      toValue: 1,
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: NATIVE,
+    }).start();
+  }, [keyId]);
+  return (
+    <Animated.View
+      style={[
+        { flex: 1, opacity: v, transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] },
+        style,
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
 export function Title({ children, style, glow }) {
   return <Text style={[s.title, glow && s.titleGlow, style]}>{children}</Text>;
 }
@@ -176,6 +202,27 @@ export function Segmented({ options, value, onChange }) {
         );
       })}
     </View>
+  );
+}
+
+// Compact translucent pill for controls that float over a full-screen map.
+export function Chip({ children, onPress, tone = 'default', style }) {
+  const tint =
+    tone === 'active' ? colors.primary : tone === 'danger' ? colors.danger : tone === 'gold' ? colors.gold : colors.text;
+  const body = (
+    <View style={[s.chip, tone === 'active' && { borderColor: colors.primary }, style]}>
+      {typeof children === 'string' ? (
+        <Text style={{ color: tint, fontWeight: '700', fontSize: 13 }}>{children}</Text>
+      ) : (
+        children
+      )}
+    </View>
+  );
+  if (!onPress) return body;
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)} hitSlop={6}>
+      {body}
+    </Pressable>
   );
 }
 
@@ -330,6 +377,16 @@ const s = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 0 },
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    backgroundColor: 'rgba(10,14,26,0.86)',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   segText: { fontSize: 15, color: colors.sub, fontWeight: '600' },
   segTextActive: { color: colors.primaryText, fontWeight: '800' },

@@ -3,7 +3,7 @@ import { ActivityIndicator, Keyboard, Linking, Pressable, ScrollView, Share, Tex
 import { notify, confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
-import { Card, Button, Input, Sub, ErrorText, Row, Avatar, FadeIn, Bleed, SCREEN_PAD, colors } from '../ui';
+import { Card, Button, Input, Sub, ErrorText, Row, Avatar, FadeIn, Pop, Bleed, SCREEN_PAD, colors } from '../ui';
 import { useAuth } from '../state';
 import { api } from '../api';
 import { wsClient } from '../ws';
@@ -310,22 +310,30 @@ export default function RideTab() {
     );
   }
 
+  // Each ride status is its own Pop, so accepting, arriving, starting and
+  // finishing all announce themselves rather than swapping in place.
   if (matched) {
-    return <DriverOnTheWay ride={myRide} driver={counterpart} driverLoc={driverLoc} onCancel={cancelRide} />;
+    return (
+      <Pop keyId={myRide.status}>
+        <DriverOnTheWay ride={myRide} driver={counterpart} driverLoc={driverLoc} onCancel={cancelRide} />
+      </Pop>
+    );
   }
 
   if (searching) {
     return (
-      <Card style={{ alignItems: 'center', paddingVertical: 28 }}>
-        <ActivityIndicator size="large" color={colors.text} style={{ marginBottom: 14 }} />
-        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 4 }}>
-          {t('ride.looking')}
-        </Text>
-        <Sub style={{ textAlign: 'center' }}>
-          {myRide.pickupAddress} → {myRide.destAddress}
-        </Sub>
-        <Button kind="ghost" title={t('ride.cancelRide')} onPress={cancelRide} style={{ alignSelf: 'stretch' }} />
-      </Card>
+      <Pop keyId="searching" style={{ flex: 0 }}>
+        <Card style={{ alignItems: 'center', paddingVertical: 28 }}>
+          <ActivityIndicator size="large" color={colors.text} style={{ marginBottom: 14 }} />
+          <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 4 }}>
+            {t('ride.looking')}
+          </Text>
+          <Sub style={{ textAlign: 'center' }}>
+            {myRide.pickupAddress} → {myRide.destAddress}
+          </Sub>
+          <Button kind="ghost" title={t('ride.cancelRide')} onPress={cancelRide} style={{ alignSelf: 'stretch' }} />
+        </Card>
+      </Pop>
     );
   }
 
