@@ -92,6 +92,18 @@ Conventions live in CLAUDE.md.
     `777 ABC 02`, 02 = Almaty), city example London → Almaty, name example
     Igor → Aigerim. KK versions land with the rest in L22.
 
+### Found while building L21
+
+- ~~**Flaky suite: smoke18 pause/resume**~~ — ✅ fixed. The second schedule
+  was created already due, so on a slow runner the 250ms sweeper tick beat
+  the pause request: the ride spawned, `paused schedule never fires` failed,
+  and the once-per-day guard then blocked the resume — whose bare `await`
+  threw `ws timeout` and killed the process mid-suite. It now creates that
+  schedule while the rider is still on the first ride (the sweeper skips busy
+  riders *without* marking them spawned), so the pause cannot lose the race.
+  `DRIVEPRO_SCHED_SWEEP_MS=5 node server/tests/smoke18.mjs` reproduces the
+  old failure deterministically and passes on the fix.
+
 ### Found while building L20
 
 - ~~**Crash: stopping a location watch killed the web app**~~ — ✅ fixed in

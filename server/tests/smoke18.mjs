@@ -28,7 +28,15 @@ const check = (label, cond, extra = '') => {
 
 fs.rmSync(DATA_DIR, { recursive: true, force: true });
 const server = spawn(process.execPath, [path.join(__dirname, '..', 'src', 'index.js')], {
-  env: { ...process.env, PORT: String(PORT), DATA_DIR, DRIVEPRO_SCHED_SWEEP_MS: '250' },
+  // Overridable so the sweeper can be made pathologically fast on purpose:
+  // DRIVEPRO_SCHED_SWEEP_MS=5 reproduces the tick-beats-the-request timing
+  // that a loaded CI runner produces, without needing a loaded CI runner.
+  env: {
+    ...process.env,
+    PORT: String(PORT),
+    DATA_DIR,
+    DRIVEPRO_SCHED_SWEEP_MS: process.env.DRIVEPRO_SCHED_SWEEP_MS || '250',
+  },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 await new Promise((resolve, reject) => {
@@ -164,31 +172,41 @@ try {
 } catch {}
 check('no double spawn while active', dup === false);
 
-// cancel it; same day -> still no respawn (once per day)
-R.send({ type: 'ride:cancel', rideId: createdMsg.ride.id });
-await R.nextOf('ride:cancelled');
-let respawn = false;
-try {
-  await R.nextOf('ride:created', 1300);
-  respawn = true;
-} catch {}
-check('spawns at most once per day', respawn === false);
-
 // ---- pause / resume ----
+// Create the second schedule while the rider is STILL on the first ride: the
+// sweeper skips a busy rider without marking the schedule spawned, so this
+// cannot fire before the pause lands. Creating it after the cancel below
+// raced the sweeper tick instead, which is what made this suite flaky on
+// slower CI runners - the spawn beat the pause, and the once-per-day guard
+// then blocked the resume too.
 const s2 = (await api('POST', '/api/schedules', { pickup: A, dest: B, time: soon(), days: ALL_DAYS }, rider.token)).json.schedule;
 const paused = await api('PUT', `/api/schedules/${s2.id}`, { active: false }, rider.token);
 check('pause works', paused.status === 200 && paused.json.schedule.active === false);
-let pausedSpawn = false;
-try {
-  await R.nextOf('ride:created', 1300);
-  pausedSpawn = true;
-} catch {}
-check('paused schedule never fires', pausedSpawn === false);
-await api('PUT', `/api/schedules/${s2.id}`, { active: true }, rider.token);
-const resumed = await R.nextOf('ride:created', 8000);
-check('resumed schedule fires', resumed.ride && resumed.scheduled === true);
-R.send({ type: 'ride:cancel', rideId: resumed.ride.id });
+
+// Free the rider. Now nothing may spawn: the first schedule already fired
+// today, and the second one is paused despite being due.
+R.send({ type: 'ride:cancel', rideId: createdMsg.ride.id });
 await R.nextOf('ride:cancelled');
+let spawnedWhileIdle = false;
+try {
+  await R.nextOf('ride:created', 1500);
+  spawnedWhileIdle = true;
+} catch {}
+check('spawns at most once per day', spawnedWhileIdle === false);
+check('paused schedule never fires', spawnedWhileIdle === false);
+
+await api('PUT', `/api/schedules/${s2.id}`, { active: true }, rider.token);
+let resumed = null;
+try {
+  resumed = await R.nextOf('ride:created', 8000);
+} catch {}
+check('resumed schedule fires', !!resumed && resumed.ride && resumed.scheduled === true, 'no ride:created after resume');
+// Leave the rider idle for the one-off below even if the check above failed,
+// rather than throwing on `resumed.ride` and losing the rest of the suite.
+if (resumed && resumed.ride) {
+  R.send({ type: 'ride:cancel', rideId: resumed.ride.id });
+  await R.nextOf('ride:cancelled');
+}
 
 // ---- one-off: fires once, then deactivates ----
 const s3 = (await api('POST', '/api/schedules', { pickup: A, dest: B, time: soon(), date: dayOf(Date.now()) }, rider.token)).json.schedule;
