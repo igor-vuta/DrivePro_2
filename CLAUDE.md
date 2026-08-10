@@ -67,6 +67,8 @@ auth hardening (password rules, phone mask, OTP password reset) · L19
 mobile viewport (100dvh + safe area), `Bleed`/`SCREEN_PAD`, KZ placeholders ·
 L20 driver full-screen map + floating offer sheet, `Pop`/`Chip` motion,
 expo-location web teardown crash fixed (`app/src/location.js`) · L21
-first-run guide (4 steps, once, before the permission ask).
+first-run guide (4 steps, once, before the permission ask) · L22 Kazakh
+(`kk` dictionary, Авто/РУ/ҚАЗ/EN picker, kk→ru→en fallback) + real plural
+forms (`app/src/plurals.js`, `key.one/.few/.many` selected by `params.n`).
 
 Remaining work and its running order live in `ROADMAP.md`.

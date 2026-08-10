@@ -127,7 +127,8 @@ export default function ProfileScreen({ goBack, openHistory }) {
           <View style={{ flex: 1 }}>
             <Title style={{ marginBottom: 0 }}>{me.name}</Title>
             <Sub style={{ marginBottom: 0 }}>
-              {ratingText} · {me.ridesCount} {t('profile.rides')} · ⚡ {me.points || 0} {t('profile.points')}
+              {ratingText} · {me.ridesCount} {t('profile.rides', { n: me.ridesCount })} · ⚡ {me.points || 0}{' '}
+            {t('profile.points', { n: me.points || 0 })}
             </Sub>
             <Sub style={{ marginBottom: 0 }}>
               {me.phone}
@@ -219,8 +220,9 @@ export default function ProfileScreen({ goBack, openHistory }) {
             onChange={(v) => setLanguage(v)}
             options={[
               { value: 'auto', label: t('profile.langAuto') },
-              { value: 'en', label: 'EN' },
               { value: 'ru', label: 'РУ' },
+              { value: 'kk', label: 'ҚАЗ' },
+              { value: 'en', label: 'EN' },
             ]}
           />
         </Card>

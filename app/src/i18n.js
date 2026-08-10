@@ -1,8 +1,14 @@
 import { Platform, NativeModules } from 'react-native';
+import { pluralCategory } from './plurals';
 
-// Lightweight i18n: EN is the base, RU is a full translation. The language
-// preference ('auto' | 'en' | 'ru') is chosen in Profile; 'auto' follows the
-// device language.
+// Lightweight i18n: EN is the base; RU and KK are full translations. The
+// preference ('auto' | 'ru' | 'kk' | 'en') is chosen in Profile; 'auto'
+// follows the device language and lands on RU for anything unrecognised.
+//
+// Keys that change with a count are stored as `key.one` / `.few` / `.many`
+// and selected by t() from params.n - see ./plurals.js. Russian needs
+// all three; Kazakh keeps the noun singular after a numeral, so `.one` alone
+// covers it; English uses one and many.
 
 const en = {
   // common
@@ -89,7 +95,8 @@ const en = {
   'crew.join': 'Join',
   'crew.codeLabel': 'Invite code',
   'crew.shareHint': 'Share it — friends join instantly.',
-  'crew.total': '{n} crew points',
+  'crew.total.one': '{n} crew point',
+  'crew.total.many': '{n} crew points',
   'crew.week': 'this week: {n}',
   'crew.leave': 'Leave crew',
   'crew.leaveQ': 'Leave the crew?',
@@ -162,9 +169,8 @@ const en = {
   'drive.goOnline': 'Go online',
   'drive.goOffline': 'Go offline',
   'drive.waiting': 'Waiting for orders…',
-  // Colon form so one string stays grammatical for any count - RU needs three
-  // plural forms and KK differs again; real plural support waits for L22.
-  'drive.offerCount': 'Offers: {n}',
+  'drive.offerCount.one': '{n} offer',
+  'drive.offerCount.many': '{n} offers',
   'drive.away': '{d} away',
   'drive.trip': 'Trip {d}',
   'drive.dismiss': 'Dismiss',
@@ -187,8 +193,10 @@ const en = {
   'drive.riderNotified': 'The rider will be notified.',
   'drive.activeAsRider': 'You have an active ride as a rider — see the Ride tab.',
   'drive.to': 'To: {addr}',
-  'drive.pointsEarned': '+{n} points for the trip',
-  'drive.pointsEarnedStreak': '+{n} points for the trip (×{mult} — streak day {days})',
+  'drive.pointsEarned.one': '+{n} point for the trip',
+  'drive.pointsEarned.many': '+{n} points for the trip',
+  'drive.pointsEarnedStreak.one': '+{n} point for the trip (×{mult} — streak day {days})',
+  'drive.pointsEarnedStreak.many': '+{n} points for the trip (×{mult} — streak day {days})',
   'drive.waitingFor': 'waiting {m} min',
   'drive.routeTitle': 'My route',
   'drive.routeHint': 'Set where you are heading - you will only see requests along your path.',
@@ -227,14 +235,20 @@ const en = {
   'weekly.title': 'Weekly recap',
   'weekly.subtitle': 'The movement, last 7 days',
   'weekly.you': 'You',
-  'weekly.youDrove': '{n} rides as driver',
-  'weekly.youRode': '{n} rides as rider',
-  'weekly.youEarned': '+{n} points',
-  'weekly.youStreak': 'Streak: {n} days',
+  'weekly.youDrove.one': '{n} ride as driver',
+  'weekly.youDrove.many': '{n} rides as driver',
+  'weekly.youRode.one': '{n} ride as rider',
+  'weekly.youRode.many': '{n} rides as rider',
+  'weekly.youEarned.one': '+{n} point',
+  'weekly.youEarned.many': '+{n} points',
+  'weekly.youStreak.one': 'Streak: {n} day',
+  'weekly.youStreak.many': 'Streak: {n} days',
   'weekly.city': 'The city',
-  'weekly.cityRides': '{n} shared rides',
+  'weekly.cityRides.one': '{n} shared ride',
+  'weekly.cityRides.many': '{n} shared rides',
   'weekly.cityKm': '{n} km travelled together',
-  'weekly.cityDrivers': '{n} drivers on the road',
+  'weekly.cityDrivers.one': '{n} driver on the road',
+  'weekly.cityDrivers.many': '{n} drivers on the road',
   'weekly.top': 'Drivers of the week',
   'weekly.crews': 'Crews of the week',
   'weekly.crewRank': '{name} — #{rank} this week',
@@ -282,9 +296,10 @@ const en = {
   'profile.language': 'Language',
   'profile.langAuto': 'Auto',
   'profile.logout': 'Log out',
-  'profile.rides': 'rides',
-  'profile.points': 'points',
-
+  'profile.rides.one': 'ride',
+  'profile.rides.many': 'rides',
+  'profile.points.one': 'point',
+  'profile.points.many': 'points',
   // history
   'history.title': 'Ride history',
   'history.refresh': 'Refresh',
@@ -323,8 +338,8 @@ const en = {
   'modal.say': 'What people say',
   'modal.noRatings': 'No ratings yet',
   'modal.meta': '{rides} rides · joined {date}',
-  'modal.ratings': '★ {avg} ({n} ratings)',
-
+  'modal.ratings.one': '★ {avg} ({n} rating)',
+  'modal.ratings.many': '★ {avg} ({n} ratings)',
   // state notifications
   'note.rideCancelled': 'Ride cancelled',
   'note.byRider': 'The rider cancelled the ride.',
@@ -452,7 +467,9 @@ const ru = {
   'crew.join': 'Войти',
   'crew.codeLabel': 'Код приглашения',
   'crew.shareHint': 'Отправьте код друзьям — вход мгновенный.',
-  'crew.total': '{n} очков экипажа',
+  'crew.total.one': '{n} очко экипажа',
+  'crew.total.few': '{n} очка экипажа',
+  'crew.total.many': '{n} очков экипажа',
   'crew.week': 'за неделю: {n}',
   'crew.leave': 'Покинуть экипаж',
   'crew.leaveQ': 'Покинуть экипаж?',
@@ -523,7 +540,9 @@ const ru = {
   'drive.goOnline': 'Выйти на линию',
   'drive.goOffline': 'Уйти с линии',
   'drive.waiting': 'Ожидание заказов…',
-  'drive.offerCount': 'Заказы: {n}',
+  'drive.offerCount.one': '{n} заказ',
+  'drive.offerCount.few': '{n} заказа',
+  'drive.offerCount.many': '{n} заказов',
   'drive.away': '{d} до подачи',
   'drive.trip': 'Поездка {d}',
   'drive.dismiss': 'Скрыть',
@@ -546,8 +565,12 @@ const ru = {
   'drive.riderNotified': 'Пассажир получит уведомление.',
   'drive.activeAsRider': 'У вас активная поездка как у пассажира — откройте вкладку «Поездка».',
   'drive.to': 'Куда: {addr}',
-  'drive.pointsEarned': '+{n} баллов за поездку',
-  'drive.pointsEarnedStreak': '+{n} баллов за поездку (×{mult} — {days}-й день серии)',
+  'drive.pointsEarned.one': '+{n} балл за поездку',
+  'drive.pointsEarned.few': '+{n} балла за поездку',
+  'drive.pointsEarned.many': '+{n} баллов за поездку',
+  'drive.pointsEarnedStreak.one': '+{n} балл за поездку (×{mult} — {days}-й день серии)',
+  'drive.pointsEarnedStreak.few': '+{n} балла за поездку (×{mult} — {days}-й день серии)',
+  'drive.pointsEarnedStreak.many': '+{n} баллов за поездку (×{mult} — {days}-й день серии)',
   'drive.waitingFor': 'ждёт {m} мин',
   'drive.routeTitle': 'Мой маршрут',
   'drive.routeHint': 'Укажите, куда едете — вы увидите только заказы вдоль вашего пути.',
@@ -606,9 +629,12 @@ const ru = {
   'profile.language': 'Язык',
   'profile.langAuto': 'Авто',
   'profile.logout': 'Выйти',
-  'profile.rides': 'поездок',
-  'profile.points': 'баллов',
-
+  'profile.rides.one': 'поездка',
+  'profile.rides.few': 'поездки',
+  'profile.rides.many': 'поездок',
+  'profile.points.one': 'балл',
+  'profile.points.few': 'балла',
+  'profile.points.many': 'баллов',
   'history.title': 'История поездок',
   'history.refresh': 'Обновить',
   'history.empty': 'Поездок пока нет. Закажите на вкладке «Поездка».',
@@ -634,14 +660,26 @@ const ru = {
   'weekly.title': 'Итоги недели',
   'weekly.subtitle': 'Движение за последние 7 дней',
   'weekly.you': 'Вы',
-  'weekly.youDrove': '{n} поездок за рулём',
-  'weekly.youRode': '{n} поездок пассажиром',
-  'weekly.youEarned': '+{n} баллов',
-  'weekly.youStreak': 'Серия: {n} дней',
+  'weekly.youDrove.one': '{n} поездка за рулём',
+  'weekly.youDrove.few': '{n} поездки за рулём',
+  'weekly.youDrove.many': '{n} поездок за рулём',
+  'weekly.youRode.one': '{n} поездка пассажиром',
+  'weekly.youRode.few': '{n} поездки пассажиром',
+  'weekly.youRode.many': '{n} поездок пассажиром',
+  'weekly.youEarned.one': '+{n} балл',
+  'weekly.youEarned.few': '+{n} балла',
+  'weekly.youEarned.many': '+{n} баллов',
+  'weekly.youStreak.one': 'Серия: {n} день',
+  'weekly.youStreak.few': 'Серия: {n} дня',
+  'weekly.youStreak.many': 'Серия: {n} дней',
   'weekly.city': 'Город',
-  'weekly.cityRides': '{n} совместных поездок',
+  'weekly.cityRides.one': '{n} совместная поездка',
+  'weekly.cityRides.few': '{n} совместные поездки',
+  'weekly.cityRides.many': '{n} совместных поездок',
   'weekly.cityKm': '{n} км вместе',
-  'weekly.cityDrivers': '{n} водителей в строю',
+  'weekly.cityDrivers.one': '{n} водитель в строю',
+  'weekly.cityDrivers.few': '{n} водителя в строю',
+  'weekly.cityDrivers.many': '{n} водителей в строю',
   'weekly.top': 'Водители недели',
   'weekly.crews': 'Экипажи недели',
   'weekly.crewRank': '{name} — #{rank} за неделю',
@@ -674,8 +712,9 @@ const ru = {
   'modal.say': 'Что говорят люди',
   'modal.noRatings': 'Пока нет оценок',
   'modal.meta': '{rides} поездок · с {date}',
-  'modal.ratings': '★ {avg} ({n} оценок)',
-
+  'modal.ratings.one': '★ {avg} ({n} оценка)',
+  'modal.ratings.few': '★ {avg} ({n} оценки)',
+  'modal.ratings.many': '★ {avg} ({n} оценок)',
   'note.rideCancelled': 'Поездка отменена',
   'note.byRider': 'Пассажир отменил поездку.',
   'note.byDriver': 'Водитель отменил поездку.',
@@ -722,7 +761,374 @@ const ru = {
   'err.network': 'Не удаётся связаться с сервером {url}. Он запущен?',
 };
 
-const dicts = { en, ru };
+const kk = {
+  // common
+  'common.back': '‹ Артқа',
+  'common.close': 'Жабу',
+  'common.cancel': 'Болдырмау',
+  'common.save': 'Сақтау',
+  'common.find': 'Табу',
+  'common.remove': 'Алып тастау',
+  'common.set': 'Белгілеу',
+  'common.change': 'Өзгерту',
+  'common.offlineSend': 'Сервермен байланыс жоқ.',
+  'common.freeRide': 'Тегін сапар',
+  'common.noRatings': 'әзірге баға жоқ',
+
+  // auth
+  'auth.tagline': 'Адамдар арасындағы сапарлар. Тарифсіз, артық әурешіліксіз.',
+  'auth.login': 'Кіру',
+  'auth.signup': 'Тіркелу',
+  'auth.yourName': 'Атыңыз',
+  'auth.namePh': 'мысалы, Айгерім',
+  'auth.phone': 'Телефон нөмірі',
+  'auth.password': 'Құпия сөз',
+  'auth.passwordPh': 'Кемінде 8 таңба, әріп пен сан',
+  'auth.createAccount': 'Аккаунт құру',
+  'auth.vName': 'Атыңызды енгізіңіз (кемінде 2 әріп).',
+  'auth.vPhone': 'Дұрыс телефон нөмірін енгізіңіз (7–15 сан).',
+
+  // password reset
+  'reset.forgot': 'Құпия сөзді ұмыттыңыз ба?',
+  'reset.title': 'Құпия сөзді қалпына келтіру',
+  'reset.subPhone': 'Нөміріңізге код жібереміз.',
+  'reset.subCode': '{phone} нөміріне жіберілген кодты енгізіп, жаңа құпия сөз ойлап табыңыз.',
+  'reset.code': 'SMS-тегі код',
+  'reset.newPassword': 'Жаңа құпия сөз',
+  'reset.sendCode': 'Код жіберу',
+  'reset.confirm': 'Құпия сөзді сақтау',
+  'reset.back': 'Кіру бетіне оралу',
+
+  // first-run guide
+  'guide.what.title': 'Бұл такси емес',
+  'guide.what.text': 'Көршілер өздері бара жатқан жолда жолсерік алады. Тарифсіз.',
+  'guide.rider.title': 'Сапар керек',
+  'guide.rider.text': 'Картада екі нүктені белгілеңіз — сол бағытта бара жатқан адамды табамыз.',
+  'guide.driver.title': 'Бос орын бар',
+  'guide.driver.text': 'Бағытыңызды көрсетіп, жол бойындағы жолсеріктерді алыңыз.',
+  'guide.points.title': 'Ұпайлар мен серия',
+  'guide.points.text': 'Әр бірлескен сапар екі жаққа да ұпай әкеледі. Күн сайын жүрсеңіз, от оларды еселейді — ×2-ге дейін.',
+  'guide.next': 'Әрі қарай',
+  'guide.start': 'Бастау',
+  'guide.skip': 'Өткізіп жіберу',
+
+  // verify
+  'verify.title': 'Телефоныңызды растаңыз',
+  'verify.sentTo': '{phone} нөміріне 4 таңбалы код жібердік',
+  'verify.codePh': '4 саннан тұратын код',
+  'verify.button': 'Растау',
+  'verify.resend': 'Кодты қайта жіберу',
+  'verify.resendIn': '{s} с кейін қайта',
+  'verify.devCode': 'Код (dev): {code}',
+  'verify.vCode': '4 саннан тұратын кодты енгізіңіз.',
+  'verify.changePhone': 'Басқа телефон нөмірі',
+
+  // home
+  'home.connected': 'Желіде ({host})',
+  'home.connecting': '{host} серверіне қосылу…',
+  'home.profile': 'Профиль',
+  'home.ride': 'Сапар',
+  'home.drive': 'Рөлде',
+  'home.cityToday': 'Бүгін қалада',
+  'home.cityLine': '{rides} сапар · {km} км · {drivers} рөлде',
+
+  // streaks
+  'streak.title': '🔥 Серия',
+  'streak.kept': 'Қатарынан {days}-күн — от сөнген жоқ!',
+
+  // crews
+  'crew.title': 'Экипаж',
+  'crew.none': 'Экипаж жинаңыз — бір шақыру коды, ортақ есеп, жексенбілік даңқ.',
+  'crew.namePh': 'Экипаж атауы',
+  'crew.create': 'Құру',
+  'crew.or': 'немесе код арқылы қосылыңыз',
+  'crew.codePh': 'ШАҚЫРУ КОДЫ',
+  'crew.join': 'Қосылу',
+  'crew.codeLabel': 'Шақыру коды',
+  'crew.shareHint': 'Кодты достарыңызға жіберіңіз — қосылу бірден.',
+  'crew.total.one': '{n} экипаж ұпайы',
+  'crew.week': 'апта ішінде: {n}',
+  'crew.leave': 'Экипаждан шығу',
+  'crew.leaveQ': 'Экипаждан шығасыз ба?',
+  'crew.leaveText': 'Ұпайлар экипажда қалады. Код арқылы қайта қосыла аласыз.',
+
+  // scheduled rides
+  'sched.title': 'Кесте бойынша сапарлар',
+  'sched.plan': 'Жоспарлау',
+  'sched.timeLabel': 'Шығу уақыты (СС:ММ)',
+  'sched.daysLabel': 'Қайталау күндері',
+  'sched.dow': 'ДС,СС,СР,БС,ЖМ,СБ,ЖК',
+  'sched.daily': 'күн сайын',
+  'sched.once': 'бір рет · {date}',
+  'sched.oneOffHint': 'Күндер таңдалмады — сапар ертең бір рет жасалады.',
+  'sched.create': 'Кестені сақтау',
+  'sched.created': '⏰ Сапар жоспарланды',
+  'sched.createdText': 'Өтінім шығуға шамамен 10 минут қалғанда жасалады.',
+  'sched.deleteQ': 'Бұл кестені жоясыз ба?',
+
+  // ride tab
+  'ride.setPickup': 'Шығу нүктесі',
+  'ride.setDest': 'Қайда барамыз',
+  'ride.confirm': 'Сапарды растаңыз',
+  'ride.searchPh': 'Мекенжай іздеу…',
+  'ride.pickupAddr': 'Шығу мекенжайы (өзгертуге болады)',
+  'ride.destAddr': 'Бару мекенжайы (өзгертуге болады)',
+  'ride.addrPh': 'Нүктені таңдау үшін картаны жылжытыңыз',
+  'ride.nextDest': 'Әрі қарай: қайда барамыз',
+  'ride.nextConfirm': 'Әрі қарай: растау',
+  'ride.request': 'Сапарға тапсырыс беру',
+  'ride.instructions': 'Жүргізушіге түсініктеме (міндетті емес)',
+  'ride.instructionsPh': 'мысалы: көк күрте, дәріхана жанындамын',
+  'ride.calcRoute': 'Бағыт салынуда…',
+  'ride.straightLine': '(тік сызық бойынша)',
+  'ride.nothingFound': 'Ештеңе табылмады. Басқаша іздеп көріңіз.',
+  'ride.notConnected': 'Сервермен байланыс жоқ. Оның қосулы екенін тексеріңіз.',
+  'ride.looking': 'Жүргізуші іздеудеміз…',
+  'ride.cancelRide': 'Сапарды болдырмау',
+  'ride.cancelQ': 'Сапарды болдырмайсыз ба?',
+  'ride.driverNotified': 'Жүргізушіге хабарлама барады.',
+  'ride.keepRide': 'Қалдыру',
+  'ride.onTheWay': 'Жүргізуші сізге келе жатыр',
+  'ride.arrivedTitle': 'Жүргізуші келді',
+  'ride.onTrip': 'Жолда',
+  'ride.headingTo': 'Бағыт: {dest}',
+  'ride.waitingAtPickup': 'Жүргізуші шығу нүктесінде күтіп тұр.',
+  'ride.pickupLabel': 'Шығу: {addr}',
+  'ride.callDriver': 'Жүргізушіге қоңырау шалу',
+  'ride.share': 'Сапармен бөлісу',
+  'ride.shareCopied': 'Сілтеме көшірілді — жақындарыңызға жіберіңіз.',
+  'ride.activeAsDriver': 'Сізде жүргізуші ретінде белсенді сапар бар — «Рөлде» бетін ашыңыз.',
+  'ride.homeChip': '🏠 Үй',
+  'ride.workChip': '💼 Жұмыс',
+  'ride.pickupDetails': 'Шығу нүктесінің мәліметі (кіреберіс, пәтер…)',
+  'ride.destDetails': 'Бару нүктесінің мәліметі (кіреберіс, пәтер…)',
+  'ride.entrance': 'Кіреберіс',
+  'ride.apartment': 'Пәтер',
+  'ride.floor': 'Қабат',
+  'ride.intercom': 'Домофон',
+  'ride.detailsNote': 'Мекенжайға ескертпе',
+
+  // drive tab
+  'drive.become': 'Жүргізуші болыңыз',
+  'drive.becomeText': 'Көлік деректерін бір рет толтырыңыз — қалаған кезде желіге шығыңыз.',
+  'drive.addCar': 'Көлік қосу',
+  'drive.online': 'Сіз желідесіз',
+  'drive.offline': 'Сіз желіде емессіз',
+  'drive.taking': 'Тапсырыс қабылдауда',
+  'drive.notTaking': 'Тапсырыс қабылданбайды',
+  'drive.goOnline': 'Желіге шығу',
+  'drive.goOffline': 'Желіден шығу',
+  'drive.waiting': 'Тапсырыс күтілуде…',
+  'drive.offerCount.one': '{n} тапсырыс',
+  'drive.away': 'шығуға дейін {d}',
+  'drive.trip': 'Сапар {d}',
+  'drive.dismiss': 'Жасыру',
+  'drive.accept': 'Қабылдау',
+  'drive.tooLate': 'Үлгермедіңіз',
+  'drive.tooLateText': 'Бұл тапсырысты басқа жүргізуші алды.',
+  'drive.cannotAccept': 'Қабылдау мүмкін болмады',
+  'drive.tryAgain': 'Қайталап көріңіз.',
+  'drive.locationNeeded': 'Геолокация қажет',
+  'drive.locationNeededText': 'Жолаушылар сізді көруі үшін геолокацияға рұқсат беріңіз.',
+  'drive.offlineTryAgain': 'Сервермен байланыс әлі жоқ. Сәлден соң қайталаңыз.',
+  'drive.error': 'Қате',
+  'drive.headPickup': 'Шығу нүктесіне барамыз',
+  'drive.waitingRider': 'Жолаушыны күту',
+  'drive.onTrip': 'Жолда',
+  'drive.arrived': 'Мен келдім',
+  'drive.start': 'Сапарды бастау',
+  'drive.finish': 'Сапарды аяқтау',
+  'drive.callRider': 'Жолаушыға қоңырау шалу',
+  'drive.riderNotified': 'Жолаушыға хабарлама барады.',
+  'drive.activeAsRider': 'Сізде жолаушы ретінде белсенді сапар бар — «Сапар» бетін ашыңыз.',
+  'drive.to': 'Қайда: {addr}',
+  'drive.pointsEarned.one': 'Сапар үшін +{n} ұпай',
+  'drive.pointsEarnedStreak.one': 'Сапар үшін +{n} ұпай (×{mult} — серияның {days}-күні)',
+  'drive.waitingFor': '{m} мин күтуде',
+  'drive.routeTitle': 'Менің бағытым',
+  'drive.routeHint': 'Қайда бара жатқаныңызды көрсетіңіз — тек жол бойындағы тапсырыстарды көресіз.',
+  'drive.routeSearchPh': 'Қайда бара жатырсыз?',
+  'drive.routeCorridor': 'Дәліз',
+  'drive.routeClear': 'Бағытты тазалау',
+  'drive.routeSet': 'Бағыт белгіленді: тек сәйкес тапсырыстар көрінеді.',
+  'drive.routeAnywhereNote': 'Бағытсыз — маңайдағы барлық тапсырысты көресіз.',
+  'drive.routeOnline': 'Бағыт бойынша · дәліз {r}',
+  'drive.routePickMap': 'Картадан таңдау',
+  'drive.pickDestTitle': 'Қайда бара жатырсыз?',
+  'drive.confirmDest': 'Нүктені белгілеу',
+  'drive.navTitle': 'Жолда',
+  'drive.navLeft': '{km} км қалды',
+  'drive.navEta': '≈ {min} мин',
+  'drive.navFollow': 'Ілесу',
+  'drive.newAlong': 'Жол бойында жолсерік!',
+  'drive.convoyTitle': 'Конвой · {n}',
+
+  // profile
+  'profile.history': 'Сапарлар тарихы ›',
+  'profile.say': 'Сіз туралы не дейді',
+  'profile.personal': 'Жеке деректер',
+  'profile.name': 'Аты',
+  'profile.about': 'Өзім туралы',
+  'profile.aboutPh': 'Өзіңіз туралы бірер сөз (міндетті емес)',
+  'profile.city': 'Қала',
+  'profile.cityPh': 'мысалы, Алматы (міндетті емес)',
+  'profile.email': 'Эл. пошта',
+  'profile.emailPh': 'you@example.com (міндетті емес)',
+  'profile.saveProfile': 'Профильді сақтау',
+  'profile.saved': 'Сақталды',
+  'profile.profileUpdated': 'Профиль жаңартылды.',
+  'profile.addPhoto': 'Фото қосу',
+  'profile.changePhoto': 'Фотоны өзгерту',
+  'profile.removePhoto': 'Фотоны жою',
+  'profile.photoTooLarge': 'Сурет тым үлкен. Кішірегін таңдаңыз.',
+  'profile.driver': 'Жүргізуші деректері',
+  'profile.fillCar': '«Рөлде» режимін ашу үшін көлік деректерін толтырыңыз.',
+  'profile.carMake': 'Маркасы',
+  'profile.carModel': 'Моделі',
+  'profile.colour': 'Түсі',
+  'profile.plate': 'Мемлекеттік нөмірі',
+  'profile.carMakePh': 'Toyota',
+  'profile.carModelPh': 'Camry',
+  'profile.colourPh': 'Ақ',
+  'profile.platePh': '777 ABC 02',
+  'profile.updateCar': 'Көлікті жаңарту',
+  'profile.saveCar': 'Сақтап, жүргізуші болу',
+  'profile.carSaved': 'Көлік сақталды. Енді желіге шыға аласыз.',
+  'profile.vCar': 'Көлік туралы төрт өрісті де толтырыңыз.',
+  'profile.places': 'Менің мекенжайларым',
+  'profile.home': 'Үй',
+  'profile.work': 'Жұмыс',
+  'profile.notSet': 'Белгіленбеген',
+  'profile.placeSearchPh': 'Осы орынға мекенжай іздеңіз…',
+  'profile.language': 'Тіл',
+  'profile.langAuto': 'Авто',
+  'profile.logout': 'Шығу',
+  'profile.rides.one': 'сапар',
+  'profile.points.one': 'ұпай',
+
+  // history
+  'history.title': 'Сапарлар тарихы',
+  'history.refresh': 'Жаңарту',
+  'history.empty': 'Әзірге сапар жоқ. «Сапар» бетінен тапсырыс беріңіз.',
+  'history.youRode': 'Сіз жүрдіңіз',
+  'history.youDrove': 'Сіз апардыңыз',
+  'history.noDriver': 'Жүргізушісіз',
+  'history.rate': 'Бағалау ›',
+  'history.finished': 'Аяқталды',
+  'history.cancelled': 'Болдырылмады',
+  'history.requested': 'Іздеу',
+  'history.accepted': 'Жүргізуші табылды',
+  'history.arrived': 'Жүргізуші келді',
+  'history.in_progress': 'Жолда',
+
+  // rating
+  'rate.finished': 'Сапар аяқталды',
+  'rate.how': '{name} екеуіңіздің сапарыңыз қалай өтті?',
+  'rate.counterpart': 'жолсерікпен',
+  'rate.commentPh': 'Пікір қалдырыңыз (міндетті емес)',
+  'rate.submit': 'Баға қою',
+  'rate.skip': 'Өткізіп жіберу',
+  'rate.couldNotSave': 'Бағаны сақтау мүмкін болмады',
+
+  // weekly recap
+  'weekly.title': 'Апта қорытындысы',
+  'weekly.subtitle': 'Соңғы 7 күндегі қозғалыс',
+  'weekly.you': 'Сіз',
+  'weekly.youDrove.one': 'рөлде {n} сапар',
+  'weekly.youRode.one': 'жолаушы ретінде {n} сапар',
+  'weekly.youEarned.one': '+{n} ұпай',
+  'weekly.youStreak.one': 'Серия: {n} күн',
+  'weekly.city': 'Қала',
+  'weekly.cityRides.one': '{n} бірлескен сапар',
+  'weekly.cityKm': 'бірге {n} км',
+  'weekly.cityDrivers.one': '{n} жүргізуші жолда',
+  'weekly.top': 'Апта жүргізушілері',
+  'weekly.crews': 'Апта экипаждары',
+  'weekly.crewRank': '{name} — апта бойынша #{rank}',
+  'weekly.empty': 'Тыныш апта. Қала сізді күтіп тұр.',
+  'weekly.close': 'Жалғастыру',
+
+  // permissions
+  'perm.title': 'Бастар алдында',
+  'perm.text': 'DrivePro жұмысы үшін геолокацияңыз қажет.',
+  'perm.point1': '🗺  Картаны сізге бағыттау',
+  'perm.point2': '🚗  Жақын жүргізушілерге сізді табуға көмектесу',
+  'perm.point3': '📡  Жолаушыға қайда келе жатқаныңызды көрсету',
+  'perm.point4': '🔔  Қосымша жабық болса да тапсырыс пен оқиға туралы хабарлау',
+  'perm.allow': 'Геолокацияға рұқсат беру',
+  'perm.skip': 'Қазір емес',
+  'perm.deniedNote': 'Рұқсат берілмеді. Оны кез келген уақытта браузер немесе телефон параметрлерінен қосуға болады.',
+
+  // app
+  'app.crashTitle': 'Бірдеңе дұрыс болмады',
+  'app.reload': 'Қайта жүктеу',
+
+  // profile modal
+  'modal.car': 'Көлік',
+  'modal.block': 'Бұғаттау',
+  'modal.unblock': 'Бұғаттан шығару',
+  'modal.report': 'Шағымдану',
+  'modal.blockQ': 'Бұл адамды бұғаттайсыз ба?',
+  'modal.blockText': 'Сіздер бұдан былай ешқашан сәйкес келмейсіздер.',
+  'modal.reportQ': 'Бұл адамға шағымданасыз ба?',
+  'modal.reportText': 'Шағым модераторларға жіберіледі.',
+  'modal.blockedNote': 'Бұғатталды — сәйкес келмейсіздер.',
+  'modal.reported': 'Шағым жіберілді. Рақмет.',
+  'modal.say': 'Адамдар не дейді',
+  'modal.noRatings': 'Әзірге баға жоқ',
+  'modal.meta': '{rides} сапар · {date} бастап',
+  'modal.ratings.one': '★ {avg} ({n} баға)',
+
+  // notifications
+  'note.rideCancelled': 'Сапар болдырылмады',
+  'note.byRider': 'Жолаушы сапарды болдырмады.',
+  'note.byDriver': 'Жүргізуші сапарды болдырмады.',
+  'note.bySystem': 'Сапар мерзімі өтіп, автоматты түрде жабылды.',
+  'note.arrivedTitle': 'Жүргізуші келді',
+  'note.lookFor': 'Іздеңіз: {color} {make} {model}, нөмірі {plate}.',
+  'note.meetPickup': 'Шығу нүктесінде қарсы алыңыз.',
+
+  // errors
+  'err.invalid_phone': 'Дұрыс телефон нөмірін енгізіңіз.',
+  'err.name_required': 'Атыңызды енгізіңіз.',
+  'err.password_short': 'Құпия сөз кемінде 8 таңбадан тұруы керек.',
+  'err.password_weak': 'Құпия сөзде әріп те, сан да болуы керек.',
+  'err.password_has_phone': 'Құпия сөзде телефон нөміріңіз болмауы керек.',
+  'err.phone_taken': 'Бұл нөмір тіркеліп қойған.',
+  'err.wrong_credentials': 'Телефон нөмірі не құпия сөз қате.',
+  'err.no_account': 'Мұндай нөмірмен аккаунт жоқ.',
+  'err.code_expired': 'Кодтың мерзімі өтті. Жаңасын сұратыңыз.',
+  'err.code_wrong': 'Код қате. Тексеріп, қайталап көріңіз.',
+  'err.resend_too_soon': 'Қайта жіберу алдында сәл күте тұрыңыз.',
+  'err.already_verified': 'Бұл аккаунт расталып қойған.',
+  'err.invalid_email': 'Дұрыс пошта мекенжайын енгізіңіз.',
+  'err.invalid_avatar': 'Фото сурет файлы болуы керек.',
+  'err.avatar_too_large': 'Фото тым үлкен.',
+  'err.invalid_place': 'Осы орынға нүкте мен мекенжай таңдаңыз.',
+  'err.car_required': 'Көліктің маркасы, моделі, түсі және нөмірі қажет.',
+  'err.invalid_plate': 'Нөмірде әріп, сан, бос орын және сызықша болуы мүмкін.',
+  'err.taken': 'Бұл тапсырыс енді қолжетімсіз.',
+  'err.points_required': 'Шығу және бару нүктелері қажет.',
+  'err.body_too_large': 'Жіберілген деректер тым үлкен.',
+  'err.convoy_full': 'Сізде қазірдің өзінде 3 жолаушы бар.',
+  'err.already_in_crew': 'Сіз экипажда болып қойдыңыз.',
+  'err.crew_not_found': 'Мұндай кодпен экипаж табылмады.',
+  'err.crew_full': 'Экипаж толы.',
+  'err.not_in_crew': 'Сіз экипажда емессіз.',
+  'err.crew_name_required': 'Экипажға атау беріңіз.',
+  'err.invalid_time': 'Шығу уақытын СС:ММ форматында көрсетіңіз.',
+  'err.invalid_days': 'Кемінде бір апта күнін немесе күнтізбелік күнді таңдаңыз.',
+  'err.invalid_date': 'Дұрыс болашақ күнді көрсетіңіз.',
+  'err.too_many_schedules': 'Кесте тым көп — біреуін жойыңыз.',
+  'err.schedule_not_found': 'Бұл кесте енді жоқ.',
+  'err.banned': 'Бұл аккаунт бұғатталған.',
+  'err.rate_limited': 'Тым көп әрекет. Кейінірек қайталаңыз.',
+  'err.code_locked': 'Тым көп қате код. Жаңасын сұратыңыз.',
+  'err.network': '{url} серверімен байланысу мүмкін емес. Ол қосулы ма?',
+};
+
+// RU first: it is the default and the most-used. KK then EN.
+const dicts = { ru, kk, en };
 
 let current = 'ru';
 
@@ -745,21 +1151,41 @@ export function detectDeviceLang() {
 }
 
 export function resolveLang(pref) {
-  if (pref === 'en' || pref === 'ru') return pref;
+  if (dicts[pref]) return pref;
   // Follow the device language; Russian is the default for everything else.
-  return detectDeviceLang().startsWith('en') ? 'en' : 'ru';
+  const dev = detectDeviceLang();
+  if (dev.startsWith('kk')) return 'kk';
+  return dev.startsWith('en') ? 'en' : 'ru';
 }
 
 export function setLang(lang) {
   current = dicts[lang] ? lang : 'ru';
 }
 
+
 export function getLang() {
   return current;
 }
 
+// Lookup order. Kazakh falls back to Russian before English: in Kazakhstan a
+// reader who misses a kk string is far likelier to read ru than en.
+function lookup(key) {
+  const chain = current === 'kk' ? [dicts.kk, ru, en] : [dicts[current], en];
+  for (const d of chain) {
+    if (d && d[key] != null) return d[key];
+  }
+  return null;
+}
+
 export function t(key, params) {
-  const s = (dicts[current] && dicts[current][key]) || en[key] || key;
+  let resolved = key;
+  // A count selects a plural variant, but only where the key defines one -
+  // `{n}` appears in plenty of strings that do not vary by number.
+  if (params && params.n != null) {
+    const variant = `${key}.${pluralCategory(current, params.n)}`;
+    if (lookup(variant) != null) resolved = variant;
+  }
+  const s = lookup(resolved) != null ? lookup(resolved) : key;
   if (!params) return s;
   return s.replace(/\{(\w+)\}/g, (m, k) => (params[k] != null ? String(params[k]) : m));
 }

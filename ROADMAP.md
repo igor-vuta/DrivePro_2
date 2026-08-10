@@ -13,16 +13,25 @@ Conventions live in CLAUDE.md.
 | ~~L19~~ | ~~7 `100dvh`/safe-area, 11 placeholders~~ (8 partly) | ✅ shipped — pure client; the most visible daily annoyances |
 | ~~L20~~ | ~~9 offers vs navigator, 8 floating panels, 10 transitions~~ | ✅ shipped — plus a crash fix, see below |
 | ~~L21~~ | ~~12 registration guide~~ | ✅ shipped — the last layer that adds new strings |
-| L22 | 1 Kazakh + RU/ҚАЗ/EN picker | one translation sweep, after the string surface stops moving |
+| ~~L22~~ | ~~1 Kazakh + RU/ҚАЗ/EN picker, real plurals~~ | ✅ shipped — one sweep, after the string surface stopped moving |
 | L23 | 2 Android APK via EAS | **needs an Expo account login** |
 | L24 | 4 real SMS provider, then passkeys | **needs a paid KZ SMS provider + keys**; flips prod's `OTP_ECHO` off |
 
 ## A. Language & identity
 
-1. **Language picker order + Kazakh** — RU first (default), then KK, then EN.
-   Add a full `kk` dictionary in `app/src/i18n.js` (mirror the `ru` keys),
-   extend `resolveLang` + the Profile `Segmented` (RU / ҚАЗ / EN), and the
-   server-side RU strings in push notifications stay RU for now.
+1. ~~**Language picker order + Kazakh**~~ — ✅ L22. Full `kk` dictionary
+   (324 keys) beside `ru`; picker reads Авто / РУ / ҚАЗ / EN; `resolveLang`
+   maps a kk device to Kazakh and everything unrecognised to Russian. A kk
+   miss falls back to **ru, then en** — in Kazakhstan that is the useful
+   order. ⚠️ Machine-assisted translation reviewed by the author, not a
+   native speaker: tone and idiom deserve a native pass.
+   Also landed: real plural forms. `app/src/plurals.js` holds the rules (RN-
+   free so `smoke24` can unit-test them), count keys are `key.one/.few/.many`,
+   and `t()` picks the variant from `params.n`. Server-side push strings are
+   still RU only.
+   Not covered: `home.cityLine` interpolates three separate counts in one
+   string, which one plural category cannot express — it needs splitting
+   before it can be made grammatical for n = 1.
 
 ## B. Native app
 
@@ -113,9 +122,7 @@ Conventions live in CLAUDE.md.
   hit it on accept, go-offline and leaving the Drive tab. `stopWatching()`
   in `app/src/location.js` swallows exactly that error; `smoke22` pins the
   contract. Remove the shim when expo-location fixes the web emitter.
-- **Plural forms** — `t()` only interpolates, so counts use a colon form
-  (`Offers: 2`). RU needs three plural forms and KK differs again; add real
-  plural support with the KK dictionary in L22.
+- ~~**Plural forms**~~ — ✅ L22, see item 1.
 
 ## E. Ops & bugs
 
