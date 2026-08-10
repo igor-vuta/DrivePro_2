@@ -69,6 +69,8 @@ L20 driver full-screen map + floating offer sheet, `Pop`/`Chip` motion,
 expo-location web teardown crash fixed (`app/src/location.js`) · L21
 first-run guide (4 steps, once, before the permission ask) · L22 Kazakh
 (`kk` dictionary, Авто/РУ/ҚАЗ/EN picker, kk→ru→en fallback) + real plural
-forms (`app/src/plurals.js`, `key.one/.few/.many` selected by `params.n`).
+forms (`app/src/plurals.js`, `key.one/.few/.many` selected by `params.n`) ·
+L23 layout fix: `#root` is `position:fixed; inset:0` (no viewport-height
+units — `100dvh` reports short inside an iOS standalone PWA).
 
 Remaining work and its running order live in `ROADMAP.md`.

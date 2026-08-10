@@ -40,18 +40,23 @@ const html = fs.readFileSync(INDEX, 'utf8');
 // env(safe-area-inset-*) only resolves when the viewport covers the notch.
 check('viewport opts into the display cutout', html.includes('viewport-fit=cover'), 'missing viewport-fit=cover');
 
-// height:100% resolves against the large viewport on mobile, so the bottom of
-// the app hides under the collapsing URL bar. dvh tracks the visible viewport.
-check('root is sized with dvh', /html,body,#root\{height:100%;height:100dvh\}/.test(html), 'missing the dvh rule');
-check('the 100% fallback comes first', html.indexOf('height:100%;height:100dvh') > -1);
-check('overscroll bounce is disabled', /body\{overscroll-behavior:none\}/.test(html));
+// Viewport height units do not survive mobile: height:100% resolves against
+// the large viewport (bottom hides under a collapsing URL bar) and 100dvh
+// comes back short of the web view in an iOS standalone PWA, leaving a dead
+// band below the app. Laying the root out against the layout viewport with
+// position:fixed + inset:0 avoids both.
+check('root is pinned to the layout viewport', /#root\{position:fixed;top:0;right:0;bottom:0;left:0;/.test(html), 'missing the fixed-inset rule');
+// An explicit height would win over `bottom:0` and reintroduce the gap.
+check('the root height stays auto', /#root\{[^}]*height:auto/.test(html), 'root has an explicit height again');
+check('no viewport-height unit sizes the app', !/#root\{[^}]*100dvh/.test(html) && !/html,body,#root\{height/.test(html));
+check('overscroll bounce is disabled', /html,body\{height:100%;overflow:hidden;overscroll-behavior:none\}/.test(html));
 check('dark background is painted before JS runs', /html,body\{background:#06070d\}/.test(html));
 
 // The override has to come after Expo's reset or it loses on equal specificity.
 check(
   'the override follows the expo reset',
-  html.indexOf('100dvh') > html.indexOf('id="expo-reset"'),
-  'dvh rule appears before #expo-reset'
+  html.indexOf('position:fixed') > html.indexOf('id="expo-reset"'),
+  'the root rule appears before #expo-reset'
 );
 
 // --------------------------------------------------------------- bundles ---
@@ -100,9 +105,15 @@ const cleanup = () => {
 process.on('exit', cleanup);
 
 const served = await fetch(`http://localhost:${PORT}/`).then((r) => r.text());
-check('the server serves the built index.html', served.includes('100dvh') && served.includes('viewport-fit=cover'));
+check('the server serves the built index.html', served.includes('position:fixed') && served.includes('viewport-fit=cover'));
 const bundleRes = await fetch(`http://localhost:${PORT}/_expo/static/js/web/${bundles[0]}`);
 check('the bundle it references is actually served', bundleRes.status === 200, String(bundleRes.status));
+
+// The root now covers the status bar in a standalone PWA, so the first row of
+// every screen needs the top inset or it renders under the clock.
+const ui = fs.readFileSync(path.join(REPO, 'app', 'src', 'ui.js'), 'utf8');
+check('screens pad for the top cutout on web', /paddingTop: 'calc\(env\(safe-area-inset-top, 0px\) \+ 8px\)'/.test(ui));
+check('screens pad for the home indicator on web', /paddingBottom: 'env\(safe-area-inset-bottom, 0px\)'/.test(ui));
 
 console.log(`\n${passed} passed, ${failed} failed`);
 cleanup();

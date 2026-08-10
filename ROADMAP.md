@@ -73,13 +73,17 @@ Conventions live in CLAUDE.md.
 
 ## D. UI / UX
 
-7. ~~**Bottom-margin overlap in the web app**~~ — ✅ L19. `postexport.mjs`
-   emits `html,body,#root{height:100%;height:100dvh}` after Expo's reset,
-   plus `overscroll-behavior:none`; `Screen` adds
-   `env(safe-area-inset-bottom)` padding on web (SafeAreaView is a plain
-   View there). `smoke21` asserts the shipped `index.html` keeps all of it.
-   ⚠️ **Verified in desktop Chrome only** — the overlap it fixes needs a
-   real mobile browser with a collapsing URL bar to confirm.
+7. ~~**Bottom-margin overlap in the web app**~~ — ✅ L19, corrected in L23.
+   L19's `100dvh` was the wrong tool: in an iOS **standalone PWA** the unit
+   comes back short of the web view, so the app ended ~13% above the bottom
+   of the screen with a dead band below it (reported from a real phone —
+   desktop Chrome cannot show this, as flagged at the time).
+   L23 drops viewport-height units entirely: `#root` is
+   `position:fixed; inset:0; height:auto`, laid out against the layout
+   viewport, so it fills whatever the browser or home-screen shell gives and
+   follows it when that changes. `Screen` pads with
+   `env(safe-area-inset-top/bottom)` on web — the top inset matters now that
+   the root can cover the status bar. `smoke21` pins the whole contract.
 8. ~~**Use the full screen**~~ — ✅ L19 + L20. L19 turned the duplicated
    `marginHorizontal: -16` into `Bleed`/`SCREEN_PAD`; L20 made the online
    driver's map full-screen with the status, follow and go-offline controls

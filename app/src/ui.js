@@ -300,11 +300,21 @@ const s = StyleSheet.create({
     flex: 1,
     paddingHorizontal: SCREEN_PAD,
     paddingTop: 8,
-    // On iOS native, SafeAreaView already handles the home indicator. On web
-    // it is an ordinary View, so the inset has to come from CSS - env() is a
-    // raw CSS value react-native-web passes straight through, and it resolves
-    // to 0px anywhere without a notch.
-    ...(WEB ? { paddingBottom: 'env(safe-area-inset-bottom, 0px)' } : {}),
+    // On iOS native, SafeAreaView already handles the notch and the home
+    // indicator. On web it is an ordinary View, so the insets have to come
+    // from CSS - env() is a raw value react-native-web passes straight
+    // through, and it resolves to 0px anywhere without a cutout.
+    //
+    // The root is position:fixed;inset:0, so in a standalone PWA it covers
+    // the status bar too; without the top inset the first row would sit
+    // under the clock. Vertical only: the horizontal padding is what Bleed
+    // cancels with -SCREEN_PAD, and a dynamic value would stop matching.
+    ...(WEB
+      ? {
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }
+      : {}),
   },
   title: { fontSize: 26, fontWeight: '800', letterSpacing: 0.4, color: colors.text, marginBottom: 4 },
   titleGlow: {
