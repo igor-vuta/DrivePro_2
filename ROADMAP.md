@@ -19,7 +19,7 @@ Conventions live in CLAUDE.md.
 | ~~L25~~ | ~~4a real SMS via Twilio~~ | ✅ shipped — credentials go in `/etc/drivepro.env`, never the repo |
 | — | 2 native builds (Android APK / iOS TestFlight) | **deferred**: staying a PWA while it is a demo |
 | ~~L26~~ | ~~4c Telegram verification + delivery~~ | ✅ shipped — free, no approvals, works where KZ SMS does not |
-| L27 | TOTP authenticator (auth step 1) | free, no provider |
+| ~~L27~~ | ~~TOTP authenticator (auth step 1)~~ | ✅ shipped — RFC 4226/6238, zero deps |
 | L28 | Passkeys / WebAuthn (auth step 2) | free, no provider |
 | L29 | Self-hosted OSRM: car + foot + bike | needed before walk/cycle routing can be real |
 | L30 | Design system: new palette, light+dark, airier spacing, brand assets | |

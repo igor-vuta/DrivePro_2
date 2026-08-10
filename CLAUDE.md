@@ -77,6 +77,9 @@ push (Expo push tokens beside web push; `push_subs` tells them apart by
 real SMS via Twilio (`server/src/sms.js`, zero deps; `TWILIO_*` in
 `/etc/drivepro.env` only — configuring it turns `OTP_ECHO` off by itself) ·
 L26 Telegram (`server/src/telegram.js`, long-polled bot, deep-link nonce,
-phone proven by Telegram's contact sharing; also delivers codes once linked).
+phone proven by Telegram's contact sharing; also delivers codes once linked) ·
+L27 TOTP (`server/src/totp.js`, RFC 4226/6238, zero deps; optional second
+factor — the verified phone stays identity and recovery, and a password reset
+over it clears the secret).
 
 Remaining work and its running order live in `ROADMAP.md`.

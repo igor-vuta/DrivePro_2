@@ -10,6 +10,7 @@ import { vapidPublicKey } from './push.js';
 import {
   telegramConfigured, telegramBotUsername, createLinkRequest, readLinkRequest, deepLink,
 } from './telegram.js';
+import { generateSecret, verifyTotp, otpauthUrl, TOTP_STEP_S } from './totp.js';
 
 const MAX_AVATAR_CHARS = 400_000; // ~300 KB of base64 image data
 const OTP_MAX_ATTEMPTS = 5;
@@ -236,6 +237,16 @@ export function createApi({ store, secret, hub, serveStatic }) {
       verificationResponse(res, 403, user, code);
       return;
     }
+    // Optional second factor. The password was already correct at this point,
+    // so the code is asked for separately rather than up front.
+    if (user.totpEnabled) {
+      const code = typeof body.code === 'string' ? body.code : '';
+      if (!code) {
+        sendJson(res, 401, { needsTotp: true });
+        return;
+      }
+      consumeTotp(user, code);
+    }
     sendJson(res, 200, sessionPayload(user));
   });
 
@@ -271,12 +282,18 @@ export function createApi({ store, secret, hub, serveStatic }) {
     consumeOtp(user, code);
     // Receiving the code proves the phone belongs to them, so an account that
     // never finished verification is verified by completing a reset.
+    // Re-proving the phone is the recovery path, so it also clears a second
+    // factor the user can no longer produce - otherwise a lost authenticator
+    // would lock them out permanently.
     store.updateUser(user.id, {
       passwordHash: hashPassword(password),
       verified: true,
       otpCode: null,
       otpExpires: null,
       otpAttempts: 0,
+      totpSecret: null,
+      totpEnabled: false,
+      totpLastStep: null,
     });
     sendJson(res, 200, sessionPayload(store.getUser(user.id)));
   });
@@ -317,12 +334,66 @@ export function createApi({ store, secret, hub, serveStatic }) {
     sendJson(res, 200, { status: 'verified', ...sessionPayload(user) });
   });
 
+  // ---------------------------------------------------------------- totp ---
+  //
+  // An optional authenticator app for faster, stronger login. It never
+  // replaces the verified phone: that stays the account's identity, and
+  // re-proving it (password reset over Telegram/SMS) is what clears a lost
+  // authenticator - which is why there are no recovery codes.
+
+  // Verifies and burns the code: a TOTP stays valid for its whole step, so
+  // without remembering the last one used, a code observed over someone's
+  // shoulder would work again for up to 30 seconds.
+  const consumeTotp = (user, code) => {
+    if (!user.totpSecret || !verifyTotp(user.totpSecret, code)) {
+      throw httpError(401, 'Wrong authenticator code.', 'totp_invalid');
+    }
+    const step = Math.floor(Date.now() / 1000 / TOTP_STEP_S);
+    if (user.totpLastStep != null && step <= user.totpLastStep) {
+      throw httpError(401, 'That code has already been used.', 'totp_reused');
+    }
+    store.updateUser(user.id, { totpLastStep: step });
+  };
+
+  route('POST', '/api/totp/setup', async (req, res) => {
+    const user = authUser(req);
+    if (user.totpEnabled) throw httpError(409, 'Two-factor is already on.', 'totp_already_on');
+    const secret = generateSecret();
+    // Stored but not enabled: it only counts once a code proves the app has it.
+    store.updateUser(user.id, { totpSecret: secret, totpEnabled: false, totpLastStep: null });
+    sendJson(res, 200, { secret, otpauth: otpauthUrl({ secret, account: user.phone }) });
+  });
+
+  route('POST', '/api/totp/enable', async (req, res) => {
+    const user = authUser(req);
+    if (user.totpEnabled) throw httpError(409, 'Two-factor is already on.', 'totp_already_on');
+    if (!user.totpSecret) throw httpError(400, 'Start the setup first.', 'totp_not_started');
+    const body = await readJson(req);
+    consumeTotp(user, typeof body.code === 'string' ? body.code : '');
+    store.updateUser(user.id, { totpEnabled: true });
+    sendJson(res, 200, { ok: true, totpEnabled: true });
+  });
+
+  // Turning it off needs a current code, so someone on a borrowed unlocked
+  // session cannot quietly remove it.
+  route('POST', '/api/totp/disable', async (req, res) => {
+    const user = authUser(req);
+    if (!user.totpEnabled) throw httpError(400, 'Two-factor is not on.', 'totp_not_on');
+    const body = await readJson(req);
+    consumeTotp(user, typeof body.code === 'string' ? body.code : '');
+    store.updateUser(user.id, { totpSecret: null, totpEnabled: false, totpLastStep: null });
+    sendJson(res, 200, { ok: true, totpEnabled: false });
+  });
+
   route('GET', '/api/me', async (req, res) => {
     const user = authUser(req);
     const activeRide = store.findActiveRideForUser(user.id);
     const driverLoc = hub && activeRide && activeRide.driverId ? hub.drivers.get(activeRide.driverId) : null;
     sendJson(res, 200, {
       user: publicUser(store, user.id),
+      // Only ever about yourself - whether someone else uses an authenticator
+      // is not public, so this sits beside the profile rather than in it.
+      totpEnabled: !!user.totpEnabled,
       driverActive: hub ? hub.drivers.has(user.id) : false,
       activeRide,
       counterpart: rideCounterpart(store, activeRide, user.id),

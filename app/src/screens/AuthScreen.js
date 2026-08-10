@@ -30,6 +30,8 @@ export default function AuthScreen() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [totpCode, setTotpCode] = useState(''); // shown only once the server asks
+  const [needsTotp, setNeedsTotp] = useState(false);
 
   // Password reset lives in this screen as a sub-flow: ask for the phone, then
   // for the code plus a new password. Confirming it logs straight in.
@@ -76,7 +78,22 @@ export default function AuthScreen() {
       setError(v);
       return;
     }
-    await run(() => (mode === 'login' ? login(phone, password) : register(phone, password, name)));
+    if (mode === 'login') {
+      try {
+        setError('');
+        setBusy(true);
+        await login(phone, password, totpCode.trim() || undefined);
+      } catch (e) {
+        // Not a failure: the password was right and a code is now needed.
+        if (e && e.needsTotp) setTotpCode((c) => c || '');
+        setError(e && e.needsTotp ? '' : errMsg(e));
+        if (e && e.needsTotp) setNeedsTotp(true);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    await run(() => register(phone, password, name));
   };
 
   const sendResetCode = async () => {
@@ -175,6 +192,8 @@ export default function AuthScreen() {
             onChange={(m) => {
               setMode(m);
               setError('');
+              setNeedsTotp(false);
+              setTotpCode('');
             }}
             options={[
               { value: 'login', label: t('auth.login') },
@@ -202,6 +221,17 @@ export default function AuthScreen() {
             secureTextEntry
             maxLength={100}
           />
+          {needsTotp ? (
+            <Input
+              label={t('totp.codeLabel')}
+              value={totpCode}
+              onChangeText={(v) => setTotpCode(v.replace(/\D/g, '').slice(0, 6))}
+              placeholder={t('totp.codePh')}
+              keyboardType="number-pad"
+              maxLength={6}
+              style={{ textAlign: 'center', fontSize: 22, letterSpacing: 6 }}
+            />
+          ) : null}
 
           <ErrorText>{error}</ErrorText>
 

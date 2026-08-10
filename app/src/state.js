@@ -27,6 +27,7 @@ export function AuthProvider({ children }) {
   const [lang, setLangState] = useState('ru');
   const [wsConnected, setWsConnected] = useState(false);
   const [cityImpact, setCityImpact] = useState(null); // { rides, km, driversOnline } for today
+  const [totpEnabled, setTotpEnabled] = useState(false);
   const meRef = useRef(null);
   useEffect(() => {
     meRef.current = me;
@@ -63,6 +64,7 @@ export function AuthProvider({ children }) {
           if (cancelled) return;
           setToken(saved);
           setMe(data.user);
+          setTotpEnabled(!!data.totpEnabled);
           setDriverActive(!!data.driverActive);
           setActiveRide(data.activeRide || null);
           setCounterpart(data.counterpart || null);
@@ -91,6 +93,7 @@ export function AuthProvider({ children }) {
         api('GET', '/api/me', null, tk)
           .then((data) => {
             setMe(data.user);
+            setTotpEnabled(!!data.totpEnabled);
             setDriverActive(!!data.driverActive);
             setActiveRide(data.activeRide || null);
             setCounterpart(data.counterpart || null);
@@ -256,6 +259,7 @@ export function AuthProvider({ children }) {
       pendingRating,
       setPendingRating,
       pendingVerification,
+      totpEnabled,
       langPref,
       lang,
       wsConnected,
@@ -274,13 +278,19 @@ export function AuthProvider({ children }) {
         }
       },
 
-      async login(phone, password) {
+      async login(phone, password, code) {
         try {
-          const data = await api('POST', '/api/login', { phone, password });
+          const data = await api('POST', '/api/login', { phone, password, ...(code ? { code } : {}) });
           await AsyncStorage.setItem(TOKEN_KEY, data.token);
           setMe(data.user);
           setToken(data.token);
         } catch (e) {
+          // Password was right; the account just wants its authenticator code.
+          if (e.data && e.data.needsTotp) {
+            const err = new Error('needsTotp');
+            err.needsTotp = true;
+            throw err;
+          }
           if (e.data && e.data.needsVerification) {
             setPendingVerification({ phone: e.data.phone, devCode: e.data.devCode || null, telegram: !!e.data.telegram });
             return;
@@ -315,6 +325,20 @@ export function AuthProvider({ children }) {
 
       // Telegram verification: ask for a deep link, then poll until the bot
       // has confirmed the number with Telegram. No code is ever typed.
+      // Authenticator (TOTP). Optional, and never a replacement for the
+      // verified phone - resetting the password over it clears this.
+      async totpSetup() {
+        return api('POST', '/api/totp/setup', {}, token);
+      },
+      async totpEnable(code) {
+        await api('POST', '/api/totp/enable', { code }, token);
+        setTotpEnabled(true);
+      },
+      async totpDisable(code) {
+        await api('POST', '/api/totp/disable', { code }, token);
+        setTotpEnabled(false);
+      },
+
       async startTelegramLink() {
         if (!pendingVerification) return null;
         return api('POST', '/api/telegram/link', { phone: pendingVerification.phone });
@@ -386,7 +410,7 @@ export function AuthProvider({ children }) {
         if (data && data.user) setMe(data.user);
       },
     }),
-    [booting, token, me, driverActive, activeRide, driverRides, counterpart, driverLoc, pendingRating, pendingVerification, langPref, lang, wsConnected, cityImpact]
+    [booting, token, me, driverActive, activeRide, driverRides, counterpart, driverLoc, pendingRating, pendingVerification, totpEnabled, langPref, lang, wsConnected, cityImpact]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

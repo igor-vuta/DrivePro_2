@@ -52,6 +52,9 @@ class SqliteBackend {
         streak_best INTEGER DEFAULT 0,
         last_ride_day TEXT,
         telegram_chat_id TEXT,
+        totp_secret TEXT,
+        totp_enabled INTEGER DEFAULT 0,
+        totp_last_step INTEGER,
         crew_id TEXT,
         crew_joined_at INTEGER
       );
@@ -194,6 +197,9 @@ class SqliteBackend {
       ['streak_best', 'INTEGER DEFAULT 0'],
       ['last_ride_day', 'TEXT'],
       ['telegram_chat_id', 'TEXT'],
+      ['totp_secret', 'TEXT'],
+      ['totp_enabled', 'INTEGER DEFAULT 0'],
+      ['totp_last_step', 'INTEGER'],
       ['crew_id', 'TEXT'],
       ['crew_joined_at', 'INTEGER'],
     ]);
@@ -229,13 +235,14 @@ class SqliteBackend {
       otpSentAt: 'otp_sent_at', avatar: 'avatar', about: 'about', email: 'email', city: 'city', places: 'places',
       otpAttempts: 'otp_attempts', banned: 'banned', crewId: 'crew_id', crewJoinedAt: 'crew_joined_at',
       passwordHash: 'password_hash', telegramChatId: 'telegram_chat_id',
+      totpSecret: 'totp_secret', totpEnabled: 'totp_enabled', totpLastStep: 'totp_last_step',
     };
     const cols = [];
     const vals = [];
     for (const [k, v] of Object.entries(patch)) {
       if (!(k in map)) continue;
       cols.push(`${map[k]} = ?`);
-      vals.push(k === 'verified' || k === 'banned' ? (v ? 1 : 0) : k === 'places' && v != null ? JSON.stringify(v) : v);
+      vals.push(k === 'verified' || k === 'banned' || k === 'totpEnabled' ? (v ? 1 : 0) : k === 'places' && v != null ? JSON.stringify(v) : v);
     }
     if (!cols.length) return;
     vals.push(uid);
@@ -558,6 +565,9 @@ function rowToUser(row) {
     points: row.points != null ? Number(row.points) : 0,
     otpAttempts: row.otp_attempts != null ? Number(row.otp_attempts) : 0,
     telegramChatId: row.telegram_chat_id ?? null,
+    totpSecret: row.totp_secret ?? null,
+    totpEnabled: !!row.totp_enabled,
+    totpLastStep: row.totp_last_step == null ? null : Number(row.totp_last_step),
     banned: !!row.banned,
     streakDays: row.streak_days != null ? Number(row.streak_days) : 0,
     streakBest: row.streak_best != null ? Number(row.streak_best) : 0,
@@ -667,7 +677,7 @@ class JsonBackend {
   updateUserFields(uid, patch) {
     const u = this.userById(uid);
     if (u) {
-      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places', 'otpAttempts', 'banned', 'crewId', 'crewJoinedAt', 'passwordHash', 'telegramChatId'];
+      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places', 'otpAttempts', 'banned', 'crewId', 'crewJoinedAt', 'passwordHash', 'telegramChatId', 'totpSecret', 'totpEnabled', 'totpLastStep'];
       for (const k of allowed) {
         if (k in patch) u[k] = patch[k];
       }

@@ -213,6 +213,8 @@ export default function ProfileScreen({ goBack, openHistory }) {
           />
         </Card>
 
+        <SecurityCard />
+
         <Card>
           <Text style={{ fontWeight: '700', marginBottom: 10, color: colors.text }}>{t('profile.language')}</Text>
           <Segmented
@@ -484,6 +486,96 @@ function PlacesCard() {
       {rowFor('home', '🏠')}
       {rowFor('work', '💼')}
       <ErrorText>{error}</ErrorText>
+    </Card>
+  );
+}
+
+// ------------------------------------------------------------- security ---
+//
+// An authenticator app is optional and additive: the verified phone stays the
+// account's identity, and resetting the password over it clears any secret
+// here - which is why there are no recovery codes to lose.
+function SecurityCard() {
+  const { totpEnabled, totpSetup, totpEnable, totpDisable } = useAuth();
+  const [secret, setSecret] = useState(null);
+  const [otpauth, setOtpauth] = useState(null);
+  const [code, setCode] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const begin = async () => {
+    setErr('');
+    setBusy(true);
+    try {
+      const r = await totpSetup();
+      setSecret(r.secret);
+      setOtpauth(r.otpauth);
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const finish = async (fn) => {
+    setErr('');
+    setBusy(true);
+    try {
+      await fn(code.trim());
+      setCode('');
+      setSecret(null);
+      setOtpauth(null);
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const field = (
+    <Input
+      label={t('totp.codeLabel')}
+      value={code}
+      onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
+      placeholder={t('totp.codePh')}
+      keyboardType="number-pad"
+      maxLength={6}
+      style={{ textAlign: 'center', fontSize: 22, letterSpacing: 6 }}
+    />
+  );
+
+  return (
+    <Card>
+      <Text style={{ fontWeight: '700', marginBottom: 4, color: colors.text }}>{t('totp.title')}</Text>
+      <Sub>{totpEnabled ? t('totp.on') : t('totp.off')}</Sub>
+
+      {totpEnabled ? (
+        <View>
+          {field}
+          <ErrorText>{err}</ErrorText>
+          <Button kind="ghost" title={t('totp.disable')} onPress={() => finish(totpDisable)} loading={busy} disabled={code.length !== 6} />
+        </View>
+      ) : secret ? (
+        <View>
+          <Sub>{t('totp.setupHint')}</Sub>
+          {/* Shown as text rather than a QR: encoding one would need a
+              dependency, and every authenticator accepts manual entry. */}
+          <Text selectable style={{ color: colors.gold, fontFamily: 'monospace', fontSize: 15, marginBottom: 8, letterSpacing: 1 }}>
+            {secret}
+          </Text>
+          <Text selectable style={{ color: colors.sub, fontSize: 11, marginBottom: 10 }} numberOfLines={2}>
+            {otpauth}
+          </Text>
+          {field}
+          <ErrorText>{err}</ErrorText>
+          <Button title={t('totp.confirm')} onPress={() => finish(totpEnable)} loading={busy} disabled={code.length !== 6} />
+        </View>
+      ) : (
+        <View>
+          <ErrorText>{err}</ErrorText>
+          <Button kind="ghost" title={t('totp.enable')} onPress={begin} loading={busy} />
+        </View>
+      )}
     </Card>
   );
 }
