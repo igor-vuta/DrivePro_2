@@ -170,9 +170,25 @@ check('a refusal does not start the resend cooldown', retry.status === 200, JSON
 check('the retry was actually sent', sent.length === 1);
 check('the retry does not echo the code either', retry.json.devCode === undefined);
 
+// ------------------------------------------------ sender formats accepted ---
+
+// Pasted straight from the Twilio console, spaces and all.
+sent = [];
+reply = { status: 201, body: { sid: 'SM125', status: 'queued' } };
+const spaced = await boot('d', 4145, { NODE_ENV: '', ...TWILIO_ENV, TWILIO_FROM: '+1 605 315 3581' });
+await register(spaced, '+77015558004');
+check('a spaced number is normalised to E.164', (sent[0] || {}).params.From === '+16053153581', JSON.stringify((sent[0] || {}).params));
+
+// An alphanumeric sender ID must survive untouched - stripping non-digits
+// would destroy it.
+sent = [];
+const alpha = await boot('e', 4146, { NODE_ENV: '', ...TWILIO_ENV, TWILIO_FROM: 'DrivePro' });
+await register(alpha, '+77015558005');
+check('an alphanumeric sender is passed through as-is', (sent[0] || {}).params.From === 'DrivePro', JSON.stringify((sent[0] || {}).params));
+
 // ------------------------------------------- explicit override still warns ---
 
-const forced = await boot('c', 4144, { NODE_ENV: '', ...TWILIO_ENV, OTP_ECHO: '1' });
+const forced = await boot('f', 4147, { NODE_ENV: '', ...TWILIO_ENV, OTP_ECHO: '1' });
 check('an explicit OTP_ECHO=1 still wins', /echo to clients ON|OTP_ECHO is ON/.test(forced.banner), forced.banner);
 check(
   'but it warns that a real provider is configured',

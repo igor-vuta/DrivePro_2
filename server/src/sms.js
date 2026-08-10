@@ -14,7 +14,13 @@
 const API_BASE = process.env.TWILIO_API_URL || 'https://api.twilio.com';
 const SID = (process.env.TWILIO_ACCOUNT_SID || '').trim();
 const TOKEN = (process.env.TWILIO_AUTH_TOKEN || '').trim();
-const FROM = (process.env.TWILIO_FROM || '').trim();
+// Twilio wants E.164 (+16053153581), but the console displays numbers spaced
+// out ("+1 605 315 3581") and that is what gets pasted into the env file - a
+// rejected `From` is a confusing way to find that out. Strip the separators
+// from anything starting with '+'. An alphanumeric sender ID ("DrivePro") has
+// no leading + and is passed through exactly as configured.
+const rawFrom = (process.env.TWILIO_FROM || '').trim();
+const FROM = rawFrom.startsWith('+') ? `+${rawFrom.slice(1).replace(/\D/g, '')}` : rawFrom;
 const SERVICE_SID = (process.env.TWILIO_MESSAGING_SERVICE_SID || '').trim();
 
 // Server-side strings stay Russian for now, like the push notifications.
