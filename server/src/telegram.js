@@ -26,9 +26,11 @@ export const telegramConfigured = () => Boolean(TOKEN);
 let botUsername = null;
 export const telegramBotUsername = () => botUsername;
 
+// Only meaningful once getMe has answered. initTelegram logs the outcome
+// itself, because it resolves after the boot banner has already printed and
+// a line saying "connecting…" forever is worse than no line at all.
 export function telegramBanner() {
-  if (!telegramConfigured()) return null;
-  return `  Telegram: bot ${botUsername ? `@${botUsername}` : '(connecting…)'}`;
+  return botUsername ? `  Telegram: bot @${botUsername}` : null;
 }
 
 async function call(method, payload, timeoutMs = 10_000) {
@@ -199,8 +201,9 @@ export async function initTelegram({ store, dataDir }) {
   try {
     const me = await call('getMe', {});
     botUsername = me.username;
+    console.log(`  Telegram: bot @${botUsername} connected`);
   } catch (e) {
-    console.error('[telegram] could not reach the Bot API:', e.message);
+    console.error('  Telegram: NOT connected -', e.message);
     return false;
   }
   // Long-poll forever; a failure just backs off and retries, because a bot

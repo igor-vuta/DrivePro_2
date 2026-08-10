@@ -85,6 +85,7 @@ server.listen(PORT, '0.0.0.0', () => {
       : `  Web app: not built yet (cd app && npx expo export -p web)`
   );
   console.log(smsBanner());
+  // May still be null here - initTelegram logs the outcome when getMe answers.
   const tg = telegramBanner();
   if (tg) console.log(tg);
   console.log(otpModeBanner());

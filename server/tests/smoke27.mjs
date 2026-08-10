@@ -95,14 +95,17 @@ const server = spawn(process.execPath, [path.join(__dirname, '..', 'src', 'index
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
+let bootLog = '';
+server.stdout.on('data', (d) => (bootLog += String(d)));
 await new Promise((resolve, reject) => {
   const t = setTimeout(() => reject(new Error('server did not start')), 8000);
-  server.stdout.on('data', (d) => {
-    if (String(d).includes('running')) {
+  const iv = setInterval(() => {
+    if (bootLog.includes('running')) {
       clearTimeout(t);
+      clearInterval(iv);
       resolve();
     }
-  });
+  }, 50);
 });
 const cleanup = () => {
   try {
@@ -136,6 +139,9 @@ for (let i = 0; i < 40; i++) {
   await sleep(100);
 }
 check('health advertises Telegram once the bot is reachable', health && health.telegram === true, JSON.stringify(health));
+// journalctl is the only diagnostic on the VM, so the log must state the
+// outcome - not a "connecting…" line that never resolves.
+check('the log states that the bot connected', /Telegram: bot @DriveProTestBot connected/.test(bootLog), bootLog.split('\n').filter((l) => l.includes('Telegram')).join(' | '));
 
 const PHONE = '+77015560001';
 const reg = await api('POST', '/api/register', { phone: PHONE, password: 'pass1234', name: 'Aigerim' });
