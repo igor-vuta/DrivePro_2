@@ -75,6 +75,8 @@ units — `100dvh` reports short inside an iOS standalone PWA) · L24 native
 push (Expo push tokens beside web push; `push_subs` tells them apart by
 `kind` in the JSON, no schema change; `EXPO_PUSH_URL` is a test seam) · L25
 real SMS via Twilio (`server/src/sms.js`, zero deps; `TWILIO_*` in
-`/etc/drivepro.env` only — configuring it turns `OTP_ECHO` off by itself).
+`/etc/drivepro.env` only — configuring it turns `OTP_ECHO` off by itself) ·
+L26 Telegram (`server/src/telegram.js`, long-polled bot, deep-link nonce,
+phone proven by Telegram's contact sharing; also delivers codes once linked).
 
 Remaining work and its running order live in `ROADMAP.md`.

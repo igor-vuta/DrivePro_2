@@ -18,7 +18,8 @@ Conventions live in CLAUDE.md.
 | ~~L24~~ | ~~native push (expo-notifications beside web push)~~ | ✅ shipped — code only; activates on the first EAS build |
 | ~~L25~~ | ~~4a real SMS via Twilio~~ | ✅ shipped — credentials go in `/etc/drivepro.env`, never the repo |
 | — | 2 native builds (Android APK / iOS TestFlight) | **deferred**: staying a PWA while it is a demo |
-| L26 | 4b passkeys, TOTP, recovery codes | free, no provider — the remaining auth hardening |
+| ~~L26~~ | ~~4c Telegram verification + delivery~~ | ✅ shipped — free, no approvals, works where KZ SMS does not |
+| L27 | 4b passkeys, TOTP, recovery codes | free, no provider — the remaining auth hardening |
 
 ## A. Language & identity
 
@@ -74,6 +75,16 @@ Conventions live in CLAUDE.md.
      a test seam; smoke26 never touches the real API.
      ⚠️ Not yet verified against live Twilio — see DEPLOY.md for the trial
      -account and KZ sender-ID caveats.
+   - ~~**Telegram**~~ — ✅ L26. `server/src/telegram.js`: long-polled Bot
+     API (no webhook, so it works in dev too), a nonce-carrying deep link,
+     and verification by Telegram's own contact sharing — Telegram reports
+     the number it has already verified and the account is verified only if
+     it matches, so no code is sent or typed at all. A forwarded contact
+     cannot verify anyone (`contact.user_id` must equal `from.id`). Once
+     linked, later codes go to the chat instead of SMS. Needed because KZ
+     carriers demand a registered sender ID and refuse long codes — Twilio
+     refused a UK test number outright.
+     ⚠️ Verified against a stub only; not yet run against a real bot.
    - **Passkeys / TOTP / recovery codes** — still open, and all free: no
      provider needed. Recovery codes first (they make the other two safe to
      rely on), then TOTP (RFC 6238, ~40 lines on node:crypto), then

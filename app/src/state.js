@@ -22,7 +22,7 @@ export function AuthProvider({ children }) {
   const [counterpart, setCounterpart] = useState(null);
   const [driverLoc, setDriverLoc] = useState(null);
   const [pendingRating, setPendingRating] = useState(null); // { ride, counterpart: {id, name} }
-  const [pendingVerification, setPendingVerification] = useState(null); // { phone, devCode }
+  const [pendingVerification, setPendingVerification] = useState(null); // { phone, devCode, telegram }
   const [langPref, setLangPref] = useState('auto'); // 'auto' | 'en' | 'ru'
   const [lang, setLangState] = useState('ru');
   const [wsConnected, setWsConnected] = useState(false);
@@ -270,7 +270,7 @@ export function AuthProvider({ children }) {
       async register(phone, password, name) {
         const data = await api('POST', '/api/register', { phone, password, name });
         if (data.needsVerification) {
-          setPendingVerification({ phone: data.phone, devCode: data.devCode || null });
+          setPendingVerification({ phone: data.phone, devCode: data.devCode || null, telegram: !!data.telegram });
         }
       },
 
@@ -282,7 +282,7 @@ export function AuthProvider({ children }) {
           setToken(data.token);
         } catch (e) {
           if (e.data && e.data.needsVerification) {
-            setPendingVerification({ phone: e.data.phone, devCode: e.data.devCode || null });
+            setPendingVerification({ phone: e.data.phone, devCode: e.data.devCode || null, telegram: !!e.data.telegram });
             return;
           }
           throw e;
@@ -313,10 +313,28 @@ export function AuthProvider({ children }) {
         setToken(data.token);
       },
 
+      // Telegram verification: ask for a deep link, then poll until the bot
+      // has confirmed the number with Telegram. No code is ever typed.
+      async startTelegramLink() {
+        if (!pendingVerification) return null;
+        return api('POST', '/api/telegram/link', { phone: pendingVerification.phone });
+      },
+
+      async pollTelegramLink(nonce) {
+        const data = await api('GET', `/api/telegram/link/${encodeURIComponent(nonce)}`);
+        if (data.status === 'verified' && data.token) {
+          await AsyncStorage.setItem(TOKEN_KEY, data.token);
+          setPendingVerification(null);
+          setMe(data.user);
+          setToken(data.token);
+        }
+        return data.status;
+      },
+
       async resendCode() {
         if (!pendingVerification) return;
         const data = await api('POST', '/api/resend', { phone: pendingVerification.phone });
-        setPendingVerification({ phone: data.phone, devCode: data.devCode || null });
+        setPendingVerification({ phone: data.phone, devCode: data.devCode || null, telegram: !!data.telegram });
       },
 
       cancelVerification() {

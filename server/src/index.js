@@ -15,6 +15,7 @@ import { initPush } from './push.js';
 import { verifyToken } from './auth.js';
 import { otpModeBanner } from './otp.js';
 import { smsBanner } from './sms.js';
+import { initTelegram, telegramBanner } from './telegram.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -35,6 +36,8 @@ const hub = new Hub(store);
 setupRides({ store, hub });
 setupSchedules({ store, hub });
 const api = createApi({ store, secret, hub, serveStatic: createStatic(WEB_DIR) });
+// Long-polls the Bot API in the background; a bot outage never blocks boot.
+initTelegram({ store, dataDir: DATA_DIR }).catch(() => {});
 
 const server = http.createServer((req, res) => {
   api(req, res).catch((e) => {
@@ -82,5 +85,7 @@ server.listen(PORT, '0.0.0.0', () => {
       : `  Web app: not built yet (cd app && npx expo export -p web)`
   );
   console.log(smsBanner());
+  const tg = telegramBanner();
+  if (tg) console.log(tg);
   console.log(otpModeBanner());
 });

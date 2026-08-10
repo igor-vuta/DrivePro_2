@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { sendSms, verificationText, smsConfigured, smsProvider } from './sms.js';
+import { telegramConfigured, sendTelegramMessage } from './telegram.js';
 
 // Phone verification codes. Delivery lives in sms.js; with no provider
 // configured it degrades to a mock that prints the code to the server log.
@@ -36,9 +37,18 @@ export function generateCode() {
   return String(crypto.randomInt(0, 10000)).padStart(4, '0');
 }
 
-// Throws SmsError if a configured provider refuses the message, so the caller
-// can tell the user instead of leaving them waiting for a code that is never
-// coming. The mock provider never throws.
-export async function sendCode(phone, code) {
-  await sendSms(phone, verificationText(code));
+// Delivers to whichever channel this user actually has. A linked Telegram
+// chat wins over SMS: it is free, instant, and reaches Kazakh numbers that
+// an international long code cannot.
+//
+// Throws if the chosen provider refuses, so the caller can tell the user
+// instead of leaving them waiting for a code that is never coming. The mock
+// provider never throws.
+export async function sendCode(user, code) {
+  if (telegramConfigured() && user && user.telegramChatId) {
+    await sendTelegramMessage(user.telegramChatId, verificationText(code));
+    return 'telegram';
+  }
+  await sendSms(user && user.phone ? user.phone : user, verificationText(code));
+  return smsProvider();
 }

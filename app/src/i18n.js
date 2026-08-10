@@ -71,6 +71,9 @@ const en = {
   'verify.devCode': 'Dev code: {code}',
   'verify.vCode': 'Enter the 4-digit code.',
   'verify.changePhone': 'Use a different phone',
+  'verify.tgButton': 'Verify with Telegram instead',
+  'verify.tgWaiting': 'Waiting for Telegram…',
+  'verify.tgMismatch': 'That Telegram account has a different phone number.',
 
   // home
   'home.connected': 'Connected ({host})',
@@ -385,6 +388,8 @@ const en = {
   'err.banned': 'This account is suspended.',
   'err.rate_limited': 'Too many attempts. Try again later.',
   'err.sms_failed': 'Could not send the code. Try again in a moment.',
+  'err.telegram_unavailable': 'Telegram is not available right now.',
+  'err.link_expired': 'This link has expired. Try again.',
   'err.code_locked': 'Too many wrong codes. Request a new one.',
   'err.network': "Can't reach the server at {url}. Is it running?",
 };
@@ -445,6 +450,9 @@ const ru = {
   'verify.devCode': 'Код (dev): {code}',
   'verify.vCode': 'Введите код из 4 цифр.',
   'verify.changePhone': 'Другой номер телефона',
+  'verify.tgButton': 'Подтвердить через Telegram',
+  'verify.tgWaiting': 'Ждём Telegram…',
+  'verify.tgMismatch': 'У этого аккаунта Telegram другой номер телефона.',
 
   'home.connected': 'В сети ({host})',
   'home.connecting': 'Подключение к {host}…',
@@ -759,6 +767,8 @@ const ru = {
   'err.banned': 'Этот аккаунт заблокирован.',
   'err.rate_limited': 'Слишком много попыток. Попробуйте позже.',
   'err.sms_failed': 'Не удалось отправить код. Попробуйте ещё раз.',
+  'err.telegram_unavailable': 'Telegram сейчас недоступен.',
+  'err.link_expired': 'Ссылка устарела. Попробуйте ещё раз.',
   'err.code_locked': 'Слишком много неверных кодов. Запросите новый.',
   'err.network': 'Не удаётся связаться с сервером {url}. Он запущен?',
 };
@@ -824,6 +834,9 @@ const kk = {
   'verify.devCode': 'Код (dev): {code}',
   'verify.vCode': '4 саннан тұратын кодты енгізіңіз.',
   'verify.changePhone': 'Басқа телефон нөмірі',
+  'verify.tgButton': 'Telegram арқылы растау',
+  'verify.tgWaiting': 'Telegram күтілуде…',
+  'verify.tgMismatch': 'Бұл Telegram аккаунтының телефон нөмірі басқа.',
 
   // home
   'home.connected': 'Желіде ({host})',
@@ -1126,6 +1139,8 @@ const kk = {
   'err.banned': 'Бұл аккаунт бұғатталған.',
   'err.rate_limited': 'Тым көп әрекет. Кейінірек қайталаңыз.',
   'err.sms_failed': 'Кодты жіберу мүмкін болмады. Сәл кейін қайталаңыз.',
+  'err.telegram_unavailable': 'Telegram қазір қолжетімсіз.',
+  'err.link_expired': 'Сілтеме ескірген. Қайталап көріңіз.',
   'err.code_locked': 'Тым көп қате код. Жаңасын сұратыңыз.',
   'err.network': '{url} серверімен байланысу мүмкін емес. Ол қосулы ма?',
 };

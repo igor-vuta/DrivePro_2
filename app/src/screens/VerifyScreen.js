@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Linking, Platform, ScrollView } from 'react-native';
 import { Screen, Title, Sub, Card, Input, Button, ErrorText } from '../ui';
 import { useAuth } from '../state';
 import { t, errMsg } from '../i18n';
@@ -7,11 +7,16 @@ import { t, errMsg } from '../i18n';
 const RESEND_SECONDS = 30;
 
 export default function VerifyScreen() {
-  const { pendingVerification, verifyPhone, resendCode, cancelVerification } = useAuth();
+  const { pendingVerification, verifyPhone, resendCode, cancelVerification, startTelegramLink, pollTelegramLink } = useAuth();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(RESEND_SECONDS);
+  const [tgState, setTgState] = useState('idle'); // idle | waiting | mismatch
+  const pollRef = useRef(null);
+
+  // Stop polling if the user leaves this screen.
+  useEffect(() => () => clearInterval(pollRef.current), []);
 
   useEffect(() => {
     setCooldown(RESEND_SECONDS);
@@ -34,6 +39,37 @@ export default function VerifyScreen() {
       setError(errMsg(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Opens the bot and waits for it to confirm the number with Telegram. The
+  // account is verified without any code being typed, so success here signs
+  // the user straight in - pollTelegramLink stores the session.
+  const viaTelegram = async () => {
+    setError('');
+    try {
+      const { nonce, url } = await startTelegramLink();
+      if (!url) return;
+      setTgState('waiting');
+      await Linking.openURL(url);
+      clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        try {
+          const status = await pollTelegramLink(nonce);
+          if (status === 'mismatch') {
+            clearInterval(pollRef.current);
+            setTgState('idle');
+            setError(t('verify.tgMismatch'));
+          }
+        } catch (e) {
+          clearInterval(pollRef.current);
+          setTgState('idle');
+          setError(errMsg(e));
+        }
+      }, 2000);
+    } catch (e) {
+      setTgState('idle');
+      setError(errMsg(e));
     }
   };
 
@@ -76,6 +112,15 @@ export default function VerifyScreen() {
               disabled={cooldown > 0}
               style={{ marginTop: 8 }}
             />
+            {pendingVerification.telegram ? (
+              <Button
+                kind="ghost"
+                title={tgState === 'waiting' ? t('verify.tgWaiting') : t('verify.tgButton')}
+                onPress={viaTelegram}
+                disabled={tgState === 'waiting'}
+                style={{ marginTop: 8 }}
+              />
+            ) : null}
             <Button kind="ghost" title={t('verify.changePhone')} onPress={cancelVerification} style={{ marginTop: 4 }} />
           </Card>
         </ScrollView>

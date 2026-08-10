@@ -7,6 +7,9 @@ import { publicUser, rideCounterpart, directoryUser } from './views.js';
 import { reverseGeocode, searchAddress, route as geoRoute } from './geo.js';
 import { generateCode, sendCode, OTP_TTL_MS, OTP_RESEND_COOLDOWN_MS, OTP_ECHO } from './otp.js';
 import { vapidPublicKey } from './push.js';
+import {
+  telegramConfigured, telegramBotUsername, createLinkRequest, readLinkRequest, deepLink,
+} from './telegram.js';
 
 const MAX_AVATAR_CHARS = 400_000; // ~300 KB of base64 image data
 const OTP_MAX_ATTEMPTS = 5;
@@ -79,7 +82,14 @@ export function createApi({ store, secret, hub, serveStatic }) {
   // ----------------------------------------------------------- routes ---
 
   route('GET', '/api/health', async (req, res) => {
-    sendJson(res, 200, { ok: true, name: 'DrivePro', storage: store.backendName, time: Date.now() });
+    sendJson(res, 200, {
+      ok: true,
+      name: 'DrivePro',
+      storage: store.backendName,
+      // The app hides the Telegram option unless the bot is actually up.
+      telegram: Boolean(telegramConfigured() && telegramBotUsername()),
+      time: Date.now(),
+    });
   });
 
   // Awaits delivery: if the provider refuses, the caller must hear about it
@@ -94,7 +104,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const code = generateCode();
     store.updateUser(user.id, { otpCode: code, otpExpires: Date.now() + OTP_TTL_MS, otpAttempts: 0 });
     try {
-      await sendCode(user.phone, code);
+      await sendCode(user, code);
     } catch (e) {
       console.error(`[sms] delivery failed for ${user.phone}:`, e.message);
       throw httpError(502, 'Could not send the code. Try again in a moment.', 'sms_failed');
@@ -133,10 +143,15 @@ export function createApi({ store, secret, hub, serveStatic }) {
     }
   };
 
+  const telegramReady = () => Boolean(telegramConfigured() && telegramBotUsername());
+
   const verificationResponse = (res, status, user, code) => {
     sendJson(res, status, {
       needsVerification: true,
       phone: user.phone,
+      // Lets the app offer "verify with Telegram" instead of waiting for an
+      // SMS that may never arrive.
+      telegram: telegramReady(),
       // Only present with a mock provider in dev - see otp.js. Never set
       // once real SMS is configured.
       ...(OTP_ECHO ? { devCode: code } : {}),
@@ -162,7 +177,15 @@ export function createApi({ store, secret, hub, serveStatic }) {
     } else {
       user = store.createUser({ phone, passwordHash: hashPassword(password), name, verified: false });
     }
-    const code = await issueOtp(user);
+    // A failed SMS is not fatal while Telegram can still verify them: the
+    // account exists, and the app will offer the other channel. Without that
+    // fallback the signup must fail loudly rather than strand the user.
+    let code = null;
+    try {
+      code = await issueOtp(user);
+    } catch (e) {
+      if (!telegramReady()) throw e;
+    }
     verificationResponse(res, 201, user, code);
   });
 
@@ -256,6 +279,42 @@ export function createApi({ store, secret, hub, serveStatic }) {
       otpAttempts: 0,
     });
     sendJson(res, 200, sessionPayload(store.getUser(user.id)));
+  });
+
+  // ------------------------------------------------------------ telegram ---
+  //
+  // Verification without SMS: the app opens a deep link carrying a one-time
+  // nonce, the user presses Start, and the bot asks Telegram itself for their
+  // phone number. Telegram vouching for the number is what the SMS code was
+  // for, so a match verifies the account outright - no code is ever typed.
+  //
+  // The client is not authenticated yet (there is no session until the
+  // account is verified), so it polls with the nonce it was given.
+  route('POST', '/api/telegram/link', async (req, res) => {
+    rateLimit(req, 'tg_link', 20);
+    if (!telegramConfigured() || !telegramBotUsername()) {
+      throw httpError(503, 'Telegram is not available.', 'telegram_unavailable');
+    }
+    const body = await readJson(req);
+    const phone = normPhone(body.phone);
+    const user = phone ? store.findUserByPhone(phone) : null;
+    if (!user) throw httpError(404, 'No account with this phone number.', 'no_account');
+    if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
+    const nonce = createLinkRequest(user);
+    sendJson(res, 200, { nonce, url: deepLink(nonce), bot: telegramBotUsername() });
+  });
+
+  route('GET', '/api/telegram/link/:nonce', async (req, res, params) => {
+    rateLimit(req, 'tg_poll', 300);
+    const rec = readLinkRequest(params.nonce);
+    if (!rec) throw httpError(404, 'This link has expired. Try again.', 'link_expired');
+    if (rec.status !== 'verified') {
+      sendJson(res, 200, { status: rec.status });
+      return;
+    }
+    const user = store.getUser(rec.userId);
+    if (!user) throw httpError(404, 'No account with this phone number.', 'no_account');
+    sendJson(res, 200, { status: 'verified', ...sessionPayload(user) });
   });
 
   route('GET', '/api/me', async (req, res) => {

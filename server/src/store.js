@@ -51,6 +51,7 @@ class SqliteBackend {
         streak_days INTEGER DEFAULT 0,
         streak_best INTEGER DEFAULT 0,
         last_ride_day TEXT,
+        telegram_chat_id TEXT,
         crew_id TEXT,
         crew_joined_at INTEGER
       );
@@ -192,6 +193,7 @@ class SqliteBackend {
       ['streak_days', 'INTEGER DEFAULT 0'],
       ['streak_best', 'INTEGER DEFAULT 0'],
       ['last_ride_day', 'TEXT'],
+      ['telegram_chat_id', 'TEXT'],
       ['crew_id', 'TEXT'],
       ['crew_joined_at', 'INTEGER'],
     ]);
@@ -226,7 +228,7 @@ class SqliteBackend {
       name: 'name', verified: 'verified', otpCode: 'otp_code', otpExpires: 'otp_expires',
       otpSentAt: 'otp_sent_at', avatar: 'avatar', about: 'about', email: 'email', city: 'city', places: 'places',
       otpAttempts: 'otp_attempts', banned: 'banned', crewId: 'crew_id', crewJoinedAt: 'crew_joined_at',
-      passwordHash: 'password_hash',
+      passwordHash: 'password_hash', telegramChatId: 'telegram_chat_id',
     };
     const cols = [];
     const vals = [];
@@ -555,6 +557,7 @@ function rowToUser(row) {
     city: row.city ?? null,
     points: row.points != null ? Number(row.points) : 0,
     otpAttempts: row.otp_attempts != null ? Number(row.otp_attempts) : 0,
+    telegramChatId: row.telegram_chat_id ?? null,
     banned: !!row.banned,
     streakDays: row.streak_days != null ? Number(row.streak_days) : 0,
     streakBest: row.streak_best != null ? Number(row.streak_best) : 0,
@@ -664,7 +667,7 @@ class JsonBackend {
   updateUserFields(uid, patch) {
     const u = this.userById(uid);
     if (u) {
-      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places', 'otpAttempts', 'banned', 'crewId', 'crewJoinedAt', 'passwordHash'];
+      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places', 'otpAttempts', 'banned', 'crewId', 'crewJoinedAt', 'passwordHash', 'telegramChatId'];
       for (const k of allowed) {
         if (k in patch) u[k] = patch[k];
       }

@@ -58,7 +58,7 @@ same process. HTTPS is what makes *Add to Home Screen* and web push work.
 | Caddy logs      | `journalctl -u caddy -f`                                   |
 | Restart         | `sudo systemctl restart drivepro`                          |
 | Admin token     | `sudo grep ADMIN_TOKEN /etc/drivepro.env` → open `/admin`  |
-| SMS / OTP mode  | `journalctl -u drivepro -n 30 \| grep -E 'SMS\|OTP'`        |
+| SMS / OTP mode  | `journalctl -u drivepro -n 30 \| grep -E 'SMS\|OTP\|Telegram'` |
 | Backup data     | `sudo tar czf drivepro-data.tgz -C /opt/drivepro data`     |
 
 All state (SQLite DB, JWT secret, VAPID push keys) lives in
@@ -116,6 +116,39 @@ Two Twilio facts that bite in Kazakhstan:
 - KZ operators generally require a **registered alphanumeric sender ID**
   for A2P traffic. Without it, delivery to `+7 7…` numbers may be silently
   dropped by the carrier even though Twilio accepts the message.
+
+### Telegram (recommended for Kazakhstan)
+
+Kazakh carriers require a pre-registered alphanumeric sender ID for A2P SMS,
+and refuse international long codes outright — so SMS may never reach your
+users. A Telegram bot needs no approval from anyone and reaches the same
+people. Setup is two minutes:
+
+1. Open Telegram, message **@BotFather**, send `/newbot`, pick a display
+   name and a username ending in `bot`.
+2. It replies with a token like `8123456:AAE…`. Put it on the VM:
+
+```bash
+sudo tee -a /etc/drivepro.env >/dev/null <<'EOF'
+TELEGRAM_BOT_TOKEN=8123456:AAE...
+EOF
+sudo systemctl restart drivepro
+journalctl -u drivepro -n 20 | grep Telegram
+```
+
+You should see `Telegram: bot @YourBotName`. The app then offers
+**“Verify with Telegram instead”** on the verification screen.
+
+How it verifies: the app opens `t.me/<bot>?start=<nonce>`, the user presses
+Start, and the bot asks for their contact. Telegram returns the phone number
+**it** has already verified; if that matches the number typed into the app,
+the account is verified with no code ever being sent or entered. Sharing
+somebody else's contact card does not work — Telegram only reports its own
+`user_id` when a user shares themselves, and the server checks that.
+
+Once linked, later codes (password reset) go to the Telegram chat instead of
+SMS. Nothing is required in the Caddyfile: the bot uses long polling, not a
+webhook.
 
 `deploy/update.sh` backfills `NODE_ENV` and `OTP_ECHO` into an existing
 `/etc/drivepro.env` (setup-oci.sh only writes that file when it is absent,
