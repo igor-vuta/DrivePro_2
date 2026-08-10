@@ -296,26 +296,11 @@ export function Avatar({ user, size = 44, style }) {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  screenInner: {
-    flex: 1,
-    paddingHorizontal: SCREEN_PAD,
-    paddingTop: 8,
-    // On iOS native, SafeAreaView already handles the notch and the home
-    // indicator. On web it is an ordinary View, so the insets have to come
-    // from CSS - env() is a raw value react-native-web passes straight
-    // through, and it resolves to 0px anywhere without a cutout.
-    //
-    // The root is position:fixed;inset:0, so in a standalone PWA it covers
-    // the status bar too; without the top inset the first row would sit
-    // under the clock. Vertical only: the horizontal padding is what Bleed
-    // cancels with -SCREEN_PAD, and a dynamic value would stop matching.
-    ...(WEB
-      ? {
-          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)',
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        }
-      : {}),
-  },
+  // No safe-area padding here: SafeAreaView (the Screen wrapper) already
+  // applies env(safe-area-inset-*) on all four sides in react-native-web.
+  // Adding it again doubled the notch and home-indicator gaps on iOS, which
+  // is what the "strange margins top and bottom" turned out to be.
+  screenInner: { flex: 1, paddingHorizontal: SCREEN_PAD, paddingTop: 8 },
   title: { fontSize: 26, fontWeight: '800', letterSpacing: 0.4, color: colors.text, marginBottom: 4 },
   titleGlow: {
     color: '#dffbff',

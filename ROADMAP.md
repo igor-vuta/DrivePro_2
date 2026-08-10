@@ -19,7 +19,53 @@ Conventions live in CLAUDE.md.
 | ~~L25~~ | ~~4a real SMS via Twilio~~ | ✅ shipped — credentials go in `/etc/drivepro.env`, never the repo |
 | — | 2 native builds (Android APK / iOS TestFlight) | **deferred**: staying a PWA while it is a demo |
 | ~~L26~~ | ~~4c Telegram verification + delivery~~ | ✅ shipped — free, no approvals, works where KZ SMS does not |
-| L27 | 4b passkeys, TOTP, recovery codes | free, no provider — the remaining auth hardening |
+| L27 | TOTP authenticator (auth step 1) | free, no provider |
+| L28 | Passkeys / WebAuthn (auth step 2) | free, no provider |
+| L29 | Self-hosted OSRM: car + foot + bike | needed before walk/cycle routing can be real |
+| L30 | Design system: new palette, light+dark, airier spacing, brand assets | |
+| L31 | Map-first restructure | the map becomes the app |
+
+## Agreed direction (decided with Igor, before the redesign)
+
+**Auth — phone stays mandatory.** A verified phone is the identity anchor:
+it is what ties an account to a real person, which matters when the app puts
+strangers in the same car. TOTP and passkeys are *optional* conveniences for
+fast login and never replace it. Because every account therefore has a
+working Telegram channel, **phone re-verification is the recovery path** —
+no recovery codes are needed. Recovering this way clears any TOTP secret and
+registered passkeys.
+
+**Routing — self-hosted OSRM on the Oracle VM** with car, foot and bike
+profiles from a Kazakhstan extract. No API key, no quota, no third party,
+and it is what makes walk/cycle routing real rather than estimated.
+
+**Design**
+- Palette (Coolors `003943606992174098`): `008FD2` primary · `FFEF01`
+  points/accent · `E83379` stop/destination · `44546C` slate ·
+  `009744` go/pickup · `FFFEFF` white.
+- **Light and dark, following the system.** Light: `FFFEFF` ground,
+  `44546C` text. Dark: `2C3542` ground, `FFFEFF` text, `44546C` cards.
+- **Soft depth, not neon**: shadows in light with no glow (glow on white
+  reads as blur), restrained glow on primary actions in dark only.
+- **Airier**: screen/card padding 16→20, card gap 12→16, input 48→52,
+  button 50→54, radius 14/18→16/20, 1.45 line-height on body.
+- Brand assets (icon, splash, theme-color, wordmark) redone in the palette —
+  otherwise the home-screen icon stays cyberpunk while the app is not.
+
+**Map-first** — the map *is* the app. You land on a full-screen map with one
+“Where to?” bar; Ride/Drive stop being top-level. Pick a destination, then
+choose how: walk, cycle, drive yourself, or ask for a shared ride. Everything
+else (Drive mode, schedules, crew, history, settings) lives behind the
+floating avatar, so nothing covers the map.
+
+~~**Open bug** — iOS standalone PWA margins~~ — ✅ fixed. Root cause:
+react-native-web's `SafeAreaView` **already** applies
+`env(safe-area-inset-*)` on all four sides (see
+`react-native-web/dist/exports/SafeAreaView/index.js`). L19 added the same
+insets again inside `Screen`, on the mistaken assumption that SafeAreaView
+was inert on web — so every screen padded the notch and the home indicator
+**twice**. Removing the duplicate leaves exactly one source of truth;
+`smoke21` now fails if it is ever re-applied.
 
 ## A. Language & identity
 

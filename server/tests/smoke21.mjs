@@ -109,11 +109,19 @@ check('the server serves the built index.html', served.includes('position:fixed'
 const bundleRes = await fetch(`http://localhost:${PORT}/_expo/static/js/web/${bundles[0]}`);
 check('the bundle it references is actually served', bundleRes.status === 200, String(bundleRes.status));
 
-// The root now covers the status bar in a standalone PWA, so the first row of
-// every screen needs the top inset or it renders under the clock.
+// Safe-area padding must come from exactly one place. react-native-web's
+// SafeAreaView already applies env(safe-area-inset-*) on all four sides, so
+// adding it again inside Screen doubled the notch and home-indicator gaps on
+// iOS - which is what the reported "margins top and bottom" actually were.
 const ui = fs.readFileSync(path.join(REPO, 'app', 'src', 'ui.js'), 'utf8');
-check('screens pad for the top cutout on web', /paddingTop: 'calc\(env\(safe-area-inset-top, 0px\) \+ 8px\)'/.test(ui));
-check('screens pad for the home indicator on web', /paddingBottom: 'env\(safe-area-inset-bottom, 0px\)'/.test(ui));
+check('Screen is a SafeAreaView', /<SafeAreaView style=\{\[s\.screen, style\]\}>/.test(ui));
+// Match a style declaration, not the comment explaining why there isn't one.
+const doubled = ui.match(/padding[A-Za-z]*:\s*'[^']*safe-area-inset[^']*'/g) || [];
+check(
+  'the inset is not applied a second time inside it',
+  doubled.length === 0,
+  `ui.js re-applies it: ${doubled.join(', ')}`
+);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 cleanup();
