@@ -87,9 +87,21 @@ phone proven by Telegram's contact sharing; also delivers codes once linked) ·
 L27 TOTP (`server/src/totp.js`, RFC 4226/6238, zero deps; optional second
 factor — the verified phone stays identity and recovery, and a password reset
 over it clears the secret) · L28 passkeys (`server/src/webauthn.js`, own CBOR
-+ COSE + signature verification, zero deps; `rpId` from `PUBLIC_ORIGIN`) · L33 security audit fixes (XFF trusted only from
++ COSE + signature verification, zero deps; `rpId` from `PUBLIC_ORIGIN`) · L29 design system (Almaty palette, light+dark,
+airier spacing) · L31 multi-profile routing (`geo.js` car/foot/bike, OSRM
+profiles + FOSSGIS fallback; `deploy/setup-osrm.sh` self-hosts, run attended) ·
+L30 + L33 security audit fixes (XFF trusted only from
 `TRUSTED_PROXIES`; ban/reset evict live sockets + bump `token_epoch`; per-frame
 WS re-auth; opaque map-driver ids; push-sub ownership; TOTP matched-step burn;
-geo/push/passkey rate limits; sanitized 500/WS errors; uniform reset/request).
+geo/push/passkey rate limits; sanitized 500/WS errors; uniform reset/request) ·
+map-first, in two commits: the ride flow (`landing → mode → pickup → confirm`;
+`loadModeRoutes` fetches all three profiles at once; `goTo()` moves map and
+`center` state together so a named pick cannot be confirmed against the old
+point) and L34 the shell (chrome floats over the map, avatar sheet replaces the
+Ride/Drive tab bar, `CHROME_H` reserved at the top and given back by
+`<Bleed top>` in full-screen-map states).
+
+Layer numbering slipped once: the ride-flow commit is labelled **L32** but
+lands after L33. Next free number is **L35**.
 
 Remaining work and its running order live in `ROADMAP.md`.

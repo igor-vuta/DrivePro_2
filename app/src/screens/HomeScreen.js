@@ -130,7 +130,11 @@ export default function HomeScreen({ openProfile, openHistory }) {
           pointerEvents="box-none"
           style={{ position: 'absolute', top: 0, left: -SCREEN_PAD, right: -SCREEN_PAD, paddingHorizontal: SCREEN_PAD }}
         >
-          <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          {/* box-none has to be repeated here: react-native-web turns it into
+              `pointer-events:none` on the element plus `& > * {auto}`, so a
+              single full-width child would re-arm the whole strip and swallow
+              map drags in the gaps between the pill and the avatar. */}
+          <Row pointerEvents="box-none" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <CityStrip impact={cityImpact} connected={wsConnected} />
             <Row style={{ marginLeft: 8 }}>
               <FlamePill days={me ? me.streakDays : 0} />

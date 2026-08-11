@@ -23,7 +23,13 @@ Conventions live in CLAUDE.md.
 | ~~L28~~ | ~~Passkeys / WebAuthn (auth step 2)~~ | ✅ shipped — zero deps, verified with a virtual authenticator |
 | ~~L31~~ | ~~Multi-profile routing car/foot/bike~~ | ✅ shipped — FOSSGIS fallback works now; `setup-osrm.sh` for self-host (run attended) |
 | ~~L29~~ | ~~Design system: palette, light+dark, airier spacing, brand~~ | ✅ shipped |
-| L32 | Map-first restructure | the map becomes the app |
+| ~~L30, L33~~ | ~~Security hardening + multi-agent audit (18 findings)~~ | ✅ shipped — `smoke32` pins each fix |
+| ~~L32*~~ | ~~Map-first ride flow: destination → walk/cycle/drive → shared ride~~ | ✅ shipped |
+| ~~L34~~ | ~~Map-first shell: floating chrome, avatar sheet, no tab bar~~ | ✅ shipped |
+
+\* misnumbered — that commit lands *after* L33 and is really L34's
+predecessor. Left alone rather than rewriting pushed history; the next free
+number is **L35**.
 
 ## Agreed direction (decided with Igor, before the redesign)
 
@@ -52,11 +58,23 @@ and it is what makes walk/cycle routing real rather than estimated.
 - Brand assets (icon, splash, theme-color, wordmark) redone in the palette —
   otherwise the home-screen icon stays cyberpunk while the app is not.
 
-**Map-first** — the map *is* the app. You land on a full-screen map with one
-“Where to?” bar; Ride/Drive stop being top-level. Pick a destination, then
-choose how: walk, cycle, drive yourself, or ask for a shared ride. Everything
-else (Drive mode, schedules, crew, history, settings) lives behind the
-floating avatar, so nothing covers the map.
+~~**Map-first** — the map *is* the app.~~ — ✅ shipped across two layers.
+You land on a full-screen map with one “Where to?” bar; Ride/Drive are no
+longer top-level. Pick a destination, then choose how: walk, cycle or drive
+(real per-profile OSRM routes, drawn as you switch), or ask for a shared
+ride — which drops into the unchanged pickup → confirm → request path.
+Everything else lives behind the floating avatar.
+
+Still open here:
+- **Schedules are not in the avatar sheet.** Saved commutes still render on
+  the ride landing step, where they already lived; the sheet links to
+  profile/crew/history/language instead. Worth a proper screen.
+- **Crew opens the profile screen** rather than scrolling to the crew card —
+  there is no scroll-to-section, so the row lands on the page that holds it.
+- **The online-driver map was not visually confirmed** after the chrome
+  change: going online requires location permission, which the browser
+  session had refused. It uses the same `<Bleed top>` that was verified on
+  the rider map, but a driver should eyeball it once.
 
 ~~**Open bug** — iOS standalone PWA margins~~ — ✅ fixed. Root cause:
 react-native-web's `SafeAreaView` **already** applies

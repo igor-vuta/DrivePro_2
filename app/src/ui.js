@@ -253,8 +253,12 @@ export function StatusDot({ on, labelOn, labelOff }) {
   );
 }
 
-export function Row({ children, style }) {
-  return <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>{children}</View>;
+export function Row({ children, style, ...rest }) {
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]} {...rest}>
+      {children}
+    </View>
+  );
 }
 
 // Round profile picture with an initial-letter fallback and a neon ring.

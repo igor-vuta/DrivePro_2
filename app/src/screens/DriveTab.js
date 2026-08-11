@@ -6,7 +6,7 @@ import {
 import { notify, confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
-import { Card, Button, Sub, StatusDot, Row, Avatar, Input, Segmented, FadeIn, Pop, Chip, Bleed, SCREEN_PAD, colors } from '../ui';
+import { Card, Button, Sub, StatusDot, Row, Avatar, Input, Segmented, FadeIn, Pop, Chip, Bleed, SCREEN_PAD, CHROME_H, colors } from '../ui';
 import { useAuth } from '../state';
 import { api } from '../api';
 import { wsClient } from '../ws';
@@ -94,7 +94,9 @@ const makeSt = () =>
   StyleSheet.create({
   topChips: {
     position: 'absolute',
-    top: 10,
+    // The online map bleeds under the home screen's floating chrome, so the
+    // driver's controls start below it rather than under the avatar.
+    top: CHROME_H + 10,
     left: SCREEN_PAD,
     right: SCREEN_PAD,
     flexDirection: 'row',
