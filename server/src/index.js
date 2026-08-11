@@ -59,7 +59,9 @@ server.on('upgrade', (req, socket, head) => {
   }
   const payload = verifyToken(url.searchParams.get('token') || '', secret);
   const user = payload ? store.getUser(payload.uid) : null;
-  if (!user) {
+  // Same epoch rule as the HTTP side: a session evicted by a password reset
+  // must not keep a live websocket either.
+  if (!user || (payload.sep || 0) !== (user.tokenEpoch || 0)) {
     socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
     socket.destroy();
     return;

@@ -55,6 +55,7 @@ class SqliteBackend {
         totp_secret TEXT,
         totp_enabled INTEGER DEFAULT 0,
         totp_last_step INTEGER,
+        token_epoch INTEGER DEFAULT 0,
         crew_id TEXT,
         crew_joined_at INTEGER
       );
@@ -211,6 +212,7 @@ class SqliteBackend {
       ['totp_secret', 'TEXT'],
       ['totp_enabled', 'INTEGER DEFAULT 0'],
       ['totp_last_step', 'INTEGER'],
+      ['token_epoch', 'INTEGER DEFAULT 0'],
       ['crew_id', 'TEXT'],
       ['crew_joined_at', 'INTEGER'],
     ]);
@@ -247,6 +249,7 @@ class SqliteBackend {
       otpAttempts: 'otp_attempts', banned: 'banned', crewId: 'crew_id', crewJoinedAt: 'crew_joined_at',
       passwordHash: 'password_hash', telegramChatId: 'telegram_chat_id',
       totpSecret: 'totp_secret', totpEnabled: 'totp_enabled', totpLastStep: 'totp_last_step',
+      tokenEpoch: 'token_epoch',
     };
     const cols = [];
     const vals = [];
@@ -615,6 +618,7 @@ function rowToUser(row) {
     totpSecret: row.totp_secret ?? null,
     totpEnabled: !!row.totp_enabled,
     totpLastStep: row.totp_last_step == null ? null : Number(row.totp_last_step),
+    tokenEpoch: row.token_epoch == null ? 0 : Number(row.token_epoch),
     banned: !!row.banned,
     streakDays: row.streak_days != null ? Number(row.streak_days) : 0,
     streakBest: row.streak_best != null ? Number(row.streak_best) : 0,
@@ -724,7 +728,7 @@ class JsonBackend {
   updateUserFields(uid, patch) {
     const u = this.userById(uid);
     if (u) {
-      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places', 'otpAttempts', 'banned', 'crewId', 'crewJoinedAt', 'passwordHash', 'telegramChatId', 'totpSecret', 'totpEnabled', 'totpLastStep'];
+      const allowed = ['name', 'verified', 'otpCode', 'otpExpires', 'otpSentAt', 'avatar', 'about', 'email', 'city', 'places', 'otpAttempts', 'banned', 'crewId', 'crewJoinedAt', 'passwordHash', 'telegramChatId', 'totpSecret', 'totpEnabled', 'totpLastStep', 'tokenEpoch'];
       for (const k of allowed) {
         if (k in patch) u[k] = patch[k];
       }

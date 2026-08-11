@@ -126,7 +126,14 @@ try {
   scriptError = e.message;
 }
 check('served admin script parses', scriptError === null, scriptError || '');
-check('ban() handler quotes its argument', /onclick="ban\(&quot;'\+u\.id\+'&quot;,/.test(script));
+check('ban() handler quotes and escapes its argument', /onclick="ban\(&quot;'\+esc\(u\.id\)\+'&quot;,/.test(script));
+// Every user-controlled field must pass through esc() before innerHTML -
+// names and report reasons are typed by users, and the operator's browser
+// holds the admin token.
+for (const field of ['u.name', 'u.phone', 'r.reporter', 'r.reported', 'r.reason']) {
+  check(`${field} is escaped`, script.includes(`esc(${field})`), `bare ${field} interpolation`);
+}
+check('no unescaped name interpolation remains', !script.includes("'+u.name+'") && !script.includes("'+r.reason+'"));
 
 const badTok = await adm.api('GET', '/api/admin/overview', null, { 'x-admin-token': 'nope' });
 check('overview rejects a wrong token with 401', badTok.status === 401, String(badTok.status));

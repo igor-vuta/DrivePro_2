@@ -2,6 +2,7 @@ import {
   readJson, sendJson, httpError, normPhone, cleanStr, isLat, isLng, isValidEmail,
   passwordProblem, PASSWORD_MIN,
 } from './util.js';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { hashPassword, verifyPassword, signToken, verifyToken } from './auth.js';
 import { publicUser, rideCounterpart, directoryUser } from './views.js';
 import { reverseGeocode, searchAddress, route as geoRoute } from './geo.js';
@@ -69,17 +70,26 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const payload = token ? verifyToken(token, secret) : null;
     const user = payload ? store.getUser(payload.uid) : null;
     if (!user) throw httpError(401, 'authentication required');
+    // Issued before the last password reset -> no longer valid.
+    if ((payload.sep || 0) !== (user.tokenEpoch || 0)) throw httpError(401, 'authentication required');
     if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
     return user;
   };
 
+  // Hash both sides to a fixed length first, so neither content nor length
+  // leaks through the comparison's timing.
   const adminAuth = (req) => {
     if (!ADMIN_TOKEN) throw httpError(404, 'not found');
-    if (String(req.headers['x-admin-token'] || '') !== ADMIN_TOKEN) throw httpError(401, 'admin token required');
+    const given = createHash('sha256').update(String(req.headers['x-admin-token'] || '')).digest();
+    const expected = createHash('sha256').update(ADMIN_TOKEN).digest();
+    if (!timingSafeEqual(given, expected)) throw httpError(401, 'admin token required');
   };
 
+  // `sep` is the session epoch: bumping users.token_epoch invalidates every
+  // token issued before the bump - the point being that resetting a
+  // compromised account's password also evicts the attacker's sessions.
   const sessionPayload = (user) => ({
-    token: signToken({ uid: user.id }, secret),
+    token: signToken({ uid: user.id, sep: user.tokenEpoch || 0 }, secret),
     user: publicUser(store, user.id),
   });
 
@@ -298,6 +308,9 @@ export function createApi({ store, secret, hub, serveStatic }) {
       totpSecret: null,
       totpEnabled: false,
       totpLastStep: null,
+      // Every session issued before this reset stops working, including the
+      // one a phone thief may be holding.
+      tokenEpoch: (user.tokenEpoch || 0) + 1,
     });
     store.removeAllPasskeys(user.id);
     sendJson(res, 200, sessionPayload(store.getUser(user.id)));
@@ -389,6 +402,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
       throw httpError(400, 'Could not register this device.', 'passkey_invalid');
     }
     if (store.getPasskey(reg.credentialId)) throw httpError(409, 'This device is already registered.', 'passkey_exists');
+    if (store.listPasskeys(user.id).length >= 10) throw httpError(400, 'Too many passkeys - remove one first.', 'too_many_passkeys');
     store.addPasskey(user.id, { ...reg, label: cleanStr(body.label, 40) || null });
     sendJson(res, 200, { ok: true, credentialId: reg.credentialId });
   });
@@ -1144,6 +1158,11 @@ th{color:#8b96b8;font-weight:600;text-transform:uppercase;font-size:11px}
 <script>
 const tok = () => localStorage.getItem('admtok') || '';
 const err = (m) => { document.getElementById('err').textContent = m || ''; };
+// Everything user-controlled goes through esc() before touching innerHTML:
+// names and report reasons are typed by users, and an operator's browser
+// holds the admin token - a name like <img src=x onerror=...> must render as
+// text, not run.
+const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Submitting the form covers both the button and the Enter key.
 function save(e){ if(e) e.preventDefault(); const v = document.getElementById('tok').value.trim(); if(!v){ err('Enter the admin token.'); return; } localStorage.setItem('admtok', v); load(); }
 async function ban(id, b){ await fetch('/api/admin/users/'+id+'/ban',{method:'POST',headers:{'Content-Type':'application/json','x-admin-token':tok()},body:JSON.stringify({banned:b})}); load(); }
@@ -1157,12 +1176,12 @@ async function load(){
   document.getElementById('panel').style.display='block';
   document.getElementById('stats').textContent = d.totalUsers+' users · '+d.activeRides+' active rides';
   document.getElementById('reps').innerHTML = (d.reports||[]).map(r =>
-    '<tr><td>'+new Date(r.createdAt).toLocaleString()+'</td><td>'+r.reporter+'</td><td class="banned">'+r.reported+'</td><td>'+(r.reason||'')+'</td></tr>'
+    '<tr><td>'+esc(new Date(r.createdAt).toLocaleString())+'</td><td>'+esc(r.reporter)+'</td><td class="banned">'+esc(r.reported)+'</td><td>'+esc(r.reason)+'</td></tr>'
   ).join('') || '<tr><td colspan="4" class="sub">none</td></tr>';
   document.getElementById('rows').innerHTML = d.users.map(u =>
-    '<tr><td>'+u.name+'</td><td>'+u.phone+'</td><td class="badge">'+u.points+'</td><td>'+u.rides+'</td>'+
+    '<tr><td>'+esc(u.name)+'</td><td>'+esc(u.phone)+'</td><td class="badge">'+esc(u.points)+'</td><td>'+esc(u.rides)+'</td>'+
     '<td class="'+(u.banned?'banned':'ok')+'">'+(u.banned?'BANNED':(u.verified?'active':'unverified'))+'</td>'+
-    '<td><button class="ghost" onclick="ban(&quot;'+u.id+'&quot;,'+(!u.banned)+')">'+(u.banned?'Unban':'Ban')+'</button></td></tr>'
+    '<td><button class="ghost" onclick="ban(&quot;'+esc(u.id)+'&quot;,'+(!u.banned)+')">'+(u.banned?'Unban':'Ban')+'</button></td></tr>'
   ).join('');
 }
 load();
