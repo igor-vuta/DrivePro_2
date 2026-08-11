@@ -47,6 +47,19 @@ const catalog = http.createServer((req, res) => {
   seenUrls.push(req.url);
   const u = new URL(req.url, 'http://x');
   res.setHeader('Content-Type', 'application/json');
+  // The live API rejects these, so the stub does too - both were shipped
+  // wrong once because the documentation disagrees with the service.
+  // byid carries no page_size, so only check it when one is sent.
+  const ps = Number(u.searchParams.get('page_size') || '0');
+  if (u.searchParams.has('page_size') && (ps < 1 || ps > 10)) {
+    res.end(JSON.stringify({ meta: { code: 400, error: { message: "Length of parameter 'page_size' should be from 1 to 10" } } }));
+    return;
+  }
+  const loc = u.searchParams.get('locale') || '';
+  if (!['ru_KZ', 'kk_KZ'].includes(loc)) {
+    res.end(JSON.stringify({ meta: { code: 400, error: { message: `Param 'locale' is invalid. Value '${loc}' is outside of allowed values` } } }));
+    return;
+  }
   if (u.pathname.endsWith('/byid')) {
     res.end(
       JSON.stringify({
@@ -257,6 +270,36 @@ let first = null;
   check('...and the endpoint says so plainly', r.status === 503 && r.json.code === 'places_off', JSON.stringify(r.json));
   const meOn = await api(BASE, 'GET', '/api/me', null, user.token);
   check('/api/me reports places on when configured', meOn.json.placesProvider === true);
+}
+
+// ---- the live API's real limits, learned the hard way ----
+//
+// The docs say page_size may be 50 and imply en_US is fine; the service caps
+// page_size at 10 and rejects any locale outside its region list. Both
+// reached a phone before being caught, so both are pinned here.
+{
+  for (const [what, path] of [
+    ['search', '/api/places/search?q=аптека&lang=ru'],
+    ['near', '/api/places/near?q=аптека&lat=43.2389&lng=76.8897&lang=ru'],
+    ['at', '/api/places/at?lat=43.2567&lng=76.9286&lang=ru'],
+  ]) {
+    const r = await api(BASE, 'GET', path, null, user.token);
+    const asked = seenUrls[seenUrls.length - 1];
+    const ps = Number(new URL(asked, 'http://x').searchParams.get('page_size'));
+    check(`${what} asks for at most 10 results`, r.status === 200 && ps >= 1 && ps <= 10, `${ps} in ${asked}`);
+  }
+  for (const [lang, want] of [['ru', 'ru_KZ'], ['kk', 'kk_KZ'], ['en', 'ru_KZ']]) {
+    const r = await api(BASE, 'GET', `/api/places/search?q=аптека&lang=${lang}`, null, user.token);
+    const asked = seenUrls[seenUrls.length - 1];
+    check(`lang=${lang} uses a locale the service accepts (${want})`, r.status === 200 && asked.includes(`locale=${want}`), asked);
+  }
+}
+
+// ---- provider wording never reaches a person ----
+{
+  const r = await api(BASE, 'GET', '/api/places/search?q=boom&lang=ru', null, user.token);
+  check('a provider complaint is not shown to the user verbatim', r.status === 502 && !/page_size|quota|project/i.test(r.text), r.text.slice(0, 120));
+  check('...a readable sentence is sent instead', r.json && r.json.code === 'places_upstream', JSON.stringify(r.json));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

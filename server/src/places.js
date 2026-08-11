@@ -38,10 +38,19 @@ function cacheSet(key, value) {
   cache.set(key, { at: Date.now(), value });
 }
 
-// Our languages onto 2GIS locales. Kazakh falls back to Russian: the catalog
-// carries Kazakhstan business data in Russian, so a kk locale would mostly
-// return the same strings while risking an unsupported-locale error.
-const locales = { en: 'en_US', ru: 'ru_RU', kk: 'ru_RU' };
+// 2GIS locales carry a region, not just a language, and the region selects
+// the dataset: asking for Almaty with ru_RU returns "Results not found", and
+// en_US is rejected outright. Kazakhstan offers exactly ru_KZ and kk_KZ -
+// there is no en_KZ - so English speakers get Russian names, which is what
+// Almaty business names are anyway. TWOGIS_LOCALE overrides the lot for a
+// deployment in another country.
+const LOCALE_OVERRIDE = process.env.TWOGIS_LOCALE || '';
+const LOCALES = { ru: 'ru_KZ', kk: 'kk_KZ', en: 'ru_KZ' };
+const localeFor = (lang) => LOCALE_OVERRIDE || LOCALES[lang] || LOCALES.ru;
+
+// The documented maximum is 50; the live API refuses anything over 10.
+const PAGE_MAX = 10;
+const pageSize = (n) => Math.max(1, Math.min(PAGE_MAX, Math.round(n) || PAGE_MAX));
 
 // Everything the app is allowed to know about a place, whoever supplied it.
 const FIELDS = [
@@ -64,8 +73,12 @@ async function upstream(url) {
     const code = json && json.meta && json.meta.code;
     if (code === 404) return { result: { items: [] } };
     if (!res.ok || (code && code >= 400)) {
-      const msg = (json && json.meta && json.meta.error && json.meta.error.message) || `places service responded ${res.status}`;
-      throw httpError(502, msg);
+      // The provider's own wording ("Length of parameter 'page_size'…") is for
+      // us, not for someone standing on a street corner: log it, show a
+      // sentence a person can act on.
+      const detail = (json && json.meta && json.meta.error && json.meta.error.message) || `HTTP ${res.status}`;
+      console.warn(`[places] upstream refused: ${detail}`);
+      throw httpError(502, 'Places are unavailable right now.', 'places_upstream');
     }
     return json || { result: { items: [] } };
   } catch (e) {
@@ -131,7 +144,7 @@ function requireKey() {
 }
 
 // Free-text: a name ("Dostyk Plaza") or a category word ("pharmacy").
-export async function searchPlaces(q, lat, lng, lang, limit = 12) {
+export async function searchPlaces(q, lat, lng, lang, limit = PAGE_MAX) {
   requireKey();
   const query = String(q || '').trim();
   if (query.length < 2) throw httpError(400, 'query too short');
@@ -142,14 +155,14 @@ export async function searchPlaces(q, lat, lng, lang, limit = 12) {
   const url =
     `${TWOGIS_URL}?q=${encodeURIComponent(query)}` +
     (near ? `&location=${lng},${lat}&sort=distance` : '') +
-    `&page_size=${Math.min(20, limit)}&fields=${FIELDS}&locale=${locales[lang] || locales.ru}&key=${encodeURIComponent(TWOGIS_KEY)}`;
+    `&page_size=${pageSize(limit)}&fields=${FIELDS}&locale=${localeFor(lang)}&key=${encodeURIComponent(TWOGIS_KEY)}`;
   const value = normList(await upstream(url), limit);
   cacheSet(key, value);
   return value;
 }
 
 // Everything of one kind around a point - what the category chips ask for.
-export async function placesNear(lat, lng, q, radiusM, lang, limit = 20) {
+export async function placesNear(lat, lng, q, radiusM, lang, limit = PAGE_MAX) {
   requireKey();
   if (!isFiniteNum(lat) || !isFiniteNum(lng)) throw httpError(400, 'lat and lng are required');
   const query = String(q || '').trim();
@@ -160,7 +173,7 @@ export async function placesNear(lat, lng, q, radiusM, lang, limit = 20) {
   if (hit) return hit;
   const url =
     `${TWOGIS_URL}?q=${encodeURIComponent(query)}&point=${lng},${lat}&radius=${radius}&sort=distance` +
-    `&page_size=${Math.min(20, limit)}&fields=${FIELDS}&locale=${locales[lang] || locales.ru}&key=${encodeURIComponent(TWOGIS_KEY)}`;
+    `&page_size=${pageSize(limit)}&fields=${FIELDS}&locale=${localeFor(lang)}&key=${encodeURIComponent(TWOGIS_KEY)}`;
   const value = normList(await upstream(url), limit);
   cacheSet(key, value);
   return value;
@@ -180,7 +193,7 @@ export async function placesAt(lat, lng, radiusM, lang, limit = 1) {
   if (hit) return hit;
   const url =
     `${TWOGIS_URL}?point=${lng},${lat}&radius=${radius}&type=branch&sort=distance` +
-    `&page_size=${Math.min(10, Math.max(1, limit))}&fields=${FIELDS}&locale=${locales[lang] || locales.ru}&key=${encodeURIComponent(TWOGIS_KEY)}`;
+    `&page_size=${pageSize(limit)}&fields=${FIELDS}&locale=${localeFor(lang)}&key=${encodeURIComponent(TWOGIS_KEY)}`;
   const value = normList(await upstream(url), limit);
   cacheSet(key, value);
   return value;
@@ -196,7 +209,7 @@ export async function placeById(id, lang) {
   if (hit) return hit;
   const url =
     `${TWOGIS_URL}/byid?id=${encodeURIComponent(pid)}&fields=${FIELDS}` +
-    `&locale=${locales[lang] || locales.ru}&key=${encodeURIComponent(TWOGIS_KEY)}`;
+    `&locale=${localeFor(lang)}&key=${encodeURIComponent(TWOGIS_KEY)}`;
   const list = normList(await upstream(url), 1);
   if (!list.length) throw httpError(404, 'no such place', 'no_place');
   cacheSet(key, list[0]);
