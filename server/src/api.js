@@ -6,7 +6,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { hashPassword, verifyPassword, signToken, verifyToken } from './auth.js';
 import { publicUser, rideCounterpart, directoryUser } from './views.js';
 import { reverseGeocode, searchAddress, route as geoRoute } from './geo.js';
-import { searchPlaces, placesNear, placesAt, placeById, placesEnabled } from './places.js';
+import { searchPlaces, placesNear, placesAt, placeById, placesEnabled, mapKey, mapStyles } from './places.js';
 import { generateCode, sendCode, OTP_TTL_MS, OTP_RESEND_COOLDOWN_MS, OTP_ECHO } from './otp.js';
 import { vapidPublicKey } from './push.js';
 import {
@@ -590,6 +590,13 @@ export function createApi({ store, secret, hub, serveStatic }) {
       // Deliberately not "places": the user object already has one of those
       // (their saved Home/Work), and the two mean entirely different things.
       placesProvider: placesEnabled(),
+      // The basemap key, which unlike every other credential here has to reach
+      // the browser to be useful at all - MapGL authenticates from the client.
+      // Handing it out only to signed-in clients is not secrecy, but it does
+      // keep it out of the static bundle and out of a crawler's reach. Null
+      // means no key is configured and the app draws OpenStreetMap instead.
+      mapKey: mapKey() || null,
+      mapStyles: mapStyles(),
       driverActive: hub ? hub.drivers.has(user.id) : false,
       activeRide,
       counterpart: rideCounterpart(store, activeRide, user.id),

@@ -7,6 +7,7 @@ import { wsClient } from './ws';
 import { t, setLang, resolveLang } from './i18n';
 import { setupPush } from './push';
 import { registerPasskey, loginWithPasskey } from './passkey';
+import { setMapKey, setMapStyles } from './mapconfig';
 
 const TOKEN_KEY = 'drivepro.token';
 const LANG_KEY = 'drivepro.lang';
@@ -32,6 +33,8 @@ export function AuthProvider({ children }) {
   // Whether this deployment has a places provider configured (see /api/me).
   const [placesProvider, setPlacesProvider] = useState(false);
   const [passkeyCount, setPasskeyCount] = useState(0);
+  // Which token's deployment config has already been applied.
+  const configTokenRef = useRef(null);
   const meRef = useRef(null);
   useEffect(() => {
     meRef.current = me;
@@ -70,6 +73,9 @@ export function AuthProvider({ children }) {
           setMe(data.user);
           setTotpEnabled(!!data.totpEnabled);
           setPlacesProvider(!!data.placesProvider);
+          setMapKey(data.mapKey);
+          setMapStyles(data.mapStyles);
+          configTokenRef.current = saved;
           setPasskeyCount(data.passkeys || 0);
           setDriverActive(!!data.driverActive);
           setActiveRide(data.activeRide || null);
@@ -101,6 +107,8 @@ export function AuthProvider({ children }) {
             setMe(data.user);
             setTotpEnabled(!!data.totpEnabled);
             setPlacesProvider(!!data.placesProvider);
+            setMapKey(data.mapKey);
+            setMapStyles(data.mapStyles);
             setPasskeyCount(data.passkeys || 0);
             setDriverActive(!!data.driverActive);
             setActiveRide(data.activeRide || null);
@@ -116,6 +124,29 @@ export function AuthProvider({ children }) {
   const tokenRef = useRef(null);
   useEffect(() => {
     tokenRef.current = token;
+  }, [token]);
+
+  // What this deployment can do - whether it has a places provider, which
+  // basemap key it can hand out - comes from /api/me. Restoring a session
+  // reads it above, but signing in fresh gets a token from /api/login, whose
+  // answer says nothing about the deployment: without this, the first session
+  // after signing in ran with places switched off and the raster basemap,
+  // until something else happened to refetch /api/me.
+  useEffect(() => {
+    if (!token || configTokenRef.current === token) return undefined;
+    let cancelled = false;
+    api('GET', '/api/me', null, token)
+      .then((data) => {
+        if (cancelled) return;
+        configTokenRef.current = token;
+        setPlacesProvider(!!data.placesProvider);
+        setMapKey(data.mapKey);
+        setMapStyles(data.mapStyles);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   // Silent push re-subscription (only if the browser already granted it).
@@ -411,6 +442,7 @@ export function AuthProvider({ children }) {
 
       async logout() {
         await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
+        configTokenRef.current = null;
         setToken(null);
         setMe(null);
         setDriverActive(false);

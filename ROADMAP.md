@@ -35,7 +35,13 @@ Conventions live in CLAUDE.md.
 | ~~L44~~ | ~~The pickup toggle mid-route, not only before Start~~ | ✅ shipped — reported from a real walk |
 | ~~L45~~ | ~~Alternative car routes: all drawn, tap to choose~~ | ✅ shipped |
 | ~~L46~~ | ~~Places from 2GIS: name search, category chips, tap-a-building~~ | ✅ shipped |
-| L47 | Labelled basemap | **blocked on a MapGL key — see below** |
+| ~~L47~~ | ~~Voyager basemap: a light style that names shops and colours parks~~ | ✅ shipped |
+| ~~L48~~ | ~~The places limits the docs got wrong (page_size 10, ru_KZ), errors people can read~~ | ✅ shipped — reported from two prod screenshots |
+| ~~L49~~ | ~~The map gets the screen back: collapsed search sheet, light-mode contrast~~ | ✅ shipped |
+| ~~L50~~ | ~~Search as you type, debounced and cached so it does not burn the quota~~ | ✅ shipped |
+| ~~L51~~ | ~~2GIS MapGL basemap, with the raster map kept as the floor~~ | ✅ shipped |
+| L52 | Ops: nightly backups, uptime alerting, the VM's pending security updates | next |
+| L53 | Tidy: DriveTab's unreachable screens; longer, coarser place caching | after L52 |
 
 \* misnumbered — that commit lands *after* L33 and is really L34's
 predecessor. Left alone rather than rewriting pushed history; the next free
@@ -100,22 +106,31 @@ that OSM does not. The proxy in `server/src/places.js` normalises to a
 provider-neutral shape precisely so OpenStreetMap can be added beside it, which
 was the stated long-term intent ("I would do three of those").
 
-**Basemap — half done, blocked on a key.** The light theme moved from
-`light_all` to CARTO **Voyager**, which colours parks and water and makes
-buildings legible. Measured honestly, that is a step and not the goal: no
-CARTO raster style carries shop or cafe names, which is what makes 2GIS feel
-dense. Revert by changing one token in `theme.js` if the warmer palette
-fights the Almaty colours.
+**Basemap — done, on two engines.** L47 moved the light theme to CARTO
+**Voyager**, and L51 put **2GIS MapGL** in front of it where a key allows.
+MapGL is the dense, labelled, 2GIS-feeling map; the raster one stays as the
+floor the app can always stand on, and `MapView.js` speaks one command
+protocol to both, so nothing outside that file knows which is drawing.
 
-The real answer is **2GIS MapGL**, and it needs its own key:
-- the existing `TWOGIS_KEY` is **Catalog-only** — `keys.api.2gis.com` 404s it,
-  so MapGL would refuse to start;
-- a MapGL key is **public by design** (it ships inside the page), so it must be
-  a *separate* key restricted by domain, never the Catalog key, which would
-  otherwise let anyone spend our catalog quota;
-- MapGL replaces Leaflet inside `MapView.js`. The external contract
-  (setCenter/fitBounds/markers/polyline/alts/taps) stays, the engine changes;
-  note MapGL takes `[lng, lat]`, the opposite of Leaflet.
+What the port had to absorb:
+- The key was **not** Catalog-only after all. The earlier 404 from
+  `keys.api.2gis.com` was weak evidence, and Igor's dashboard showed *MapGL JS
+  API — No limit* on the same key; a live probe then loaded a map with it.
+  A 404 from an endpoint you have not read the contract for proves nothing.
+- A MapGL key **must** reach the browser — the tiles authenticate from there,
+  and no proxy changes that. It travels in `/api/me`, so it reaches signed-in
+  clients rather than sitting in the static bundle, and `TWOGIS_MAP_KEY` is
+  its own variable so it can be a second, domain-restricted key. Falling back
+  to `TWOGIS_KEY` keeps a one-key deployment working and says so at boot.
+- **There is no public dark style.** 2GIS publishes none that another account
+  can reference; a dark map is authored in their Style Editor and named by id
+  (`TWOGIS_MAP_STYLE_DARK`). Until one exists, night stays on the raster
+  basemap rather than turning the screen white at 2am — which is exactly why
+  the raster engine was kept rather than deleted.
+- MapGL takes `[lng, lat]`, the opposite of Leaflet and of the rest of this
+  app. Every crossing happens at the edge of the MapGL template and nowhere
+  else. Markers are `HtmlMarker`s carrying the same markup the raster engine
+  puts in a `divIcon`, so a pin does not change shape with the engine.
 
 Using 2GIS's raster tiles directly (`tile2.maps.2gis.com` serves without a key)
 was considered and **not** done: it works technically, but it is not what the

@@ -14,6 +14,33 @@ const TWOGIS_KEY = process.env.TWOGIS_KEY || '';
 // the catalog at a stub so smoke tests never touch the real API.
 const TWOGIS_URL = process.env.TWOGIS_API_URL || 'https://catalog.api.2gis.com/3.0/items';
 
+// The basemap is the one 2GIS product that cannot be proxied: MapGL draws
+// vector tiles in the browser and authenticates itself from there, so its key
+// is necessarily visible to whoever is running the map. That makes it a
+// different kind of secret from the catalog key above, and it deserves its own
+// variable - ideally a second key, restricted in the 2GIS console to this
+// site's domain, so publishing it grants nothing anywhere else.
+//
+// Falling back to the catalog key keeps a single-key deployment working, but
+// it publishes a key that also spends the catalog quota, so boot says so out
+// loud rather than letting it pass unnoticed.
+const TWOGIS_MAP_KEY = process.env.TWOGIS_MAP_KEY || '';
+export const mapKey = () => TWOGIS_MAP_KEY || TWOGIS_KEY;
+
+// A style id per scheme, from https://styles.2gis.com. MapGL's built-in style
+// is a light one and 2GIS publishes no dark style anyone can reference, so a
+// dark map has to be authored there and named here; with no dark id the app
+// keeps the raster basemap at night rather than glaring.
+export const mapStyles = () => ({
+  light: process.env.TWOGIS_MAP_STYLE || null,
+  dark: process.env.TWOGIS_MAP_STYLE_DARK || null,
+});
+export function describeMapKey() {
+  if (TWOGIS_MAP_KEY) return 'Map: 2GIS MapGL (own browser key)';
+  if (TWOGIS_KEY) return 'Map: 2GIS MapGL !! reusing TWOGIS_KEY in browsers - set TWOGIS_MAP_KEY to a domain-restricted key';
+  return 'Map: OpenStreetMap raster (no TWOGIS_MAP_KEY)';
+}
+
 const TIMEOUT_MS = 8000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const CACHE_MAX = 400;

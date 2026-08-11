@@ -210,6 +210,34 @@ Provider quirks absorbed in `places.js`, learned by probing the live API:
 `TWOGIS_API_URL` is a test seam; `smoke36` runs the whole surface against a
 stub and never touches the real API.
 
+### The basemap key is a different kind of secret
+
+`TWOGIS_KEY` above is a server secret and stays one. The **basemap** key cannot
+be: MapGL draws vector tiles with WebGL in the browser and authenticates from
+there, so whatever key it uses is visible to anyone running the map. There is no
+proxy that changes this.
+
+```bash
+sudo sh -c 'echo "TWOGIS_MAP_KEY=your_browser_key" >> /etc/drivepro.env'
+sudo systemctl restart drivepro
+journalctl -u drivepro -n 30 | grep '^Map:'
+```
+
+- **`Map: 2GIS MapGL (own browser key)`** — what you want. Create a *second*
+  key in the 2GIS console with only the MapGL JS API on it and restrict it to
+  this deployment's domain, so publishing it grants nothing anywhere else.
+- **`Map: 2GIS MapGL !! reusing TWOGIS_KEY in browsers …`** — with no
+  `TWOGIS_MAP_KEY`, the catalog key is reused so a one-key deployment still
+  gets a map. It works, but that key also spends the 1,000/month catalog quota
+  and is now readable by every signed-in user. Fine for a demo; split the keys
+  before it matters.
+- **`Map: OpenStreetMap raster (no TWOGIS_MAP_KEY)`** — no key at all. The app
+  falls back to CARTO raster tiles, which need no key and always work.
+
+The key travels in `/api/me`, so it reaches signed-in clients only and is never
+baked into the static bundle. That is not secrecy — it just keeps it out of
+crawlers and off the public JS.
+
 `GEO_USER_AGENT` overrides the Nominatim User-Agent - set a real contact there
 before any serious geocoding volume, or Nominatim may block a generic one.
 

@@ -130,4 +130,14 @@ already uses for saved Home/Work).
 Layer numbering slipped once: the ride-flow commit is labelled **L32** but
 lands after L33. Next free number is **L47**.
 
+L51 basemap: two engines behind one command protocol in `app/src/MapView.js` -
+2GIS **MapGL** where a key allows, CARTO raster through Leaflet otherwise, and
+the raster one is the floor rather than a degraded mode. MapGL's key must reach
+the browser (the tiles authenticate from there), so it travels in `/api/me` as
+`mapKey` and lives in its own `TWOGIS_MAP_KEY`, ideally a second domain-restricted
+key; with only `TWOGIS_KEY` set it is reused and boot warns. 2GIS publishes **no
+dark style** anyone can reference - one is authored in their Style Editor and
+named by `TWOGIS_MAP_STYLE_DARK`, and without it the night map stays raster.
+MapGL is `[lng, lat]`; every crossing happens inside that one template.
+
 Remaining work and its running order live in `ROADMAP.md`.

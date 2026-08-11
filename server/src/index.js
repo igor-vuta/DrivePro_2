@@ -16,6 +16,7 @@ import { verifyToken } from './auth.js';
 import { otpModeBanner } from './otp.js';
 import { smsBanner } from './sms.js';
 import { initTelegram, telegramBanner } from './telegram.js';
+import { describeMapKey } from './places.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -92,4 +93,5 @@ server.listen(PORT, '0.0.0.0', () => {
   const tg = telegramBanner();
   if (tg) console.log(tg);
   console.log(otpModeBanner());
+  console.log(describeMapKey());
 });
