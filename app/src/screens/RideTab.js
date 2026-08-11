@@ -529,37 +529,51 @@ export default function RideTab() {
   // step can show real walk / cycle / drive times side by side. Each failure
   // falls back to a straight-line estimate rather than blocking.
   const loadModeRoutes = async (from, to) => {
-    // Three requests in flight; if the user changes destination or leaves the
-    // step before they land, the stale batch must not overwrite the new routes
-    // or yank the map back with its fitBounds.
+    // These used to go out as three parallel requests behind one Promise.all,
+    // so the screen waited for the slowest of them. On a self-hosted router
+    // that is expensive twice over: the three profiles are three separate
+    // graphs, they are memory-mapped, and asking for all three at once makes
+    // them evict each other from the page cache while the user waits.
+    //
+    // So the mode the flow actually starts on is fetched first and drawn the
+    // moment it lands; walking and cycling fill in behind it, one at a time,
+    // and the user is looking at a route long before they arrive.
     const seq = ++fitSeq.current;
     setModeRoutes({});
     setMode('car');
-    const modes = ['foot', 'bike', 'car'];
-    const pairs = await Promise.all(
-      modes.map(async (m) => {
-        try {
-          const r = await api(
-            'GET',
-            `/api/geo/route?fromLat=${from.lat}&fromLng=${from.lng}&toLat=${to.lat}&toLng=${to.lng}&mode=${m}` +
-              (m === 'car' ? '&alts=2' : ''),
-            null,
-            token
-          );
-          return [m, { ...r, approx: false }];
-        } catch (e) {
-          const d = haversineM(from, to);
-          const speed = m === 'foot' ? 1.35 : m === 'bike' ? 4.2 : 8.3; // m/s
-          return [m, { distanceM: d, durationS: Math.round(d / speed), points: [[from.lat, from.lng], [to.lat, to.lng]], approx: true }];
-        }
-      })
-    );
+
+    const ask = async (m) => {
+      try {
+        const r = await api(
+          'GET',
+          `/api/geo/route?fromLat=${from.lat}&fromLng=${from.lng}&toLat=${to.lat}&toLng=${to.lng}&mode=${m}` +
+            (m === 'car' ? '&alts=2' : ''),
+          null,
+          token
+        );
+        return { ...r, approx: false };
+      } catch (e) {
+        // A straight line is the last resort, not a route - the server repairs
+        // unreachable points and falls back between profiles before it gets
+        // here, so this now means the router itself is unreachable.
+        const d = haversineM(from, to);
+        const speed = m === 'foot' ? 1.35 : m === 'bike' ? 4.2 : 8.3; // m/s
+        return { distanceM: d, durationS: Math.round(d / speed), points: [[from.lat, from.lng], [to.lat, to.lng]], approx: true };
+      }
+    };
+
+    const car = await ask('car');
     if (seq !== fitSeq.current) return;
-    const map = Object.fromEntries(pairs);
     setAltPick(0);
-    setModeRoutes(map);
-    const fit = map.car && map.car.points.length ? map.car.points : [[from.lat, from.lng], [to.lat, to.lng]];
+    setModeRoutes({ car });
+    const fit = car.points && car.points.length ? car.points : [[from.lat, from.lng], [to.lat, to.lng]];
     if (mapRef.current) mapRef.current.fitBounds(fit);
+
+    for (const m of ['foot', 'bike']) {
+      const r = await ask(m);
+      if (seq !== fitSeq.current) return;
+      setModeRoutes((prev) => ({ ...prev, [m]: r }));
+    }
   };
 
   const showMode = (m) => {

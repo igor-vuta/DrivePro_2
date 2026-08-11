@@ -78,8 +78,16 @@ export const routeModes = () => Object.keys(PROFILES);
 // answered in 94 ms, 82 ms and 14 ms - so the working set for a whole city is
 // small enough to hold, it just has to be touched.
 //
+// And it warms one profile, not three. Measured after warming all three: an
+// unwarmed route took 4.0 s (car) and 7.4 s (foot) - *worse* than before the
+// warmer existed, because 3.3 GB of graphs cannot all live in ~700 MB of page
+// cache and warming them evicts each other. Whichever profile the ride flow
+// opens on is the only one anybody waits for; the app now asks for that one
+// first and fills the others in behind it, so those can afford to be cold.
+//
 // Override with OSRM_WARM_ROUTES for a deployment in another city: routes are
 // separated by "|", the two points of a route by ";", as OSRM writes them.
+// OSRM_WARM_MODES takes the profiles worth warming, comma separated.
 const SELF_HOSTED = !!(process.env.OSRM_URL || process.env.OSRM_FOOT_URL || process.env.OSRM_BIKE_URL);
 const WARM_EVERY_MS = Number(process.env.OSRM_WARM_MS || 120_000);
 const WARM_ROUTES = (
@@ -96,6 +104,10 @@ const WARM_ROUTES = (
   .split('|')
   .map((r) => r.trim())
   .filter(Boolean);
+const WARM_MODES = (process.env.OSRM_WARM_MODES || 'car')
+  .split(',')
+  .map((m) => m.trim())
+  .filter((m) => PROFILES[m]);
 
 let warmTimer = null;
 let warming = false;
@@ -109,8 +121,9 @@ export function startRouteWarmer() {
     if (warming) return;
     warming = true;
     try {
-      for (const [mode, p] of Object.entries(PROFILES)) {
-        if (p.url === FOSSGIS[mode]) continue;
+      for (const mode of WARM_MODES) {
+        const p = PROFILES[mode];
+        if (!p || p.url === FOSSGIS[mode]) continue;
         for (const pair of WARM_ROUTES) {
           try {
             await upstream(`${p.url}/route/v1/${p.path}/${pair}?overview=false`);

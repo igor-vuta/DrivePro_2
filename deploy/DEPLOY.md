@@ -243,6 +243,18 @@ just as cold (measured: 2.6 s car, 5.5 s foot). Six corridors across Almaty cost
 5.2 s once and then answered new routes in 14-94 ms. Deploying in another city
 means replacing this list.
 
+`OSRM_WARM_MODES` (default `car`) is which profiles to warm, and on this VM it
+must stay short. The three graphs total ~3.3 GB against ~700 MB of page cache,
+so warming all three makes them evict one another — measured *worse* than no
+warmer at all (4.0 s car, 7.4 s foot). The app asks for the opening mode first
+and fills the others in behind it, so only that one profile needs to be hot.
+
+**The real fix is a smaller graph.** These were built from the whole-Kazakhstan
+extract; an Almaty-sized extract would be a fraction of the size, all three
+profiles would fit in RAM at once, and none of this warming would be needed.
+That is a rebuild of `setup-osrm.sh` with a city extract — hours, and it
+competes with the live service, so run it attended.
+
 > **Run it attended.** It competes with the live service for the whole
 > build. Nothing breaks without it; the FOSSGIS fallback keeps serving in
 > the meantime.
