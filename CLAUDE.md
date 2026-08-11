@@ -106,9 +106,12 @@ findings from a four-reviewer adversarial pass: back-navigation restoring
 labels without coordinates, a `fitSeq` counter revoking in-flight fitBounds
 on every navigation, `box-none` re-armed by a full-width child, chrome
 overlaps) · L37 `SchedulesScreen` + L38 `CrewScreen` behind the avatar sheet
-(`CrewCard` shared with the profile).
+(`CrewCard` shared with the profile) · L39 OSRM self-hosted on the VM
+(car/foot/bike graphs on localhost 5000-5002, `--mmap=1` mandatory on its
+956 MB of RAM; FOSSGIS stays the per-request fallback; `update.sh` health
+check now retries for 60 s so a slow boot cannot redden CI).
 
 Layer numbering slipped once: the ride-flow commit is labelled **L32** but
-lands after L33. Next free number is **L39**.
+lands after L33. Next free number is **L40**.
 
 Remaining work and its running order live in `ROADMAP.md`.
