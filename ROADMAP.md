@@ -42,9 +42,13 @@ working Telegram channel, **phone re-verification is the recovery path** —
 no recovery codes are needed. Recovering this way clears any TOTP secret and
 registered passkeys.
 
-**Routing — self-hosted OSRM on the Oracle VM** with car, foot and bike
-profiles from a Kazakhstan extract. No API key, no quota, no third party,
-and it is what makes walk/cycle routing real rather than estimated.
+~~**Routing — self-hosted OSRM on the Oracle VM**~~ — ✅ live since
+2026-08-11. Car, foot and bike graphs built from the Geofabrik Kazakhstan
+extract on the VM itself (~3 h on its 956 MB of RAM, leaning on a 4 GB
+swapfile), served by three systemd-managed containers on localhost
+5000/5001/5002 with `--mmap=1` (see the note in `deploy/setup-osrm.sh` -
+without it the three graphs cannot coexist in that little RAM). DrivePro
+routes through them; FOSSGIS remains the automatic fallback on error.
 
 **Design**
 - Palette (Coolors `003943606992174098`): `008FD2` primary · `FFEF01`

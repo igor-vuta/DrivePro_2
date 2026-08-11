@@ -170,11 +170,17 @@ This downloads the Kazakhstan extract, builds car/foot/bike profiles, runs
 each as a Docker container behind systemd on ports 5000-5002, and appends
 `OSRM_URL` / `OSRM_FOOT_URL` / `OSRM_BIKE_URL` to `/etc/drivepro.env`.
 
-> **Run it attended.** Building the profiles is memory-hungry - the script
-> adds a 4 GB swapfile first, but on a 1 OCPU / 6 GB instance it will compete
-> with the live service. Do it when you can watch `journalctl -u drivepro`,
-> not unattended. Nothing breaks without it; the FOSSGIS fallback keeps
-> serving in the meantime.
+**Done on the prod VM 2026-08-11.** The build took ~3 h on its 956 MB of
+RAM (the script's 4 GB swapfile is what makes it possible at all); the live
+service stayed up but sluggish throughout, and CI health checks needed the
+60 s grace window `update.sh` now has. The routers run with `--mmap=1` —
+mandatory on this box, since the three graphs total ~3.3 GB and loading
+them into anonymous memory thrashes forever. To rebuild after a fresh
+region download, rerun the script; it skips whatever is already built.
+
+> **Run it attended.** It competes with the live service for the whole
+> build. Nothing breaks without it; the FOSSGIS fallback keeps serving in
+> the meantime.
 
 `GEO_USER_AGENT` overrides the Nominatim User-Agent - set a real contact there
 before any serious geocoding volume, or Nominatim may block a generic one.

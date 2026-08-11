@@ -70,6 +70,10 @@ build_profile foot foot
 build_profile bike bicycle
 
 # A systemd unit per routed profile, each serving one container with MLD.
+# --mmap=1 is load-bearing on a small VM: without it each router loads its
+# whole graph into anonymous memory (~3 GB across the three profiles, against
+# 956 MB of RAM here - they thrash swap and never finish binding). Mapped,
+# the page cache backs all three and total RSS stays under ~50 MB.
 run_profile() {
   local name="$1" port="$2"
   cat > "/etc/systemd/system/osrm-$name.service" <<EOF
@@ -83,7 +87,7 @@ Restart=always
 ExecStartPre=-/usr/bin/docker rm -f osrm-$name
 ExecStart=/usr/bin/docker run --rm --name osrm-$name -p 127.0.0.1:$port:5000 \\
   -v $OSRM_DIR:/data $OSRM_IMAGE \\
-  osrm-routed --algorithm mld /data/$name.osrm
+  osrm-routed --algorithm mld --mmap=1 /data/$name.osrm
 ExecStop=/usr/bin/docker stop osrm-$name
 
 [Install]
