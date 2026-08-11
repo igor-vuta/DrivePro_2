@@ -28,7 +28,7 @@ export default function PlaceCard({ place, onGo, onClose }) {
             {place.name}
           </Text>
           {place.categories && place.categories.length ? (
-            <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700', marginTop: 1 }} numberOfLines={1}>
+            <Text style={{ color: colors.primaryInk, fontSize: 12, fontWeight: '700', marginTop: 1 }} numberOfLines={1}>
               {place.categories.join(' · ')}
             </Text>
           ) : null}
@@ -42,7 +42,7 @@ export default function PlaceCard({ place, onGo, onClose }) {
           ) : null}
           {place.phones && place.phones.length ? (
             <Pressable onPress={() => Linking.openURL(`tel:${place.phones[0].replace(/[^\d+]/g, '')}`)}>
-              <Text style={{ color: colors.primary, fontSize: 13, marginTop: 2, fontWeight: '700' }}>
+              <Text style={{ color: colors.primaryInk, fontSize: 13, marginTop: 2, fontWeight: '700' }}>
                 📞 {place.phones[0]}
               </Text>
             </Pressable>

@@ -68,7 +68,7 @@ export default function CrewCard() {
             }}
           >
             <Sub style={{ marginBottom: 2, fontSize: 12 }}>{t('crew.codeLabel')}</Sub>
-            <Text selectable style={{ color: colors.primary, fontSize: 22, fontWeight: '800', letterSpacing: 3 }}>
+            <Text selectable style={{ color: colors.primaryInk, fontSize: 22, fontWeight: '800', letterSpacing: 3 }}>
               {crew.code}
             </Text>
             <Sub style={{ marginBottom: 0, fontSize: 12 }}>{t('crew.shareHint')}</Sub>

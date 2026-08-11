@@ -196,12 +196,19 @@ export function Segmented({ options, value, onChange }) {
   );
 }
 
-// Compact translucent pill for controls that float over a full-screen map.
+// Compact pill for controls that float over a full-screen map. It is chrome,
+// not a panel, so it takes the blue-cast chrome tokens rather than card.
 export function Chip({ children, onPress, tone = 'default', style }) {
   const tint =
-    tone === 'active' ? colors.primary : tone === 'danger' ? colors.danger : tone === 'gold' ? colors.gold : colors.text;
+    tone === 'active'
+      ? colors.onTint
+      : tone === 'danger'
+      ? colors.dangerInk
+      : tone === 'gold'
+      ? colors.gold
+      : colors.text;
   const body = (
-    <View style={[s.chip, tone === 'active' && { borderColor: colors.primary }, style]}>
+    <View style={[s.chip, tone === 'active' && { borderColor: colors.primary, backgroundColor: colors.tint }, style]}>
       {typeof children === 'string' ? (
         <Text style={{ color: tint, fontWeight: '700', fontSize: 13 }}>{children}</Text>
       ) : (
@@ -284,7 +291,7 @@ export function Avatar({ user, size = 44, style }) {
   }
   return (
     <View style={[base, style]}>
-      <Text style={{ fontSize: size * 0.42, fontWeight: '700', color: colors.primary }}>{initial}</Text>
+      <Text style={{ fontSize: size * 0.42, fontWeight: '700', color: colors.primaryInk }}>{initial}</Text>
     </View>
   );
 }
@@ -336,7 +343,9 @@ const makeStyles = () =>
     shadowOffset: { width: 0, height: colors.glow === 'transparent' ? 2 : 0 },
     elevation: 4,
   },
-  btnGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border },
+  // A ghost button is only its outline, so it takes the hairline that is meant
+  // to be seen; colors.border would vanish on card and on sheet alike.
+  btnGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.borderStrong },
   btnText: { fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
   label: { fontSize: 13, color: colors.sub, marginBottom: 8 },
   input: {
@@ -349,7 +358,7 @@ const makeStyles = () =>
     fontSize: 16,
     color: colors.text,
   },
-  error: { color: colors.danger, marginBottom: 12, fontSize: 14, lineHeight: 20 },
+  error: { color: colors.dangerInk, marginBottom: 12, fontSize: 14, lineHeight: 20 },
   seg: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
@@ -379,9 +388,9 @@ const makeStyles = () =>
     height: 36,
     paddingHorizontal: 14,
     borderRadius: 18,
-    backgroundColor: colors.card,
+    backgroundColor: colors.chrome,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.chromeBorder,
     shadowColor: colors.shadow,
     shadowOpacity: 1,
     shadowRadius: 6,

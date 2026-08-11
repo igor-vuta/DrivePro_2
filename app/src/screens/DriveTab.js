@@ -105,13 +105,13 @@ const makeSt = () =>
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: colors.card,
+    backgroundColor: colors.sheet,
     borderTopWidth: 1,
     borderColor: colors.border,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
-    shadowColor: '#000000',
-    shadowOpacity: 0.5,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: -6 },
   },
@@ -125,7 +125,7 @@ const makeSt = () =>
     width: 34,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.border,
+    backgroundColor: colors.borderStrong,
     marginRight: 10,
   },
   });
@@ -169,7 +169,7 @@ function OfferSheet({ count, expanded, onToggle, children }) {
           {label}
         </Text>
         {count ? (
-          <Text style={{ color: colors.primary, fontWeight: '800', fontSize: 15 }}>{expanded ? '▼' : '▲'}</Text>
+          <Text style={{ color: colors.primaryInk, fontWeight: '800', fontSize: 15 }}>{expanded ? '▼' : '▲'}</Text>
         ) : null}
       </Pressable>
       {/* maxHeight, not height: one offer takes one card's worth of screen and
@@ -574,7 +574,7 @@ function ConvoyView({ rides, myCoords, token, openProfile }) {
               </Text>
             ) : null}
             <Pressable onPress={() => setFollow((f) => !f)} hitSlop={10}>
-              <Text style={{ color: follow ? colors.primary : colors.sub, fontWeight: '700', fontSize: 15 }}>🎯</Text>
+              <Text style={{ color: follow ? colors.primaryInk : colors.sub, fontWeight: '700', fontSize: 15 }}>🎯</Text>
             </Pressable>
           </Row>
         </Row>
@@ -612,7 +612,7 @@ function ConvoyView({ rides, myCoords, token, openProfile }) {
                     {idx + 1}. {rider ? rider.name : ''}{' '}
                     <Text style={{ color: colors.sub, fontWeight: '400', fontSize: 12 }}>{stars(rider)}</Text>
                   </Text>
-                  <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>{heading}</Text>
+                  <Text style={{ color: colors.primaryInk, fontSize: 12, fontWeight: '700' }}>{heading}</Text>
                 </View>
               </Row>
               <Sub style={{ marginBottom: 6 }}>

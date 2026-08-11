@@ -39,7 +39,7 @@ export default function UserProfileModal({ userId, onClose }) {
 
   return (
     <Modal visible={!!userId} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 }}>
+      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: 24 }}>
         <Pressable onPress={() => {}} style={{ backgroundColor: colors.card, borderRadius: 16, padding: 16, maxHeight: '75%' }}>
           {!profile && !error ? (
             <ActivityIndicator color={colors.text} style={{ marginVertical: 30 }} />
@@ -86,7 +86,7 @@ export default function UserProfileModal({ userId, onClose }) {
           )}
           {profile && me && profile.id !== me.id ? (
             <View>
-              {blocked ? <Sub style={{ marginTop: 6, marginBottom: 0, color: colors.danger }}>{t('modal.blockedNote')}</Sub> : null}
+              {blocked ? <Sub style={{ marginTop: 6, marginBottom: 0, color: colors.dangerInk }}>{t('modal.blockedNote')}</Sub> : null}
               <Row style={{ marginTop: 8 }}>
                 <Button
                   kind="ghost"

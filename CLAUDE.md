@@ -128,7 +128,7 @@ only, `/api/places/{search,near,at,:id}` returning a provider-neutral shape;
 already uses for saved Home/Work).
 
 Layer numbering slipped once: the ride-flow commit is labelled **L32** but
-lands after L33. Next free number is **L47**.
+lands after L33. Next free number is **L55**.
 
 L51 basemap: two engines behind one command protocol in `app/src/MapView.js` -
 2GIS **MapGL** where a key allows, CARTO raster through Leaflet otherwise, and
@@ -152,5 +152,19 @@ one flow when the last passenger is out (it used to strand them). The places
 cache now lives a day (a week for buildings), keys round to ~1 km so neighbours
 share answers, and it persists to `DATA_DIR/places-cache.json` so a deploy does
 not spend the 1,000/month quota re-answering.
+
+L54 area colours: every region of the app has its own token instead of two
+surfaces shared by everything - `surface` (recessed controls) < `bg` (the
+ground) < `sheet` (the bottom dock and the avatar menu) < `card` (panels raised
+over the map), plus `chrome`/`chromeBorder` for the pills floating at the top
+and `tint`/`onTint` for anything selected. Values are generated in OKLCH: hue
+and chroma name the region, only lightness differs between schemes. Dark is
+light inverted **where inverting means something** - ground and ink swap ends
+and `surface` crosses the ground (below it in light, above it in dark), while
+elevation still climbs toward light in both and the city's semantic colours
+stay put. Fills that appear as type got readable twins the way `gold/goldFill`
+already had: `primaryInk`, `okInk`, `dangerInk`, plus `borderStrong` and
+`overlay`. `smoke38.mjs` pins the contract - matching key sets, the ladder's
+order, AA on every ink/region pair, and no hardcoded colour in a style prop.
 
 Remaining work and its running order live in `ROADMAP.md`.

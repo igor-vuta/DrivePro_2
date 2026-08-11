@@ -75,9 +75,9 @@ export function DialogHost() {
         <Pressable
           onPress={() => dismiss(x.id)}
           style={{
-            backgroundColor: '#101728',
+            backgroundColor: colors.card,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.chromeBorder,
             borderRadius: 14,
             paddingVertical: 12,
             paddingHorizontal: 16,
@@ -111,8 +111,8 @@ export function DialogHost() {
 
       {confirm ? (
         <Modal transparent animationType="fade" onRequestClose={() => setConfirm(null)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 28 }}>
-            <View style={{ backgroundColor: colors.bg, borderRadius: 18, padding: 20 }}>
+          <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: 28 }}>
+            <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 20 }}>
               <Text style={{ color: colors.text, fontWeight: '700', fontSize: 18, marginBottom: 6 }}>{confirm.title}</Text>
               {confirm.message ? <Text style={{ color: colors.sub, marginBottom: 16 }}>{confirm.message}</Text> : null}
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
@@ -127,7 +127,7 @@ export function DialogHost() {
                   }}
                   style={{ paddingVertical: 10, paddingHorizontal: 16 }}
                 >
-                  <Text style={{ color: confirm.destructive === false ? colors.primary : colors.danger, fontWeight: '700' }}>
+                  <Text style={{ color: confirm.destructive === false ? colors.primaryInk : colors.dangerInk, fontWeight: '700' }}>
                     {confirm.okLabel}
                   </Text>
                 </Pressable>

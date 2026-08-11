@@ -80,7 +80,7 @@ export default function SchedulesScreen({ goBack }) {
                   </Text>
                 </Pressable>
                 <Pressable onPress={() => del(s)} style={{ paddingHorizontal: 10, paddingVertical: 4 }}>
-                  <Text style={{ color: colors.danger, fontWeight: '700', fontSize: 13 }}>✕ {t('common.remove')}</Text>
+                  <Text style={{ color: colors.dangerInk, fontWeight: '700', fontSize: 13 }}>✕ {t('common.remove')}</Text>
                 </Pressable>
               </Row>
             </Card>

@@ -20,8 +20,8 @@ function FlamePill({ days }) {
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.surface,
-        borderColor: colors.border,
+        backgroundColor: colors.chrome,
+        borderColor: colors.chromeBorder,
         borderWidth: 1,
         borderRadius: 999,
         paddingHorizontal: 10,
@@ -58,13 +58,13 @@ function CityStrip({ impact, connected }) {
   // chrome floating there is room for one pill, so it carries both - a dropped
   // connection is why the numbers would be stale in the first place.
   if (!impact && connected) return null;
-  const border = pulse.interpolate({ inputRange: [0, 1], outputRange: [colors.border, colors.primary] });
+  const border = pulse.interpolate({ inputRange: [0, 1], outputRange: [colors.chromeBorder, colors.primary] });
   return (
     <Animated.View
       style={{
         borderWidth: 1,
         borderColor: border,
-        backgroundColor: colors.card,
+        backgroundColor: colors.chrome,
         borderRadius: 999,
         paddingVertical: 6,
         paddingHorizontal: 11,
@@ -145,7 +145,7 @@ export default function HomeScreen({ openProfile, openHistory, openSchedules, op
                 <Avatar
                   user={me}
                   size={40}
-                  style={{ borderWidth: 2, borderColor: colors.card, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}
+                  style={{ borderWidth: 2, borderColor: colors.chrome, shadowColor: colors.shadow, shadowOpacity: 1, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}
                 />
               </Pressable>
             </Row>
@@ -188,13 +188,13 @@ function MenuRow({ icon, label, sub, onPress, danger }) {
         alignItems: 'center',
         paddingVertical: 13,
         borderBottomWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.borderStrong,
         opacity: pressed ? 0.6 : 1,
       })}
     >
       <Text style={{ fontSize: 18, width: 30 }}>{icon}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: danger ? colors.danger : colors.text, fontWeight: '700', fontSize: 15 }}>{label}</Text>
+        <Text style={{ color: danger ? colors.dangerInk : colors.text, fontWeight: '700', fontSize: 15 }}>{label}</Text>
         {sub ? <Text style={{ color: colors.sub, fontSize: 12, marginTop: 1 }}>{sub}</Text> : null}
       </View>
       <Text style={{ color: colors.sub, fontSize: 18 }}>›</Text>
@@ -209,10 +209,15 @@ function MenuSheet({ visible, onClose, openProfile, openHistory, openSchedules, 
   const { me, logout, langPref, setLanguage } = useAuth();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }} />
+      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: colors.overlay }} />
+      {/* The menu is its own region: sheet under it, a card for the identity
+          header, so "who you are" and "where you can go" do not read as one
+          undifferentiated list. */}
       <View
         style={{
-          backgroundColor: colors.card,
+          backgroundColor: colors.sheet,
+          borderTopWidth: 1,
+          borderColor: colors.border,
           borderTopLeftRadius: RADIUS_LG,
           borderTopRightRadius: RADIUS_LG,
           paddingHorizontal: SCREEN_PAD,
@@ -221,10 +226,19 @@ function MenuSheet({ visible, onClose, openProfile, openHistory, openSchedules, 
           maxHeight: '85%',
         }}
       >
-        <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 14 }} />
+        <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, marginBottom: 14 }} />
         <ScrollView keyboardShouldPersistTaps="handled">
           <Pressable onPress={openProfile} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-            <Row style={{ marginBottom: 14 }}>
+            <Row
+              style={{
+                marginBottom: 14,
+                backgroundColor: colors.card,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: RADIUS_LG,
+                padding: 12,
+              }}
+            >
               <Avatar user={me} size={52} style={{ marginRight: 12 }} />
               <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800' }} numberOfLines={1}>

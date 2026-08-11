@@ -353,7 +353,7 @@ ${postFn}
           c.alts.forEach(function (alt, i) {
             if (!alt.points || alt.points.length < 2) return;
             // A fat invisible line makes the thin dashed one easy to hit.
-            var hit = L.polyline(alt.points, { color: '#000', weight: 22, opacity: 0, lineCap: 'round' });
+            var hit = L.polyline(alt.points, { color: 'transparent', weight: 22, opacity: 0, lineCap: 'round' });
             var line = L.polyline(alt.points, { color: '${colors.sub}', weight: 5, opacity: 0.75, dashArray: '10 8', lineCap: 'round', interactive: false });
             hit.on('click', function (ev) { L.DomEvent.stop(ev); post({ type: 'altpick', index: i }); });
             line.addTo(altLayer);

@@ -42,6 +42,7 @@ Conventions live in CLAUDE.md.
 | ~~L51~~ | ~~2GIS MapGL basemap, with the raster map kept as the floor~~ | ✅ shipped |
 | ~~L52~~ | ~~Ops: nightly verified backups, a watchdog that speaks Telegram, security updates~~ | ✅ shipped |
 | ~~L53~~ | ~~The second driver window removed; a place cache that survives deploys~~ | ✅ shipped |
+| ~~L54~~ | ~~One colour per region, light and dark: navbar, sheets, menus, cards, controls~~ | ✅ shipped — dark is the light ramp inverted where inverting means something |
 
 \* misnumbered — that commit lands *after* L33 and is really L34's
 predecessor. Left alone rather than rewriting pushed history; the next free

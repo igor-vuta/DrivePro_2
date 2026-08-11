@@ -21,28 +21,73 @@ const PALETTE = {
   white: '#FFFEFF',
 };
 
+// ------------------------------------------------------------- the ramp ---
+//
+// Every region of the app used to draw from the same two surfaces, so a
+// floating pill, a bottom dock and a menu sheet were all literally the same
+// colour and depth had to be guessed from the borders. Each region now has
+// its own token, and the tokens are one ordered ladder rather than a bag of
+// greys:
+//
+//   surface  recessed - inputs, segmented tracks, switch tracks
+//   bg       the ground everything else sits on
+//   sheet    the dock at the bottom of the map, and the menu behind the avatar
+//   card     a panel raised over the map
+//   chrome   the pills floating at the top - the navbar, blue-cast so it is
+//            read as controls rather than as another panel
+//
+// The values were generated in OKLCH so the ladder is even to the eye rather
+// than even in hex: hue and chroma identify the region (259 slate for the
+// content ladder, 234 - the palette blue - for chrome and tint) and only
+// lightness differs between the two schemes.
+//
+// Dark inverts light where inverting means something. The ground and the ink
+// swap ends of the ramp, and `surface` crosses over: a recessed control sits
+// *below* the ground in light and *above* it in dark, because on a dark ground
+// an inset darker still is a hole. What does not invert is the direction of
+// elevation - a raised panel is lighter than its ground in both schemes, since
+// raised things catch light either way - nor the semantic colours, which are
+// the city's and stay put. Dark carries more chroma at the same hue, or the
+// slate cast washes out to plain grey down there.
+//
+// Fills are unreadable as body text, so the palette colours that appear as
+// type have a scheme-specific readable twin, the way gold/goldFill already
+// did: primary/primaryInk, ok/okInk, danger/dangerInk. Every ink - including
+// sub - clears WCAG AA (4.5:1) against every region of its own scheme, which
+// is what fixed the lightness of each one.
+
 const light = {
   scheme: 'light',
-  // bg and card were both white, so nothing on the sheet stood up from it -
-  // the app read as one flat white field. The ground is now a slate tint and
-  // cards stay pure white, which is what makes them look raised.
-  bg: '#E9EEF3',
-  card: '#FFFFFF',
-  // Deeper than the ground, so inputs and chips read as recessed into it
-  // rather than floating like cards.
-  surface: '#DCE4EC',
+  bg: '#E2E8F3',
+  surface: '#CED8E7',
+  sheet: '#F0F5FB',
+  card: PALETTE.white,
+  chrome: '#DBF3FF',
+  chromeBorder: '#9ED3F2',
+  // A soft primary wash for anything selected - chips, days, mode tiles.
+  tint: '#BDE7FF',
+  onTint: '#006692',
   text: PALETTE.slate,
-  sub: '#7B8798',
-  border: '#C8D3DE',
+  sub: '#535D6C',
+  border: '#C4CDDB',
+  // Where a hairline has to be seen rather than felt: grab handles, ghost
+  // buttons, dividers inside a menu.
+  borderStrong: '#A6B2C5',
   primary: PALETTE.blue,
   primaryText: PALETTE.white,
+  primaryInk: '#006194',
   accent: PALETTE.crimson,
   // The palette yellow is unreadable as text on white, so light mode uses a
   // darkened version for type and keeps the pure yellow for fills.
-  gold: '#8A7400',
+  gold: '#6F5C00',
   goldFill: PALETTE.yellow,
   danger: PALETTE.crimson,
+  dangerInk: '#AC1B53',
   ok: PALETTE.green,
+  okInk: '#006933',
+  // Scrims are slate rather than black, so a modal dims the app instead of
+  // greying it out.
+  overlay: 'rgba(31,41,58,0.42)',
   // Shadows carry depth in light; glow is reserved for dark, because glow on
   // a near-white ground reads as blur rather than light.
   shadow: 'rgba(44,53,66,0.22)',
@@ -56,20 +101,30 @@ const light = {
 
 const dark = {
   scheme: 'dark',
-  bg: '#222B36',
-  card: PALETTE.slate,
-  surface: '#3A465A',
+  bg: '#131C2A',
+  surface: '#202C3E',
+  sheet: '#2B3749',
+  card: '#3B4759',
+  chrome: '#20465A',
+  chromeBorder: '#2B6E8F',
+  tint: '#064059',
+  onTint: '#83D8FF',
   text: PALETTE.white,
-  sub: '#A9B4C4',
-  border: '#55637A',
+  sub: '#B1BBCC',
+  border: '#4D5768',
+  borderStrong: '#697589',
   primary: PALETTE.blue,
   primaryText: PALETTE.white,
+  primaryInk: '#6DC6F6',
   accent: PALETTE.crimson,
   gold: PALETTE.yellow,
   goldFill: PALETTE.yellow,
   danger: '#FF5C93',
+  dangerInk: '#FF94B1',
   ok: '#12B45C',
-  shadow: 'rgba(0,0,0,0.45)',
+  okInk: '#6FD395',
+  overlay: 'rgba(5,9,15,0.62)',
+  shadow: 'rgba(0,0,0,0.5)',
   glow: 'rgba(0,143,210,0.45)',
   // No dark Voyager exists; dark_all already carries street names, and a
   // light style under a dark UI would glare at night.

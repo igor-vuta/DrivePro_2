@@ -76,14 +76,14 @@ function ModeTile({ icon, label, route, active, onPress, style }) {
           borderRadius: 16,
           borderWidth: active ? 2 : 1,
           borderColor: active ? colors.primary : colors.border,
-          backgroundColor: colors.card,
+          backgroundColor: active ? colors.tint : colors.card,
           opacity: pressed ? 0.75 : 1,
         },
         style,
       ]}
     >
       <Text style={{ fontSize: 20 }}>{icon}</Text>
-      <Text style={{ color: active ? colors.primary : colors.text, fontWeight: '700', fontSize: 13, marginTop: 2 }}>{label}</Text>
+      <Text style={{ color: active ? colors.onTint : colors.text, fontWeight: '700', fontSize: 13, marginTop: 2 }}>{label}</Text>
       <Text style={{ color: colors.sub, fontSize: 12, marginTop: 2 }}>
         {route ? fmtDuration(route.durationS) : '…'}
       </Text>
@@ -1182,7 +1182,7 @@ export default function RideTab() {
                       : ''}
                   </Text>
                   {liftOffer.meet ? (
-                    <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>
+                    <Text style={{ color: colors.primaryInk, fontSize: 12, fontWeight: '700' }}>
                       {t('ride.liftMeet', { dist: fmtDistance(liftOffer.meet.distM) })}
                     </Text>
                   ) : null}
@@ -1252,7 +1252,7 @@ export default function RideTab() {
           <View pointerEvents="none" style={{ position: 'absolute', left: 12, right: 12, top: CHROME_H + 8 }}>
             <Card style={{ marginBottom: 0, paddingVertical: 12 }}>
               <Row>
-                <Text style={{ fontSize: 30, color: colors.primary, width: 44, textAlign: 'center' }}>
+                <Text style={{ fontSize: 30, color: colors.primaryInk, width: 44, textAlign: 'center' }}>
                   {instructionArrow(bannerStep)}
                 </Text>
                 <View style={{ flex: 1 }}>
@@ -1269,12 +1269,12 @@ export default function RideTab() {
         ) : null}
       </View>
 
-      <View style={{ paddingHorizontal: SCREEN_PAD, paddingTop: 10, backgroundColor: colors.bg }}>
+      <View style={{ paddingHorizontal: SCREEN_PAD, paddingTop: 10, backgroundColor: colors.sheet, borderTopWidth: 1, borderTopColor: colors.border }}>
         {step === 'nav' ? (
           <Row style={{ paddingBottom: 12 }}>
             {navPhase === 'arrived' ? (
               <>
-                <Text style={{ flex: 1, fontSize: 20, fontWeight: '800', color: colors.ok }}>🏁 {t('nav.arrived')}</Text>
+                <Text style={{ flex: 1, fontSize: 20, fontWeight: '800', color: colors.okInk }}>🏁 {t('nav.arrived')}</Text>
                 <Button title={t('nav.done')} onPress={resetFlow} style={{ paddingHorizontal: 22, marginTop: 0 }} />
               </>
             ) : (
@@ -1342,7 +1342,7 @@ export default function RideTab() {
                   {origin && origin.address ? origin.address : t('nav.myLocation')}
                 </Text>
                 <Pressable onPress={changeOrigin} hitSlop={8}>
-                  <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>{t('nav.changeFrom')}</Text>
+                  <Text style={{ color: colors.primaryInk, fontWeight: '700', fontSize: 13 }}>{t('nav.changeFrom')}</Text>
                 </Pressable>
               </Row>
               <Row>
@@ -1401,12 +1401,12 @@ export default function RideTab() {
                         borderRadius: 999,
                         borderWidth: on ? 2 : 1,
                         borderColor: on ? colors.primary : colors.border,
-                        backgroundColor: colors.card,
+                        backgroundColor: on ? colors.tint : colors.card,
                         marginRight: 8,
                         marginBottom: 6,
                       }}
                     >
-                      <Text style={{ color: on ? colors.primary : colors.text, fontWeight: '700', fontSize: 13 }}>
+                      <Text style={{ color: on ? colors.onTint : colors.text, fontWeight: '700', fontSize: 13 }}>
                         {fmtDuration(o.durationS)}
                         <Text style={{ color: colors.sub, fontWeight: '600' }}>
                           {'  '}
@@ -1480,7 +1480,7 @@ export default function RideTab() {
               /* A grab handle that also collapses the sheet, so the map is
                  always one tap away. */
               <Pressable onPress={() => setSheetOpen(false)} hitSlop={10} style={{ alignItems: 'center', paddingBottom: 8 }}>
-                <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: colors.border }} />
+                <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: colors.borderStrong }} />
               </Pressable>
             ) : null}
             {step === 'landing' && schedules.length ? (
@@ -1510,11 +1510,11 @@ export default function RideTab() {
                         borderRadius: 999,
                         borderWidth: on ? 2 : 1,
                         borderColor: on ? colors.primary : colors.border,
-                        backgroundColor: colors.card,
+                        backgroundColor: on ? colors.tint : colors.card,
                         marginRight: 8,
                       }}
                     >
-                      <Text style={{ color: on ? colors.primary : colors.text, fontWeight: '700', fontSize: 13 }}>{t(c.label)}</Text>
+                      <Text style={{ color: on ? colors.onTint : colors.text, fontWeight: '700', fontSize: 13 }}>{t(c.label)}</Text>
                     </Pressable>
                   );
                 })}
@@ -1669,7 +1669,7 @@ function ScheduleList({ schedules, onChanged }) {
               <Text style={{ fontSize: 14 }}>{s.active ? '⏸' : '▶️'}</Text>
             </Pressable>
             <Pressable onPress={() => del(s)} style={{ paddingHorizontal: 6 }}>
-              <Text style={{ color: colors.danger, fontSize: 14, fontWeight: '700' }}>✕</Text>
+              <Text style={{ color: colors.dangerInk, fontSize: 14, fontWeight: '700' }}>✕</Text>
             </Pressable>
           </Row>
         </Row>
@@ -1737,12 +1737,12 @@ function SchedulePlanner({ pickup, dest, comment, onCreated }) {
                 borderRadius: 999,
                 borderWidth: 1,
                 borderColor: on ? colors.primary : colors.border,
-                backgroundColor: on ? '#04222b' : colors.card,
+                backgroundColor: on ? colors.tint : colors.card,
                 marginRight: 6,
                 marginBottom: 6,
               }}
             >
-              <Text style={{ color: on ? colors.primary : colors.sub, fontWeight: '700', fontSize: 12 }}>{lb}</Text>
+              <Text style={{ color: on ? colors.onTint : colors.sub, fontWeight: '700', fontSize: 12 }}>{lb}</Text>
             </Pressable>
           );
         })}
@@ -1808,7 +1808,7 @@ function CarFormModal({ visible, onClose, onSaved, saveCar }) {
   };
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: SCREEN_PAD }}>
+      <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: SCREEN_PAD }}>
         <Card>
           <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, marginBottom: 2 }}>🚗 {t('ride.carFormTitle')}</Text>
           <Sub>{t('ride.carFormText')}</Sub>
@@ -1911,7 +1911,7 @@ function DriverOnTheWay({ ride, driver, driverLoc, onCancel }) {
       <View style={{ flex: 1 }}>
         <MapView ref={mapRef} initialCenter={{ lat: target.lat, lng: target.lng }} markers={markers} />
       </View>
-      <View style={{ paddingHorizontal: SCREEN_PAD, paddingTop: 10, backgroundColor: colors.bg }}>
+      <View style={{ paddingHorizontal: SCREEN_PAD, paddingTop: 10, backgroundColor: colors.sheet, borderTopWidth: 1, borderTopColor: colors.border }}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 6 }}>{heading}</Text>
         <Card style={{ marginBottom: 10 }}>
           <Row style={{ marginBottom: 2 }}>
