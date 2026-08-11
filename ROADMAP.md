@@ -40,8 +40,8 @@ Conventions live in CLAUDE.md.
 | ~~L49~~ | ~~The map gets the screen back: collapsed search sheet, light-mode contrast~~ | ✅ shipped |
 | ~~L50~~ | ~~Search as you type, debounced and cached so it does not burn the quota~~ | ✅ shipped |
 | ~~L51~~ | ~~2GIS MapGL basemap, with the raster map kept as the floor~~ | ✅ shipped |
-| L52 | Ops: nightly backups, uptime alerting, the VM's pending security updates | next |
-| L53 | Tidy: DriveTab's unreachable screens; longer, coarser place caching | after L52 |
+| ~~L52~~ | ~~Ops: nightly verified backups, a watchdog that speaks Telegram, security updates~~ | ✅ shipped |
+| L53 | Tidy: DriveTab's unreachable screens; longer, coarser place caching | next |
 
 \* misnumbered — that commit lands *after* L33 and is really L34's
 predecessor. Left alone rather than rewriting pushed history; the next free

@@ -65,6 +65,59 @@ All state (SQLite DB, JWT secret, VAPID push keys) lives in
 `/opt/drivepro/data` — back up that one folder. Restoring it on a fresh VM
 keeps every account, ride, streak, crew and push subscription.
 
+## Unattended operations
+
+`deploy/setup-ops.sh` installs three things and is re-run by `update.sh` on
+every deploy, so a VM provisioned before any of it existed picks it up on its
+next push:
+
+| What | Unit | When |
+| --- | --- | --- |
+| Backup `/opt/drivepro/data` | `drivepro-backup.timer` | 03:20 UTC nightly (≈09:20 Almaty), 14 kept |
+| Health / disk / backup-age check | `drivepro-watchdog.timer` | every 10 min |
+| Ubuntu security updates | `unattended-upgrades` | daily |
+
+```bash
+systemctl list-timers 'drivepro-*'            # are they armed
+sudo bash /opt/drivepro/repo/deploy/backup.sh # run a backup now
+journalctl -u drivepro-backup -n 20           # did last night's work
+journalctl -u drivepro-watchdog -n 20         # what the watchdog sees
+```
+
+**Backups** go to `/opt/drivepro/backups`, `0600`, newest 14 kept. The
+database is snapshotted with `sqlite3 .backup` rather than copied, because a
+plain copy of a database being written to can restore corrupt. Each archive is
+opened after writing and deleted if it will not read — an unverified backup is
+not a backup. Restore with:
+
+```bash
+sudo systemctl stop drivepro
+sudo tar xzf /opt/drivepro/backups/drivepro-YYYYMMDD-HHMMSS.tgz -C /opt/drivepro/data
+sudo chown -R drivepro:drivepro /opt/drivepro/data
+sudo systemctl start drivepro
+```
+
+**Alerts** reuse the Telegram bot that already delivers verification codes, so
+they cost nothing new. Set the chat to alert:
+
+```bash
+sudo sh -c 'echo "ALERT_TELEGRAM_CHAT_ID=123456789" >> /etc/drivepro.env'
+```
+
+(Message the bot, then read your chat id from
+`journalctl -u drivepro | grep -i telegram`.) Without it the watchdog still
+runs and still logs — it just has nobody to tell. It reports once when
+something breaks and once when it recovers, never every ten minutes.
+
+**Reboots are deliberately manual.** `unattended-upgrades` installs security
+updates but never reboots: an unattended restart of the only production
+machine at an hour nobody is watching is worse than a pending one. When
+`/var/run/reboot-required` exists (kernel or libc updates), pick a moment:
+
+```bash
+sudo reboot        # then check: curl -sf https://drivepro-almaty.duckdns.org/api/health
+```
+
 ## Environments
 
 Three environments, deliberately separated so nothing developer-only can

@@ -20,6 +20,11 @@ OTP_ECHO=1
 EOF
 fi
 
+# Backups, watchdog and automatic security patching. Idempotent, and running
+# it here means a VM provisioned before any of it existed gets it on its next
+# deploy rather than when somebody remembers.
+bash /opt/drivepro/repo/deploy/setup-ops.sh || echo "warning: ops units not installed" >&2
+
 systemctl restart drivepro
 
 # Health check with a grace window: on a loaded box (the OSRM graph build,
