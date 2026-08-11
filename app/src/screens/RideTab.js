@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Linking, Platform, Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Linking, Modal, Platform, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { notify, confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
@@ -92,7 +92,7 @@ function ModeTile({ icon, label, route, active, onPress, style }) {
 }
 
 export default function RideTab() {
-  const { token, me, activeRide, counterpart, driverLoc } = useAuth();
+  const { token, me, activeRide, counterpart, driverLoc, saveCar } = useAuth();
   const mapRef = useRef(null);
 
   const myRide = activeRide && me && activeRide.riderId === me.id ? activeRide : null;
@@ -116,6 +116,9 @@ export default function RideTab() {
   const [navPos, setNavPos] = useState(null); // last GPS fix during navigation
   const [navInfo, setNavInfo] = useState(null); // progress(): remaining, ETA, next maneuver
   const [navPhase, setNavPhase] = useState('going'); // going | rerouting | arrived
+  const [takeAlong, setTakeAlong] = useState(false); // car mode: pick up riders en route
+  const [carModal, setCarModal] = useState(false); // one-time car details form
+  const [offer, setOffer] = useState(null); // ride offer received while driving
   const [center, setCenter] = useState(FALLBACK_CENTER);
   const [trails, setTrails] = useState([]);
   const [address, setAddress] = useState('');
@@ -147,6 +150,7 @@ export default function RideTab() {
   const navWatchRef = useRef(null); // the live position subscription
   const navOffCount = useRef(0); // consecutive off-route fixes before rerouting
   const wakeLockRef = useRef(null); // keeps the screen on while navigating (web)
+  const driverOnRef = useRef(false); // online as a driver during this navigation
 
   // Scheduled rides (L14): list + refresh after planner/list mutations.
   const loadSchedules = async () => {
@@ -204,6 +208,22 @@ export default function RideTab() {
 
   const centerRef = useRef(center);
   centerRef.current = center;
+
+  // Ride offers while navigating as a taking-passengers driver. Accepting
+  // hands over to the existing carrying flow: activeRide flips, and the home
+  // screen switches to the drive view exactly as it always has.
+  useEffect(() => {
+    const offOffer = wsClient.on('ride:offer', (msg) => {
+      if (driverOnRef.current) setOffer(msg);
+    });
+    const offGone = wsClient.on('ride:offer_gone', (msg) => {
+      setOffer((cur) => (cur && cur.ride && cur.ride.id === msg.rideId ? null : cur));
+    });
+    return () => {
+      offOffer();
+      offGone();
+    };
+  }, []);
 
   // Neon trails: glowing traces of recently finished rides, refreshed lazily.
   useEffect(() => {
@@ -452,6 +472,22 @@ export default function RideTab() {
       setNavPhase('going');
       setStep('nav');
       if (mapRef.current) mapRef.current.setCenter({ ...from, zoom: 17 });
+      // Taking passengers: go online as a driver along this exact route, so
+      // corridor matching offers requests that lie on the way.
+      if (mode === 'car' && takeAlong) {
+        driverOnRef.current = wsClient.send({
+          type: 'driver:activate',
+          lat: from.lat,
+          lng: from.lng,
+          route: {
+            points: simplifyPts(r.points, 200),
+            destLat: dest.lat,
+            destLng: dest.lng,
+            destAddress: dest.address || '',
+            radiusM: 1000,
+          },
+        });
+      }
       beginNavWatch();
       // Navigation with the screen off is no navigation; best-effort only.
       try {
@@ -490,6 +526,7 @@ export default function RideTab() {
   const onNavPos = (c) => {
     myLocRef.current = c;
     setNavPos(c);
+    if (driverOnRef.current) wsClient.send({ type: 'driver:location', lat: c.lat, lng: c.lng });
     const model = navModelRef.current;
     if (!model) return;
     const p = navProgress(model, c);
@@ -499,6 +536,7 @@ export default function RideTab() {
     if (p.remainM < 40) {
       setNavPhase('arrived');
       endNavWatch();
+      goOffline();
       return;
     }
     // Two consecutive fixes far from every route vertex = genuinely off the
@@ -534,6 +572,14 @@ export default function RideTab() {
     }
   };
 
+  const goOffline = () => {
+    if (driverOnRef.current) {
+      wsClient.send({ type: 'driver:deactivate' });
+      driverOnRef.current = false;
+    }
+    setOffer(null);
+  };
+
   const endNavWatch = () => {
     if (navWatchRef.current) {
       stopWatching(navWatchRef.current);
@@ -549,6 +595,7 @@ export default function RideTab() {
 
   const exitNav = () => {
     endNavWatch();
+    goOffline();
     navModelRef.current = null;
     setNavModel(null);
     setNavInfo(null);
@@ -558,8 +605,22 @@ export default function RideTab() {
     if (r && r.points && r.points.length && mapRef.current) mapRef.current.fitBounds(r.points);
   };
 
-  // The watch must not outlive the component.
-  useEffect(() => () => endNavWatch(), []);
+  // The watch must not outlive the component - nor must the online status.
+  useEffect(
+    () => () => {
+      endNavWatch();
+      goOffline();
+    },
+    []
+  );
+
+  const acceptOffer = () => {
+    if (!offer || !offer.ride) return;
+    wsClient.send({ type: 'ride:accept', rideId: offer.ride.id });
+    setOffer(null);
+    // activeRide flips on ride:accepted; the home screen then switches to the
+    // carrying view as it always has.
+  };
 
   const loadRoute = async (from, to) => {
     const seq = ++fitSeq.current;
@@ -635,6 +696,7 @@ export default function RideTab() {
   const resetFlow = () => {
     fitSeq.current++;
     endNavWatch();
+    goOffline();
     navModelRef.current = null;
     setNavModel(null);
     setNavInfo(null);
@@ -780,6 +842,30 @@ export default function RideTab() {
             </Card>
           </View>
         ) : null}
+        {step === 'nav' && offer && offer.ride ? (
+          <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
+            <Card style={{ marginBottom: 0 }}>
+              <Row style={{ marginBottom: 6 }}>
+                <Avatar user={offer.rider} size={34} style={{ marginRight: 8 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontWeight: '800' }} numberOfLines={1}>
+                    {offer.rider ? offer.rider.name : ''}
+                  </Text>
+                  <Text style={{ color: colors.sub, fontSize: 12 }} numberOfLines={1}>
+                    {offer.ride.pickupAddress} → {offer.ride.destAddress}
+                  </Text>
+                </View>
+                {typeof offer.pickupDistanceM === 'number' ? (
+                  <Text style={{ color: colors.sub, fontSize: 12 }}>{fmtDistance(offer.pickupDistanceM)}</Text>
+                ) : null}
+              </Row>
+              <Row>
+                <Button kind="ghost" title={t('common.close')} onPress={() => setOffer(null)} style={{ flex: 1, marginRight: 8, marginTop: 0, height: 44 }} />
+                <Button title={t('drive.accept')} onPress={acceptOffer} style={{ flex: 2, marginTop: 0, height: 44 }} />
+              </Row>
+            </Card>
+          </View>
+        ) : null}
         {step === 'nav' && navPhase !== 'arrived' ? (
           <View pointerEvents="none" style={{ position: 'absolute', left: 12, right: 12, top: CHROME_H + 8 }}>
             <Card style={{ marginBottom: 0, paddingVertical: 12 }}>
@@ -820,7 +906,15 @@ export default function RideTab() {
                     </Text>
                   </Text>
                   <Sub style={{ marginBottom: 0, fontSize: 12 }}>
-                    {navPhase === 'rerouting' ? t('nav.rerouting') : !navPos ? t('nav.waitGps') : dest ? dest.address : ''}
+                    {navPhase === 'rerouting'
+                      ? t('nav.rerouting')
+                      : !navPos
+                      ? t('nav.waitGps')
+                      : takeAlong && mode === 'car'
+                      ? `🟢 ${t('ride.takeAlongOn')}`
+                      : dest
+                      ? dest.address
+                      : ''}
                   </Sub>
                 </View>
                 <Button kind="ghost" title={t('nav.exit')} onPress={exitNav} style={{ height: 44, paddingHorizontal: 16, marginTop: 0 }} />
@@ -861,7 +955,36 @@ export default function RideTab() {
                 />
               ))}
             </Row>
-            <Sub style={{ marginBottom: 8 }}>{originGuessed ? t('ride.fromCentre') : t('ride.soloHint')}</Sub>
+            {mode === 'car' ? (
+              <Pressable
+                onPress={() => {
+                  if (!takeAlong && !(me && me.isDriver)) setCarModal(true);
+                  else setTakeAlong(!takeAlong);
+                }}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, marginBottom: 2 }}
+              >
+                <View
+                  style={{
+                    width: 44,
+                    height: 26,
+                    borderRadius: 13,
+                    backgroundColor: takeAlong ? colors.primary : colors.surface,
+                    borderWidth: 1,
+                    borderColor: takeAlong ? colors.primary : colors.border,
+                    padding: 2,
+                    marginRight: 10,
+                  }}
+                >
+                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.card, alignSelf: takeAlong ? 'flex-end' : 'flex-start' }} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14 }}>🚗 {t('ride.takeAlong')}</Text>
+                  {takeAlong ? <Text style={{ color: colors.sub, fontSize: 12 }}>{t('ride.takeAlongOn')}</Text> : null}
+                </View>
+              </Pressable>
+            ) : (
+              <Sub style={{ marginBottom: 8 }}>{originGuessed ? t('ride.fromCentre') : t('ride.soloHint')}</Sub>
+            )}
             <ErrorText>{error}</ErrorText>
             <Row>
               <Button title={`▶ ${t('nav.start')}`} onPress={startNav} style={{ flex: 1, marginRight: 8 }} />
@@ -975,6 +1098,15 @@ export default function RideTab() {
         </FadeIn>
         )}
       </View>
+      <CarFormModal
+        visible={carModal}
+        onClose={() => setCarModal(false)}
+        onSaved={() => {
+          setCarModal(false);
+          setTakeAlong(true);
+        }}
+        saveCar={saveCar}
+      />
     </Bleed>
   );
 }
@@ -1106,6 +1238,52 @@ function SchedulePlanner({ pickup, dest, comment, onCreated }) {
         <Button title={t('sched.create')} onPress={create} loading={busy} style={{ flex: 2 }} />
       </Row>
     </Card>
+  );
+}
+
+// One-time car details, asked the moment someone flips "take passengers
+// along the way" without a car on file. Saved to the profile; never asked again.
+function CarFormModal({ visible, onClose, onSaved, saveCar }) {
+  const [make, setMake] = useState('');
+  const [model, setModel] = useState('');
+  const [color, setColor] = useState('');
+  const [plate, setPlate] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setErr('');
+    setBusy(true);
+    try {
+      await saveCar({ carMake: make.trim(), carModel: model.trim(), carColor: color.trim(), plate: plate.trim() });
+      onSaved();
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: SCREEN_PAD }}>
+        <Card>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, marginBottom: 2 }}>🚗 {t('ride.carFormTitle')}</Text>
+          <Sub>{t('ride.carFormText')}</Sub>
+          <Row>
+            <Input label={t('profile.carMake')} value={make} onChangeText={setMake} placeholder={t('profile.carMakePh')} maxLength={40} containerStyle={{ flex: 1, marginRight: 8 }} />
+            <Input label={t('profile.carModel')} value={model} onChangeText={setModel} placeholder={t('profile.carModelPh')} maxLength={40} containerStyle={{ flex: 1 }} />
+          </Row>
+          <Row>
+            <Input label={t('profile.colour')} value={color} onChangeText={setColor} placeholder={t('profile.colourPh')} maxLength={30} containerStyle={{ flex: 1, marginRight: 8 }} />
+            <Input label={t('profile.plate')} value={plate} onChangeText={setPlate} placeholder={t('profile.platePh')} autoCapitalize="characters" maxLength={16} containerStyle={{ flex: 1 }} />
+          </Row>
+          <ErrorText>{err}</ErrorText>
+          <Row>
+            <Button kind="ghost" title={t('common.cancel')} onPress={onClose} style={{ flex: 1, marginRight: 8 }} />
+            <Button title={t('profile.saveCar')} onPress={save} loading={busy} disabled={!make.trim() || !model.trim() || !plate.trim()} style={{ flex: 2 }} />
+          </Row>
+        </Card>
+      </View>
+    </Modal>
   );
 }
 

@@ -153,11 +153,6 @@ export default function HomeScreen({ openProfile, openHistory, openSchedules, op
       <MenuSheet
         visible={menu}
         onClose={() => setMenu(false)}
-        tab={tab}
-        onTab={(v) => {
-          setTab(v);
-          setMenu(false);
-        }}
         openProfile={() => {
           setMenu(false);
           openProfile();
@@ -207,9 +202,8 @@ function MenuRow({ icon, label, sub, onPress, danger }) {
 // Everything that is not "get me somewhere" lives behind the avatar: which
 // side of the ride you are on, your crew and history, the language, the way
 // out. The map stays visible behind it.
-function MenuSheet({ visible, onClose, tab, onTab, openProfile, openHistory, openSchedules, openCrew }) {
+function MenuSheet({ visible, onClose, openProfile, openHistory, openSchedules, openCrew }) {
   const { me, logout, langPref, setLanguage } = useAuth();
-  const driving = tab === 'drive';
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }} />
@@ -240,12 +234,6 @@ function MenuSheet({ visible, onClose, tab, onTab, openProfile, openHistory, ope
             </Row>
           </Pressable>
 
-          <MenuRow
-            icon={driving ? '🧍' : '🚗'}
-            label={driving ? t('menu.rideMode') : t('menu.driveMode')}
-            sub={driving ? t('menu.rideSub') : t('menu.driveSub')}
-            onPress={() => onTab(driving ? 'ride' : 'drive')}
-          />
           <MenuRow icon="👤" label={t('menu.profile')} onPress={openProfile} />
           <MenuRow icon="⏰" label={t('menu.schedules')} onPress={openSchedules} />
           <MenuRow icon="🏴" label={t('crew.title')} onPress={openCrew} />
