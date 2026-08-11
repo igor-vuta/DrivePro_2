@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { Screen, Button, Segmented, Row, FadeIn, Avatar, colors, SCREEN_PAD, CHROME_H } from '../ui';
-import { RADIUS_LG } from '../theme';
+import { Screen, Button, Segmented, Row, FadeIn, Avatar, colors, SCREEN_PAD, SAFE_TOP } from '../ui';
+import { RADIUS_LG, CHROME_TOP } from '../theme';
 import { useAuth } from '../state';
 import { t } from '../i18n';
 import RideTab from './RideTab';
@@ -119,11 +119,12 @@ export default function HomeScreen({ openProfile, openHistory, openSchedules, op
   // The map is the app: it runs edge to edge and the chrome floats on top of
   // it, so switching modes lives in the avatar sheet rather than a tab bar.
   return (
-    <Screen>
+    <Screen full>
       <View style={{ flex: 1 }}>
-        {/* The chrome floats, so the space it needs is reserved here and given
-            back by <Bleed top> in the states that are a full-screen map. */}
-        <View style={{ flex: 1, paddingTop: CHROME_H }}>
+        {/* The chrome floats, so the space it needs - the notch plus the pills
+            themselves - is reserved here and given back by <Bleed top> in the
+            states that are a full-screen map. */}
+        <View style={{ flex: 1, paddingTop: CHROME_TOP }}>
           <FadeIn keyId={tab} style={{ flex: 1 }}>
             {tab === 'ride' ? <RideTab /> : <DriveTab openProfile={openProfile} />}
           </FadeIn>
@@ -131,7 +132,15 @@ export default function HomeScreen({ openProfile, openHistory, openSchedules, op
 
         <View
           pointerEvents="box-none"
-          style={{ position: 'absolute', top: 0, left: -SCREEN_PAD, right: -SCREEN_PAD, paddingHorizontal: SCREEN_PAD }}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: -SCREEN_PAD,
+            right: -SCREEN_PAD,
+            paddingHorizontal: SCREEN_PAD,
+            // The map runs under the status bar; these do not.
+            paddingTop: SAFE_TOP,
+          }}
         >
           {/* box-none has to be repeated here: react-native-web turns it into
               `pointer-events:none` on the element plus `& > * {auto}`, so a

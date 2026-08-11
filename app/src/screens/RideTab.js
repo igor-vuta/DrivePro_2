@@ -3,7 +3,7 @@ import { ActivityIndicator, Keyboard, Linking, Modal, Platform, Pressable, Scrol
 import { notify, confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
-import { Card, Button, Input, Sub, ErrorText, Row, Avatar, FadeIn, Pop, Bleed, SCREEN_PAD, CHROME_H, colors } from '../ui';
+import { Card, Button, Input, Sub, ErrorText, Row, Avatar, FadeIn, Pop, Bleed, SCREEN_PAD, CHROME_H, SAFE_BOTTOM, colors } from '../ui';
 import { useAuth } from '../state';
 import { api } from '../api';
 import { wsClient } from '../ws';
@@ -1269,7 +1269,7 @@ export default function RideTab() {
         ) : null}
       </View>
 
-      <View style={{ paddingHorizontal: SCREEN_PAD, paddingTop: 10, backgroundColor: colors.sheet, borderTopWidth: 1, borderTopColor: colors.border }}>
+      <View style={{ paddingHorizontal: SCREEN_PAD, paddingTop: 10, paddingBottom: SAFE_BOTTOM, backgroundColor: colors.sheet, borderTopWidth: 1, borderTopColor: colors.border }}>
         {step === 'nav' ? (
           <Row style={{ paddingBottom: 12 }}>
             {navPhase === 'arrived' ? (
@@ -1911,7 +1911,7 @@ function DriverOnTheWay({ ride, driver, driverLoc, onCancel }) {
       <View style={{ flex: 1 }}>
         <MapView ref={mapRef} initialCenter={{ lat: target.lat, lng: target.lng }} markers={markers} />
       </View>
-      <View style={{ paddingHorizontal: SCREEN_PAD, paddingTop: 10, backgroundColor: colors.sheet, borderTopWidth: 1, borderTopColor: colors.border }}>
+      <View style={{ paddingHorizontal: SCREEN_PAD, paddingTop: 10, paddingBottom: SAFE_BOTTOM, backgroundColor: colors.sheet, borderTopWidth: 1, borderTopColor: colors.border }}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 6 }}>{heading}</Text>
         <Card style={{ marginBottom: 10 }}>
           <Row style={{ marginBottom: 2 }}>

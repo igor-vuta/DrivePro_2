@@ -51,6 +51,12 @@ if (!html.includes(MARK)) {
     // flash in dark mode or a black one in light.
     '      html,body{background:#FFFEFF}',
     '      @media (prefers-color-scheme: dark){html,body{background:#222B36}}',
+    // The notch and the home indicator, published as variables so the app can
+    // decide per element who respects them. The map does not: it runs under
+    // the status bar to the physical edge of the screen, the way a map app
+    // should. Only the things you have to be able to read and tap - the
+    // floating pills, the bottom sheet's controls - keep clear of them.
+    '      :root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)}',
     '      html,body{height:100%;overflow:hidden;overscroll-behavior:none}',
     '      #root{position:fixed;top:0;right:0;bottom:0;left:0;height:auto;display:flex}',
     '    </style>',

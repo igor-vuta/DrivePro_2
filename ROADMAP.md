@@ -43,6 +43,9 @@ Conventions live in CLAUDE.md.
 | ~~L52~~ | ~~Ops: nightly verified backups, a watchdog that speaks Telegram, security updates~~ | ✅ shipped |
 | ~~L53~~ | ~~The second driver window removed; a place cache that survives deploys~~ | ✅ shipped |
 | ~~L54~~ | ~~One colour per region, light and dark: navbar, sheets, menus, cards, controls~~ | ✅ shipped — dark is the light ramp inverted where inverting means something |
+| ~~L55~~ | ~~Routing: keep the graphs warm; repair a point the profile cannot use~~ | ✅ shipped — cold 2.2/4.1/6.0 s vs 1-100 ms warm, measured |
+| ~~L56~~ | ~~OpenStreetMap wherever 2GIS has no map~~ | ✅ shipped |
+| ~~L57~~ | ~~Two colours, white/blue and black/blue; and a genuinely full screen~~ | ✅ shipped |
 
 \* misnumbered — that commit lands *after* L33 and is really L34's
 predecessor. Left alone rather than rewriting pushed history; the next free

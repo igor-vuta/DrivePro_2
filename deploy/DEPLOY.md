@@ -231,6 +231,11 @@ mandatory on this box, since the three graphs total ~3.3 GB and loading
 them into anonymous memory thrashes forever. To rebuild after a fresh
 region download, rerun the script; it skips whatever is already built.
 
+`OSRM_WARM_MS` (default 120000) and `OSRM_WARM_POINT` control the warmer that
+keeps the mmap'd graphs in the page cache; it only runs when a self-hosted
+`OSRM_*_URL` is configured. Without it the first route after a quiet spell takes
+seconds instead of milliseconds on this size of machine.
+
 > **Run it attended.** It competes with the live service for the whole
 > build. Nothing breaks without it; the FOSSGIS fallback keeps serving in
 > the meantime.

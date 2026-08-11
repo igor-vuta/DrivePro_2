@@ -128,7 +128,7 @@ only, `/api/places/{search,near,at,:id}` returning a provider-neutral shape;
 already uses for saved Home/Work).
 
 Layer numbering slipped once: the ride-flow commit is labelled **L32** but
-lands after L33. Next free number is **L55**.
+lands after L33. Next free number is **L58**.
 
 L51 basemap: two engines behind one command protocol in `app/src/MapView.js` -
 2GIS **MapGL** where a key allows, CARTO raster through Leaflet otherwise, and
@@ -166,5 +166,28 @@ stay put. Fills that appear as type got readable twins the way `gold/goldFill`
 already had: `primaryInk`, `okInk`, `dangerInk`, plus `borderStrong` and
 `overlay`. `smoke38.mjs` pins the contract - matching key sets, the ladder's
 order, AA on every ink/region pair, and no hardcoded colour in a style prop.
+
+L55 routing: self-hosted OSRM runs `--mmap=1`, so its graphs live in the page
+cache and the kernel evicts them while idle - cold routes measured 2.2/4.1/6.0 s
+against 1-100 ms warm. `startRouteWarmer()` in `geo.js` touches each profile
+every `OSRM_WARM_MS` (2 min, self-hosted only). A point the profile cannot start
+from is no longer a 502: OSRM's `nearest` supplies the closest routable point,
+the route is retried from there and the displacement comes back as `snapped`;
+if the profile still cannot answer, another one does and says so as `viaMode`.
+
+L56 basemap coverage: `covers2gis()` in `app/src/mapconfig.js` holds bounding
+boxes for the countries 2GIS maps. Outside them MapGL renders an empty world, so
+`chooseEngine(initialCenter)` picks the raster engine instead - alongside the two
+existing reasons (no key, dark with no dark style).
+
+L57 identity and the full screen: the app is **white and blue**, black and blue
+after dark - the content ladder is near-neutral and the only saturated thing in
+the furniture is the palette blue; crimson/green/yellow are map signals, not
+decoration. The margins are gone: `SafeAreaView` at the root of every screen
+reserved the notch and the home indicator, and no negative margin could cancel a
+CSS `env()` the layout never sees. `postexport.mjs` publishes them as `--sat`
+/`--sab`, `theme.js` exports `SAFE_TOP`/`SAFE_BOTTOM`/`CHROME_TOP`, and
+`<Screen full>` stops insetting at the root - the map runs to the physical edge
+while chrome and sheet controls pad themselves.
 
 Remaining work and its running order live in `ROADMAP.md`.

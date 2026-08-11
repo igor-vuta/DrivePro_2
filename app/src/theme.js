@@ -37,9 +37,17 @@ const PALETTE = {
 //            read as controls rather than as another panel
 //
 // The values were generated in OKLCH so the ladder is even to the eye rather
-// than even in hex: hue and chroma identify the region (259 slate for the
-// content ladder, 234 - the palette blue - for chrome and tint) and only
-// lightness differs between the two schemes.
+// than even in hex, and the ladder itself is deliberately almost colourless.
+//
+// Every map app is two colours you can name from across the room: Uber is
+// white and black, 2GIS white and green, Yandex white and yellow. Ours is
+// **white and blue** - black and blue after dark. So the whole content ladder
+// carries only a trace of chroma (enough that grey does not look dead) and the
+// only saturated thing in the interface is the palette blue: the chrome pills,
+// anything selected, every primary button. The city's other colours are still
+// here, but they are *signals* rather than identity - crimson means the
+// destination, green means the pickup, yellow means points - and they appear
+// on the map, not as decoration on the furniture.
 //
 // Dark inverts light where inverting means something. The ground and the ink
 // swap ends of the ramp, and `surface` crosses over: a recessed control sits
@@ -58,21 +66,23 @@ const PALETTE = {
 
 const light = {
   scheme: 'light',
-  bg: '#E2E8F3',
-  surface: '#CED8E7',
-  sheet: '#F0F5FB',
-  card: PALETTE.white,
+  bg: '#F4F6F8',
+  surface: '#E4E7EC',
+  sheet: '#FAFBFC',
+  card: '#FFFFFF',
   chrome: '#DBF3FF',
   chromeBorder: '#9ED3F2',
   // A soft primary wash for anything selected - chips, days, mode tiles.
   tint: '#BDE7FF',
   onTint: '#006692',
-  text: PALETTE.slate,
-  sub: '#535D6C',
-  border: '#C4CDDB',
+  // Near-black rather than the coat-of-arms slate: with the ground this close
+  // to white, ink that is itself blue-grey makes the whole screen hazy.
+  text: '#161A21',
+  sub: '#5A6270',
+  border: '#DCE0E6',
   // Where a hairline has to be seen rather than felt: grab handles, ghost
   // buttons, dividers inside a menu.
-  borderStrong: '#A6B2C5',
+  borderStrong: '#B4BAC4',
   primary: PALETTE.blue,
   primaryText: PALETTE.white,
   primaryInk: '#006194',
@@ -87,7 +97,7 @@ const light = {
   okInk: '#006933',
   // Scrims are slate rather than black, so a modal dims the app instead of
   // greying it out.
-  overlay: 'rgba(31,41,58,0.42)',
+  overlay: 'rgba(22,26,33,0.42)',
   // Shadows carry depth in light; glow is reserved for dark, because glow on
   // a near-white ground reads as blur rather than light.
   shadow: 'rgba(44,53,66,0.22)',
@@ -101,18 +111,18 @@ const light = {
 
 const dark = {
   scheme: 'dark',
-  bg: '#131C2A',
-  surface: '#202C3E',
-  sheet: '#2B3749',
-  card: '#3B4759',
+  bg: '#0D1014',
+  surface: '#1A1E24',
+  sheet: '#23272F',
+  card: '#2F343D',
   chrome: '#20465A',
   chromeBorder: '#2B6E8F',
   tint: '#064059',
   onTint: '#83D8FF',
   text: PALETTE.white,
-  sub: '#B1BBCC',
-  border: '#4D5768',
-  borderStrong: '#697589',
+  sub: '#AEB5C0',
+  border: '#3D434D',
+  borderStrong: '#5C636F',
   primary: PALETTE.blue,
   primaryText: PALETTE.white,
   primaryInk: '#6DC6F6',
@@ -179,5 +189,25 @@ export const RADIUS_LG = 20;
 // with <Bleed top> so the map runs under the chrome to the screen edge.
 export const CHROME_H = 52;
 export const LINE_HEIGHT = 1.45;
+
+// The notch and the home indicator.
+//
+// These used to be handled once, at the top of every screen, by wrapping
+// everything in a SafeAreaView - which is correct for a form and wrong for a
+// map: it left a dead band above the map and below the sheet, and no amount of
+// negative margin could cancel it, because the inset is a CSS env() value the
+// layout never knows the size of.
+//
+// So the shell publishes the insets as CSS variables (see tools/postexport.mjs)
+// and each element decides for itself. The map ignores them and runs to the
+// physical edge; the floating chrome and the sheet's controls keep clear.
+// Native has no env(), and its SafeAreaView still does the job there.
+const web = Platform.OS === 'web';
+export const SAFE_TOP = web ? 'var(--sat, 0px)' : 0;
+export const SAFE_BOTTOM = web ? 'var(--sab, 0px)' : 0;
+// The space the home screen reserves for its floating chrome: the notch plus
+// the chrome itself, and the exact negative of it for a full-bleed child.
+export const CHROME_TOP = web ? `calc(var(--sat, 0px) + ${CHROME_H}px)` : CHROME_H;
+export const CHROME_TOP_NEG = web ? `calc(-1 * var(--sat, 0px) - ${CHROME_H}px)` : -CHROME_H;
 
 applyScheme(systemScheme());

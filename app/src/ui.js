@@ -14,16 +14,29 @@ import {
   View,
 } from 'react-native';
 
-import { colors, SCREEN_PAD, CARD_PAD, GAP, INPUT_H, BUTTON_H, RADIUS, RADIUS_LG, CHROME_H } from './theme';
+import { colors, SCREEN_PAD, CARD_PAD, GAP, INPUT_H, BUTTON_H, RADIUS, RADIUS_LG, CHROME_H, SAFE_TOP, SAFE_BOTTOM, CHROME_TOP_NEG } from './theme';
 
 const NATIVE = Platform.OS !== 'web';
 
 // Design system in Almaty's colours, light and dark - tokens live in
 // theme.js. SCREEN_PAD is re-exported so full-bleed children can cancel the
 // screen padding instead of repeating the number.
-export { colors, SCREEN_PAD, CHROME_H };
+export { colors, SCREEN_PAD, CHROME_H, SAFE_TOP, SAFE_BOTTOM };
 
-export function Screen({ children, style }) {
+// `full` is for the screen that is a map. It keeps the horizontal padding -
+// panels still sit inset, and Bleed still cancels it - but stops reserving the
+// notch and the home indicator at the top of the tree, so a full-bleed child
+// can actually reach the edge of the display. Whatever must stay legible pads
+// itself with SAFE_TOP / SAFE_BOTTOM instead.
+export function Screen({ children, style, full }) {
+  if (full) {
+    return (
+      <View style={[s.screen, style]}>
+        <StatusBar barStyle={colors.statusBar} backgroundColor={colors.bg} />
+        <View style={s.screenInnerFull}>{children}</View>
+      </View>
+    );
+  }
   return (
     <SafeAreaView style={[s.screen, style]}>
       <StatusBar barStyle={colors.statusBar} backgroundColor={colors.bg} />
@@ -101,7 +114,7 @@ export function Card({ children, style }) {
 // chrome, so a full-screen map reaches the very top of the display.
 export function Bleed({ children, style, top }) {
   return (
-    <View style={[{ flex: 1, marginHorizontal: -SCREEN_PAD }, top ? { marginTop: -CHROME_H } : null, style]}>
+    <View style={[{ flex: 1, marginHorizontal: -SCREEN_PAD }, top ? { marginTop: CHROME_TOP_NEG } : null, style]}>
       {children}
     </View>
   );
@@ -304,6 +317,8 @@ const makeStyles = () =>
   // Adding it again doubled the notch and home-indicator gaps on iOS, which
   // is what the "strange margins top and bottom" turned out to be.
   screenInner: { flex: 1, paddingHorizontal: SCREEN_PAD, paddingTop: 10 },
+  // No top padding and no safe-area inset: the map starts at pixel zero.
+  screenInnerFull: { flex: 1, paddingHorizontal: SCREEN_PAD },
   title: { fontSize: 26, fontWeight: '800', letterSpacing: 0.4, color: colors.text, marginBottom: 6 },
   // Glow only exists in dark; in light the token is transparent, so the
   // wordmark simply renders solid.
