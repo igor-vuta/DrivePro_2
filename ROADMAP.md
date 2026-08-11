@@ -72,10 +72,10 @@ Still open here:
   profile/crew/history/language instead. Worth a proper screen.
 - **Crew opens the profile screen** rather than scrolling to the crew card —
   there is no scroll-to-section, so the row lands on the page that holds it.
-- **The online-driver map was not visually confirmed** after the chrome
-  change: going online requires location permission, which the browser
-  session had refused. It uses the same `<Bleed top>` that was verified on
-  the rider map, but a driver should eyeball it once.
+- ~~The online-driver map was not visually confirmed~~ — ✅ verified after
+  L36 with a stubbed geolocation: the map reaches the top edge, the
+  Taking-orders / Go-offline chips sit below the floating chrome
+  (`CHROME_H + 10`), and the offer sheet peeks at the bottom.
 
 ~~**Open bug** — iOS standalone PWA margins~~ — ✅ fixed. Root cause:
 react-native-web's `SafeAreaView` **already** applies
