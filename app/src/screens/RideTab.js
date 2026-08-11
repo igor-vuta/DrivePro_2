@@ -122,6 +122,7 @@ export default function RideTab() {
   const [pickMeUp, setPickMeUp] = useState(false); // walking/cycling: accept a lift en route
   const [liftOffer, setLiftOffer] = useState(null); // a driver has offered this walker a lift
   const [nearWalkers, setNearWalkers] = useState([]); // driving: pickup-seeking people on my corridor
+  const [live, setLive] = useState(false); // broadcasting availability right now (either role)
   const [center, setCenter] = useState(FALLBACK_CENTER);
   const [trails, setTrails] = useState([]);
   const [address, setAddress] = useState('');
@@ -485,6 +486,7 @@ export default function RideTab() {
       // Taking passengers: go online as a driver along this exact route, so
       // corridor matching offers requests that lie on the way.
       if (mode === 'car' && takeAlong) {
+        setLive(true);
         driverOnRef.current = wsClient.send({
           type: 'driver:activate',
           lat: from.lat,
@@ -501,6 +503,7 @@ export default function RideTab() {
       // Walking or cycling and open to a lift: announce it with where we are
       // and where we are going - both are what corridor matching needs.
       if (mode !== 'car' && pickMeUp) {
+        setLive(true);
         walkOnRef.current = wsClient.send({
           type: 'walk:available',
           lat: from.lat,
@@ -608,6 +611,7 @@ export default function RideTab() {
     setOffer(null);
     setLiftOffer(null);
     setNearWalkers([]);
+    setLive(false);
   };
 
   const endNavWatch = () => {
@@ -643,6 +647,51 @@ export default function RideTab() {
     },
     []
   );
+
+  // Mid-route change of mind: you set off walking and then decide you would
+  // rather be picked up (or, driving, that you have room after all). Same
+  // switch as before Start, available the whole way.
+  const toggleLive = () => {
+    const c = navPos || myLocRef.current || centerRef.current;
+    if (live) {
+      goOffline();
+      setPickMeUp(false);
+      setTakeAlong(false);
+      return;
+    }
+    if (mode === 'car') {
+      if (!(me && me.isDriver)) {
+        setCarModal(true); // no car on file: ask once, then this turns on
+        return;
+      }
+      const pts = navModelRef.current ? navModelRef.current.points : [];
+      driverOnRef.current = wsClient.send({
+        type: 'driver:activate',
+        lat: c.lat,
+        lng: c.lng,
+        route: {
+          points: simplifyPts(pts, 200),
+          destLat: dest.lat,
+          destLng: dest.lng,
+          destAddress: dest.address || '',
+          radiusM: 1000,
+        },
+      });
+      setTakeAlong(true);
+    } else {
+      walkOnRef.current = wsClient.send({
+        type: 'walk:available',
+        lat: c.lat,
+        lng: c.lng,
+        destLat: dest.lat,
+        destLng: dest.lng,
+        destAddress: dest.address || '',
+        mode,
+      });
+      setPickMeUp(true);
+    }
+    setLive(true);
+  };
 
   // Walking side: take the lift, or turn it down.
   const acceptLift = async () => {
@@ -936,7 +985,7 @@ export default function RideTab() {
             </Card>
           </View>
         ) : null}
-        {step === 'nav' && driverOnRef.current && !offer && nearWalkers.length ? (
+        {step === 'nav' && live && mode === 'car' && !offer && nearWalkers.length ? (
           <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
             <Card style={{ marginBottom: 0, paddingVertical: 10 }}>
               <Text style={{ color: colors.sub, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
@@ -1028,20 +1077,40 @@ export default function RideTab() {
                       {fmtDuration(navInfo ? navInfo.etaS : navModel ? navModel.durationS : 0)}
                     </Text>
                   </Text>
-                  <Sub style={{ marginBottom: 0, fontSize: 12 }}>
+                  <Sub style={{ marginBottom: 0, fontSize: 12 }} numberOfLines={1}>
                     {navPhase === 'rerouting'
                       ? t('nav.rerouting')
                       : !navPos
                       ? t('nav.waitGps')
-                      : takeAlong && mode === 'car'
+                      : live && mode === 'car'
                       ? `🟢 ${t('ride.takeAlongOn')}`
-                      : pickMeUp && mode !== 'car'
+                      : live
                       ? `🟢 ${t('ride.pickMeUpOn')}`
                       : dest
                       ? dest.address
                       : ''}
                   </Sub>
                 </View>
+                {/* Change your mind mid-route: start walking, then decide you
+                    would rather be picked up - or stop offering seats. */}
+                <Pressable
+                  onPress={toggleLive}
+                  hitSlop={6}
+                  style={({ pressed }) => ({
+                    height: 44,
+                    paddingHorizontal: 14,
+                    borderRadius: 22,
+                    borderWidth: live ? 2 : 1,
+                    borderColor: live ? colors.ok : colors.border,
+                    backgroundColor: live ? colors.surface : colors.card,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 8,
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <Text style={{ fontSize: 18 }}>{mode === 'car' ? '🚗' : '🖐'}</Text>
+                </Pressable>
                 <Button kind="ghost" title={t('nav.exit')} onPress={exitNav} style={{ height: 44, paddingHorizontal: 16, marginTop: 0 }} />
               </>
             )}
@@ -1222,6 +1291,8 @@ export default function RideTab() {
         onSaved={() => {
           setCarModal(false);
           setTakeAlong(true);
+          // Saved mid-route: honour the tap that opened this form.
+          if (step === 'nav' && !live) setTimeout(toggleLive, 0);
         }}
         saveCar={saveCar}
       />
