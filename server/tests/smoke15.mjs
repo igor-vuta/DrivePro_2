@@ -63,8 +63,12 @@ const html = home.buf.toString('utf8');
 check('index.html served', home.status === 200 && home.type.includes('text/html'));
 check('document language is Russian', html.includes('<html lang="ru">'));
 check('manifest is linked', html.includes('rel="manifest"') && html.includes('/manifest.json'));
-check('theme-color matches the night bg', html.includes('name="theme-color"') && html.includes('#06070d'));
-check('iOS standalone meta present', html.includes('apple-mobile-web-app-capable') && html.includes('black-translucent'));
+// One theme-color per scheme now, so the browser chrome matches whichever
+// the device is in before any JS has run.
+check('a theme-color per scheme', html.includes('#FFFEFF') && html.includes('#222B36') && (html.match(/name="theme-color"/g) || []).length === 2);
+// `default` rather than `black-translucent`: the status bar text has to be
+// legible against a white ground in light mode, which translucent breaks.
+check('iOS standalone meta present', html.includes('apple-mobile-web-app-capable') && html.includes('content="default"'));
 check('apple-touch-icon linked', html.includes('rel="apple-touch-icon"'));
 check('viewport covers the notch', html.includes('viewport-fit=cover'));
 
@@ -77,7 +81,7 @@ try {
 check('manifest parses', !!manifest);
 check('manifest identity', manifest?.name === 'DrivePro' && manifest?.short_name === 'DrivePro');
 check('manifest installs standalone', manifest?.display === 'standalone' && manifest?.start_url === '/');
-check('manifest is themed', manifest?.theme_color === '#06070d' && manifest?.background_color === '#06070d');
+check('manifest is themed', manifest?.theme_color === '#008FD2' && manifest?.background_color === '#FFFEFF');
 const purposes = (manifest?.icons || []).map((i) => i.purpose);
 check('manifest has any + maskable icons', purposes.includes('any') && purposes.includes('maskable'));
 
@@ -98,10 +102,12 @@ check('service worker still served', sw.status === 200 && sw.type.includes('java
 // ---- native build identity (Expo + EAS config) ----
 const appJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'app', 'app.json'), 'utf8')).expo;
 check('expo icon wired', appJson.icon === './assets/icon.png');
-check('expo dark identity', appJson.userInterfaceStyle === 'dark' && appJson.backgroundColor === '#06070d');
+// The app follows the system now, in Almaty's palette - white ground with
+// the dark scheme supplied by theme.js rather than baked into app.json.
+check('expo identity follows the system', appJson.userInterfaceStyle === 'automatic' && appJson.backgroundColor === '#FFFEFF');
 check('android package set', /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(appJson.android?.package || ''));
 check('android adaptive icon wired', appJson.android?.adaptiveIcon?.foregroundImage === './assets/adaptive-icon.png'
-  && appJson.android?.adaptiveIcon?.backgroundColor === '#06070d');
+  && appJson.android?.adaptiveIcon?.backgroundColor === '#FFFEFF');
 
 for (const rel of ['assets/icon.png', 'assets/adaptive-icon.png', 'assets/favicon.png']) {
   const f = path.join(ROOT, 'app', rel);

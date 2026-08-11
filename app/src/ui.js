@@ -14,34 +14,19 @@ import {
   View,
 } from 'react-native';
 
+import { colors, SCREEN_PAD, CARD_PAD, GAP, INPUT_H, BUTTON_H, RADIUS, RADIUS_LG } from './theme';
+
 const NATIVE = Platform.OS !== 'web';
-const WEB = Platform.OS === 'web';
 
-// Horizontal padding every Screen applies; SCREEN_PAD is exported so full-
-// bleed children can cancel it instead of repeating the magic number.
-export const SCREEN_PAD = 16;
-
-// Cyberpunk-luxury design system: deep night surfaces, neon cyan primaries,
-// magenta trails, gold for points. Every screen inherits from these tokens.
-
-export const colors = {
-  bg: '#06070d',
-  card: '#0e1220',
-  text: '#e9f2ff',
-  sub: '#8b96b8',
-  primary: '#00e5ff',
-  primaryText: '#02141a',
-  accent: '#ff2bd6',
-  gold: '#f5c518',
-  border: '#1c2438',
-  danger: '#ff3b5c',
-  ok: '#00ffa3',
-};
+// Design system in Almaty's colours, light and dark - tokens live in
+// theme.js. SCREEN_PAD is re-exported so full-bleed children can cancel the
+// screen padding instead of repeating the number.
+export { colors, SCREEN_PAD };
 
 export function Screen({ children, style }) {
   return (
     <SafeAreaView style={[s.screen, style]}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
+      <StatusBar barStyle={colors.statusBar} backgroundColor={colors.bg} />
       <View style={s.screenInner}>{children}</View>
     </SafeAreaView>
   );
@@ -150,7 +135,7 @@ export function Input({ label, style, containerStyle, ...props }) {
   return (
     <View style={[{ marginBottom: 12 }, containerStyle]}>
       {label ? <Text style={s.label}>{label}</Text> : null}
-      <TextInput placeholderTextColor="#4d5875" style={[s.input, style]} autoCapitalize="none" {...props} />
+      <TextInput placeholderTextColor={colors.sub} style={[s.input, style]} autoCapitalize="none" {...props} />
     </View>
   );
 }
@@ -273,9 +258,9 @@ export function Avatar({ user, size = 44, style }) {
     width: size,
     height: size,
     borderRadius: size / 2,
-    backgroundColor: '#161c30',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#254a63',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -289,75 +274,80 @@ export function Avatar({ user, size = 44, style }) {
   }
   return (
     <View style={[base, style]}>
-      <Text style={{ fontSize: size * 0.42, fontWeight: '700', color: '#7ff3ff' }}>{initial}</Text>
+      <Text style={{ fontSize: size * 0.42, fontWeight: '700', color: colors.primary }}>{initial}</Text>
     </View>
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = () =>
+  StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   // No safe-area padding here: SafeAreaView (the Screen wrapper) already
   // applies env(safe-area-inset-*) on all four sides in react-native-web.
   // Adding it again doubled the notch and home-indicator gaps on iOS, which
   // is what the "strange margins top and bottom" turned out to be.
-  screenInner: { flex: 1, paddingHorizontal: SCREEN_PAD, paddingTop: 8 },
-  title: { fontSize: 26, fontWeight: '800', letterSpacing: 0.4, color: colors.text, marginBottom: 4 },
+  screenInner: { flex: 1, paddingHorizontal: SCREEN_PAD, paddingTop: 10 },
+  title: { fontSize: 26, fontWeight: '800', letterSpacing: 0.4, color: colors.text, marginBottom: 6 },
+  // Glow only exists in dark; in light the token is transparent, so the
+  // wordmark simply renders solid.
   titleGlow: {
-    color: '#dffbff',
-    textShadowColor: colors.primary,
+    color: colors.primary,
+    textShadowColor: colors.glow,
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 14,
   },
-  sub: { fontSize: 14, color: colors.sub, marginBottom: 12 },
+  sub: { fontSize: 14, lineHeight: 20, color: colors.sub, marginBottom: 12 },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: RADIUS_LG,
+    padding: CARD_PAD,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 12,
-    shadowColor: '#000000',
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
+    marginBottom: GAP,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   btn: {
-    height: 50,
-    borderRadius: 14,
+    height: BUTTON_H,
+    borderRadius: RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 4,
   },
   btnPrimary: {
     backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
+    // Glow in dark, a soft drop shadow in light - see theme.js.
+    shadowColor: colors.glow === 'transparent' ? colors.shadow : colors.primary,
+    shadowOpacity: 1,
+    shadowRadius: colors.glow === 'transparent' ? 6 : 14,
+    shadowOffset: { width: 0, height: colors.glow === 'transparent' ? 2 : 0 },
+    elevation: 4,
   },
-  btnGhost: { backgroundColor: 'rgba(0,229,255,0.04)', borderWidth: 1, borderColor: '#254a63' },
+  btnGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border },
   btnText: { fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
-  label: { fontSize: 13, color: colors.sub, marginBottom: 6 },
+  label: { fontSize: 13, color: colors.sub, marginBottom: 8 },
   input: {
-    height: 48,
-    borderRadius: 14,
+    height: INPUT_H,
+    borderRadius: RADIUS,
     borderWidth: 1,
-    borderColor: '#223052',
-    backgroundColor: '#0a0e1a',
-    paddingHorizontal: 14,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 16,
     fontSize: 16,
     color: colors.text,
   },
-  error: { color: colors.danger, marginBottom: 10, fontSize: 14 },
+  error: { color: colors.danger, marginBottom: 12, fontSize: 14, lineHeight: 20 },
   seg: {
     flexDirection: 'row',
-    backgroundColor: '#0a0e1a',
-    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderRadius: RADIUS,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 4,
-    marginBottom: 12,
+    marginBottom: GAP,
   },
   segItem: {
     flex: 1,
@@ -368,22 +358,33 @@ const s = StyleSheet.create({
   },
   segItemActive: {
     backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
+    shadowColor: colors.glow === 'transparent' ? colors.shadow : colors.primary,
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: colors.glow === 'transparent' ? 1 : 0 },
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 34,
-    paddingHorizontal: 12,
-    borderRadius: 17,
-    backgroundColor: 'rgba(10,14,26,0.86)',
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
   },
   segText: { fontSize: 15, color: colors.sub, fontWeight: '600' },
   segTextActive: { color: colors.primaryText, fontWeight: '800' },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-});
+  });
+
+// Rebuilt whenever the scheme flips; the root re-renders, so every component
+// picks the new sheet up on its next render.
+let s = makeStyles();
+export function refreshStyles() {
+  s = makeStyles();
+}

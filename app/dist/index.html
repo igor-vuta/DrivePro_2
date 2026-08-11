@@ -24,17 +24,19 @@
       }
     </style>
       <!-- drivepro:pwa -->
-    <meta name="theme-color" content="#06070d" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFEFF" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#222B36" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="DrivePro" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <style>
-          html,body{background:#06070d}
+          html,body{background:#FFFEFF}
+          @media (prefers-color-scheme: dark){html,body{background:#222B36}}
           html,body{height:100%;overflow:hidden;overscroll-behavior:none}
           #root{position:fixed;top:0;right:0;bottom:0;left:0;height:auto;display:flex}
         </style>
@@ -47,6 +49,6 @@
     </noscript>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
-  <script src="/_expo/static/js/web/index-122f14c727f993abc0b5be0b35aa8edd.js" defer></script>
+  <script src="/_expo/static/js/web/index-01f8da748d758dd1569fde0ecb565b05.js" defer></script>
 </body>
 </html>

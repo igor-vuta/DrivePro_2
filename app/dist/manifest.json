@@ -9,8 +9,8 @@
   "dir": "ltr",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#06070d",
-  "theme_color": "#06070d",
+  "background_color": "#FFFEFF",
+  "theme_color": "#008FD2",
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

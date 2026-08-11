@@ -90,7 +90,8 @@ function stars(user) {
 
 const SHEET_PEEK = 54; // header height when collapsed
 
-const st = StyleSheet.create({
+const makeSt = () =>
+  StyleSheet.create({
   topChips: {
     position: 'absolute',
     top: 10,
@@ -106,7 +107,7 @@ const st = StyleSheet.create({
     left: SCREEN_PAD,
     right: SCREEN_PAD,
     bottom: SHEET_PEEK + 10,
-    backgroundColor: 'rgba(10,14,26,0.9)',
+    backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 14,
@@ -140,7 +141,18 @@ const st = StyleSheet.create({
     backgroundColor: colors.border,
     marginRight: 10,
   },
-});
+  });
+
+// Rebuilt on every render so a scheme change is picked up; the sheet is
+// cheap and this screen renders rarely.
+const st = new Proxy(
+  {},
+  {
+    get(_t, key) {
+      return makeSt()[key];
+    },
+  }
+);
 
 // Offers panel that floats over the driver's map instead of pushing it off
 // screen. Collapsed it is a header showing the count; tapping expands it to a
@@ -593,7 +605,7 @@ export default function DriveTab({ openProfile }) {
                           {left != null ? t('drive.navEta', { min: Math.max(1, Math.round(left * 2.1)) }) : ''}
                         </Text>
                       </Row>
-                      <View style={{ height: 6, borderRadius: 3, backgroundColor: '#0a0e1a', overflow: 'hidden', marginBottom: 6 }}>
+                      <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.surface, overflow: 'hidden', marginBottom: 6 }}>
                         <View
                           style={{
                             width: `${pct}%`,
@@ -940,14 +952,14 @@ function MapPickModal({ visible, onClose, onConfirm, initialCenter, token }) {
                   borderRadius: 10,
                   backgroundColor: colors.danger,
                   borderWidth: 3,
-                  borderColor: '#e9f2ff',
+                  borderColor: colors.text,
                   shadowColor: colors.danger,
                   shadowOpacity: 0.9,
                   shadowRadius: 8,
                   shadowOffset: { width: 0, height: 0 },
                 }}
               />
-              <View style={{ width: 2, height: 14, backgroundColor: '#e9f2ff' }} />
+              <View style={{ width: 2, height: 14, backgroundColor: colors.text }} />
             </View>
           </View>
         </View>

@@ -1,9 +1,15 @@
 # DrivePro — working agreements
 
 Carpooling PWA: zero-dependency Node 22.5+ server (`server/`), Expo React
-Native web app (`app/`), Russian as default language, dark cyberpunk-luxury
-theme (all tokens in `app/src/ui.js` — bg #06070d, cyan #00e5ff, magenta
-#ff2bd6, gold #f5c518).
+Native web app (`app/`), Russian as default language.
+
+Design tokens live in `app/src/theme.js`, in Almaty's own colours (taken from
+the city's coat of arms): `008FD2` primary · `FFEF01` points · `E83379`
+destination · `44546C` slate · `009744` pickup · `FFFEFF` white. **Light and
+dark, following the system.** `colors` is one mutable object rewritten by
+`applyScheme()`; anything built with `StyleSheet.create` must live in a
+`makeStyles()` function and be rebuilt by `refreshStyles()`, or it will
+capture the old scheme.
 
 ## Git rules (strict)
 

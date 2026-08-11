@@ -50,7 +50,11 @@ check('root is pinned to the layout viewport', /#root\{position:fixed;top:0;righ
 check('the root height stays auto', /#root\{[^}]*height:auto/.test(html), 'root has an explicit height again');
 check('no viewport-height unit sizes the app', !/#root\{[^}]*100dvh/.test(html) && !/html,body,#root\{height/.test(html));
 check('overscroll bounce is disabled', /html,body\{height:100%;overflow:hidden;overscroll-behavior:none\}/.test(html));
-check('dark background is painted before JS runs', /html,body\{background:#06070d\}/.test(html));
+// Painted before the bundle loads so the first frame is not a white flash in
+// dark mode, nor a black one in light.
+check('the ground colour is painted before JS runs', /html,body\{background:#FFFEFF\}/.test(html));
+check('and a dark one for dark mode', /@media \(prefers-color-scheme: dark\)\{html,body\{background:#222B36\}\}/.test(html));
+check('both theme-colors are declared', (html.match(/name="theme-color"/g) || []).length === 2, html.match(/theme-color[^>]*/g));
 
 // The override has to come after Expo's reset or it loses on equal specificity.
 check(

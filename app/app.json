@@ -5,13 +5,13 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
-    "backgroundColor": "#06070d",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#FFFEFF",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/adaptive-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#06070d"
+      "backgroundColor": "#FFFEFF"
     },
     "ios": {
       "supportsTablet": false,
@@ -27,7 +27,7 @@
       "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#06070d"
+        "backgroundColor": "#FFFEFF"
       }
     },
     "web": {

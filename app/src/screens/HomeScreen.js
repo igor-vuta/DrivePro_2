@@ -20,8 +20,8 @@ function FlamePill({ days }) {
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#1a1206',
-        borderColor: '#3d2e0e',
+        backgroundColor: colors.surface,
+        borderColor: colors.border,
         borderWidth: 1,
         borderRadius: 999,
         paddingHorizontal: 10,

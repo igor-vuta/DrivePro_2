@@ -24,10 +24,13 @@ const MARK = '<!-- drivepro:pwa -->';
 if (!html.includes(MARK)) {
   const tags = [
     MARK,
-    '<meta name="theme-color" content="#06070d" />',
+    // Two theme-colors so the browser chrome matches before JS runs;
+    // theme.js keeps the tag in step afterwards.
+    '<meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFEFF" />',
+    '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#222B36" />',
     '<meta name="mobile-web-app-capable" content="yes" />',
     '<meta name="apple-mobile-web-app-capable" content="yes" />',
-    '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />',
+    '<meta name="apple-mobile-web-app-status-bar-style" content="default" />',
     '<meta name="apple-mobile-web-app-title" content="DrivePro" />',
     '<link rel="manifest" href="/manifest.json" />',
     '<link rel="icon" href="/favicon.ico" sizes="48x48" />',
@@ -44,7 +47,10 @@ if (!html.includes(MARK)) {
     // height:auto is required - an explicit height would beat `bottom:0`.
     // Comes after #expo-reset in the head, so it wins on equal specificity.
     '<style>',
-    '      html,body{background:#06070d}',
+    // Painted before the bundle loads, so the first frame is not a white
+    // flash in dark mode or a black one in light.
+    '      html,body{background:#FFFEFF}',
+    '      @media (prefers-color-scheme: dark){html,body{background:#222B36}}',
     '      html,body{height:100%;overflow:hidden;overscroll-behavior:none}',
     '      #root{position:fixed;top:0;right:0;bottom:0;left:0;height:auto;display:flex}',
     '    </style>',

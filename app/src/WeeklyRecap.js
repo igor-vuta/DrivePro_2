@@ -51,7 +51,7 @@ export default function WeeklyRecap() {
   return (
     <Modal transparent animationType="fade" onRequestClose={close}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 24 }}>
-        <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: '#254a63', borderRadius: 20, padding: 22, maxHeight: '85%' }}>
+        <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 20, padding: 22, maxHeight: '85%' }}>
           <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text, marginBottom: 2 }}>{t('weekly.title')}</Text>
           <Text style={{ color: colors.sub, marginBottom: 14 }}>{t('weekly.subtitle')}</Text>
 

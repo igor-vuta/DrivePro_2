@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, BackHandler, LayoutAnimation, Platform, Text, UIManager, View } from 'react-native';
+import { ActivityIndicator, Appearance, BackHandler, LayoutAnimation, Platform, Text, UIManager, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
@@ -13,7 +13,8 @@ import RateScreen from './src/screens/RateScreen';
 import PermissionsScreen from './src/screens/PermissionsScreen';
 import GuideScreen from './src/screens/GuideScreen';
 import { DialogHost } from './src/dialogs';
-import { Button, FadeIn, colors } from './src/ui';
+import { Button, FadeIn, colors, refreshStyles } from './src/ui';
+import { applyScheme, systemScheme, syncDocumentTheme } from './src/theme';
 import { t } from './src/i18n';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -177,11 +178,29 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// Light by day, dark by night, following the system. The tokens in theme.js
+// are mutated in place and the stylesheets rebuilt, then this re-renders the
+// whole tree - which is why nothing else needs a theme context.
+function useSystemScheme() {
+  const [scheme, setScheme] = useState(systemScheme());
+  useEffect(() => {
+    applyScheme(scheme);
+    refreshStyles();
+    syncDocumentTheme();
+  }, [scheme]);
+  useEffect(() => {
+    const sub = Appearance.addChangeListener(() => setScheme(systemScheme()));
+    return () => sub.remove();
+  }, []);
+  return scheme;
+}
+
 export default function App() {
+  const scheme = useSystemScheme();
   return (
-    <AuthProvider>
+    <AuthProvider key={scheme}>
       <View style={{ flex: 1 }}>
-        <StatusBar style="light" />
+        <StatusBar style={scheme === 'light' ? 'dark' : 'light'} />
         <ErrorBoundary>
           <Root />
         </ErrorBoundary>

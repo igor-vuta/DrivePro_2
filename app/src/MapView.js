@@ -1,5 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Platform, View } from 'react-native';
+import { colors } from './theme';
 
 // OpenStreetMap map rendered with Leaflet, driven over a small JSON command
 // bridge. On phones it lives in a WebView; on web the same HTML runs in an
@@ -8,21 +9,23 @@ import { Platform, View } from 'react-native';
 // Ref methods: setCenter({lat, lng, zoom?, animate?}), fitBounds([[lat,lng],...])
 // Props: initialCenter, initialZoom, markers, polyline, onMoveEnd, onMoveStart, onReady
 
-const html = `<!DOCTYPE html>
+// Built per render so the tiles and marker colours follow the active scheme;
+// the map is remounted on a scheme change because App keys the whole tree.
+const makeHtml = () => `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <style>
-  html, body, #map { margin: 0; padding: 0; height: 100%; width: 100%; background: #06070d; }
+  html, body, #map { margin: 0; padding: 0; height: 100%; width: 100%; background: ${colors.bg}; }
   .mk { display: flex; align-items: center; justify-content: center; }
-  .mk-car { font-size: 24px; filter: drop-shadow(0 0 6px rgba(0,229,255,.9)); }
-  .mk-dot { width: 15px; height: 15px; border-radius: 50%; border: 2px solid rgba(233,242,255,.9); }
-  .mk-pickup { background: #00ffa3; box-shadow: 0 0 10px 2px rgba(0,255,163,.75); }
-  .mk-dest { background: #ff3b5c; box-shadow: 0 0 10px 2px rgba(255,59,92,.75); }
-  .leaflet-control-attribution { font-size: 9px; background: rgba(6,7,13,.6) !important; color: #5a6684 !important; }
-  .leaflet-control-attribution a { color: #5a6684 !important; }
+  .mk-car { font-size: 24px; filter: drop-shadow(0 0 6px ${colors.primary}); }
+  .mk-dot { width: 15px; height: 15px; border-radius: 50%; border: 2px solid ${colors.card}; }
+  .mk-pickup { background: ${colors.ok}; box-shadow: 0 0 8px 2px ${colors.ok}; }
+  .mk-dest { background: ${colors.danger}; box-shadow: 0 0 8px 2px ${colors.danger}; }
+  .leaflet-control-attribution { font-size: 9px; background: ${colors.card} !important; color: ${colors.sub} !important; }
+  .leaflet-control-attribution a { color: ${colors.sub} !important; }
 </style>
 </head>
 <body>
@@ -30,7 +33,7 @@ const html = `<!DOCTYPE html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
   var map = L.map('map', { zoomControl: false, attributionControl: true });
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/${colors.mapTiles}/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd',
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap &copy; CARTO'
@@ -80,8 +83,8 @@ const html = `<!DOCTYPE html>
         if (polyline) { map.removeLayer(polyline); polyline = null; }
         if (c.points && c.points.length) {
           polyline = L.layerGroup();
-          L.polyline(c.points, { color: '#00e5ff', weight: 10, opacity: 0.16, lineCap: 'round' }).addTo(polyline);
-          L.polyline(c.points, { color: '#7ff3ff', weight: 3, opacity: 0.95, lineCap: 'round' }).addTo(polyline);
+          L.polyline(c.points, { color: '${colors.primary}', weight: 10, opacity: 0.16, lineCap: 'round' }).addTo(polyline);
+          L.polyline(c.points, { color: '${colors.primary}', weight: 3, opacity: 0.95, lineCap: 'round' }).addTo(polyline);
           polyline.addTo(map);
         }
       } else if (c.type === 'setTrails') {
@@ -91,8 +94,8 @@ const html = `<!DOCTYPE html>
           c.trails.forEach(function (tr) {
             if (!tr.points || tr.points.length < 2) return;
             var a = Math.max(0.12, 1 - (tr.age || 0));
-            L.polyline(tr.points, { color: '#ff2bd6', weight: 8, opacity: 0.10 * a, interactive: false, lineCap: 'round' }).addTo(trailLayer);
-            L.polyline(tr.points, { color: '#ff5ce1', weight: 2.5, opacity: 0.55 * a, interactive: false, lineCap: 'round' }).addTo(trailLayer);
+            L.polyline(tr.points, { color: '${colors.accent}', weight: 8, opacity: 0.10 * a, interactive: false, lineCap: 'round' }).addTo(trailLayer);
+            L.polyline(tr.points, { color: '${colors.accent}', weight: 2.5, opacity: 0.55 * a, interactive: false, lineCap: 'round' }).addTo(trailLayer);
           });
           trailLayer.addTo(map);
         }
@@ -114,6 +117,7 @@ const html = `<!DOCTYPE html>
 </script>
 </body>
 </html>`;
+
 
 const MapViewCmp = forwardRef(function MapViewCmp(
   { initialCenter, initialZoom = 15, markers = [], polyline = null, trails = null, onMoveEnd, onMoveStart, onReady, style },
@@ -200,7 +204,7 @@ const MapViewCmp = forwardRef(function MapViewCmp(
       <View style={[{ flex: 1, overflow: 'hidden' }, style]}>
         <iframe
           ref={frameRef}
-          srcDoc={html}
+          srcDoc={makeHtml()}
           title="map"
           style={{ border: 0, width: '100%', height: '100%', display: 'block' }}
         />
@@ -213,7 +217,7 @@ const MapViewCmp = forwardRef(function MapViewCmp(
     <WebView
       ref={nativeRef}
       originWhitelist={['*']}
-      source={{ html }}
+      source={{ html: makeHtml() }}
       onMessage={(e) => {
         try {
           handleMsg(JSON.parse(e.nativeEvent.data));

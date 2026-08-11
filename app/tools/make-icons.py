@@ -3,9 +3,14 @@
 ships: Expo native icon, Android adaptive foreground, PWA icons, apple-touch
 icon and favicon.
 
-The mark: neon cyan portal ring interlocked with a perspective road (behind
-the ring at the horizon, in front at the bottom), gold center dashes, magenta
-echo trail, deep night #06070d. Supersampled 2x for smooth edges.
+The mark: a blue portal ring interlocked with a perspective road (behind the
+ring at the horizon, in front at the bottom), yellow centre dashes, a crimson
+echo trail, on white. Colours are Almaty's own - taken from the city's coat of
+arms. Supersampled 2x for smooth edges.
+
+Light ground, so the glow layers the first version relied on are gone: glow
+over near-white reads as blur rather than light. Depth comes from the slate
+road against the white instead.
 
 Usage: python3 tools/make-icons.py   (from app/; needs Pillow + numpy)
 """
@@ -19,11 +24,17 @@ APP = Path(__file__).resolve().parents[1]
 
 F = 2                          # supersample factor
 S = 1024 * F
-BG = (6, 7, 13, 255)           # #06070d
-CYAN = (0, 229, 255)           # #00e5ff
-MAGENTA = (255, 43, 214)       # #ff2bd6
-GOLD = (245, 197, 24)          # #f5c518
-GRID = (28, 36, 56)            # #1c2438
+BG = (255, 254, 255, 255)      # #FFFEFF
+BLUE = (0, 143, 210)           # #008FD2
+CRIMSON = (232, 51, 121)       # #E83379
+YELLOW = (255, 239, 1)         # #FFEF01
+SLATE = (68, 84, 108)          # #44546C
+
+# Kept as aliases so the drawing code below reads unchanged.
+CYAN = BLUE
+MAGENTA = CRIMSON
+GOLD = YELLOW
+GRID = SLATE
 
 RC = (512 * F, 452 * F)        # ring center
 R_MID = 264 * F                # ring centerline radius
@@ -63,16 +74,15 @@ def build_road():
     rd = ImageDraw.Draw(road)
     lb, rb = 512 * F - ROAD_HALF_BOT, 512 * F + ROAD_HALF_BOT
     lt, rt = 512 * F - ROAD_HALF_TOP, 512 * F + ROAD_HALF_TOP
-    fill = (16, 24, 44, 235)
+    fill = SLATE + (255,)
     rd.polygon([(lb, S), (rb, S), (rt, ROAD_TOP_Y), (lt, ROAD_TOP_Y)], fill=fill)
     rd.ellipse([lt, ROAD_TOP_Y - ROAD_HALF_TOP, rt, ROAD_TOP_Y + ROAD_HALF_TOP], fill=fill)
 
     edges = layer()
     ed = ImageDraw.Draw(edges)
     w = 9 * F
-    capped_line(ed, (lb, S + w), (lt + 2 * F, ROAD_TOP_Y), CYAN + (215,), w)
-    capped_line(ed, (rb, S + w), (rt - 2 * F, ROAD_TOP_Y), CYAN + (215,), w)
-    road.alpha_composite(edges.filter(ImageFilter.GaussianBlur(9 * F)))
+    capped_line(ed, (lb, S + w), (lt + 2 * F, ROAD_TOP_Y), BLUE + (255,), w)
+    capped_line(ed, (rb, S + w), (rt - 2 * F, ROAD_TOP_Y), BLUE + (255,), w)
     road.alpha_composite(edges)
 
     dash = layer()
@@ -82,7 +92,6 @@ def build_road():
         w = min(19 * F, max(8 * F, int(road_half(y_bot) * 0.095)))
         dd.rounded_rectangle([512 * F - w, y_bot - h, 512 * F + w, y_bot],
                              radius=w, fill=GOLD + (255,))
-    road.alpha_composite(dash.filter(ImageFilter.GaussianBlur(8 * F)).point(lambda p: p * 0.55))
     road.alpha_composite(dash)
     return road
 
@@ -100,29 +109,18 @@ def radial_glow(center, radius, color, max_alpha):
 def build(size=1024, fg_only=False):
     img = Image.new('RGBA', (S, S), (0, 0, 0, 0) if fg_only else BG)
 
-    if not fg_only:
-        img.alpha_composite(radial_glow((512 * F, 600 * F), 780 * F, CYAN, 26))
-        img.alpha_composite(radial_glow((790 * F, 210 * F), 500 * F, MAGENTA, 18))
-        g = layer()
-        gd = ImageDraw.Draw(g)
-        for t in (-1.0, -0.55, 0.55, 1.0):
-            gd.line([(512 * F, 470 * F), (int((512 + t * 980) * F), S)],
-                    fill=GRID + (60,), width=3 * F)
-        for i, yy in enumerate((700, 810, 930)):
-            gd.line([(0, yy * F), (S, yy * F)], fill=GRID + (46 - i * 12,), width=2 * F)
-        img.alpha_composite(g.filter(ImageFilter.GaussianBlur(F)))
+    # No background glow or grid on a light ground - it only muddies the white.
 
     road = build_road()
     img.alpha_composite(road)
 
-    echo = ring_layer(MAGENTA + (175,))
-    echo = echo.transform((S, S), Image.AFFINE, (1, 0, -28 * F, 0, 1, -15 * F))
-    img.alpha_composite(echo.filter(ImageFilter.GaussianBlur(6 * F)))
-    for blur, alpha in ((54, 95), (20, 125)):
-        img.alpha_composite(ring_layer(CYAN + (alpha,)).filter(ImageFilter.GaussianBlur(blur * F)))
-    img.alpha_composite(ring_layer(CYAN + (255,)))
-    img.alpha_composite(ring_layer((240, 255, 255, 195), width=14 * F)
-                        .filter(ImageFilter.GaussianBlur(F)))
+    echo = ring_layer(CRIMSON + (200,))
+    echo = echo.transform((S, S), Image.AFFINE, (1, 0, -30 * F, 0, 1, -16 * F))
+    img.alpha_composite(echo)
+    # A soft drop shadow gives the ring depth without glow.
+    shadow = ring_layer(SLATE + (70,)).transform((S, S), Image.AFFINE, (1, 0, 0, 0, 1, -8 * F))
+    img.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(10 * F)))
+    img.alpha_composite(ring_layer(BLUE + (255,)))
 
     front = road.copy()
     fade = Image.new('L', (S, S), 0)
