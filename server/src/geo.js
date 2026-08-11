@@ -139,7 +139,7 @@ export async function searchAddress(q, lat, lng, lang) {
   return value;
 }
 
-export async function route(fromLat, fromLng, toLat, toLng, mode = 'car', withSteps = false) {
+export async function route(fromLat, fromLng, toLat, toLng, mode = 'car', withSteps = false, wantAlts = 0) {
   if (![fromLat, fromLng, toLat, toLng].every(isFiniteNum)) {
     throw httpError(400, 'from and to coordinates are required');
   }
@@ -147,7 +147,7 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car', withSt
   // both reflect what actually ran rather than an unknown input.
   const resolved = PROFILES[mode] ? mode : 'car';
   const profile = PROFILES[resolved];
-  const key = `route:${resolved}:${withSteps ? 's:' : ''}${fromLat.toFixed(5)},${fromLng.toFixed(5)}:${toLat.toFixed(5)},${toLng.toFixed(5)}`;
+  const key = `route:${resolved}:${withSteps ? 's:' : ''}${wantAlts ? `a${wantAlts}:` : ''}${fromLat.toFixed(5)},${fromLng.toFixed(5)}:${toLat.toFixed(5)},${toLng.toFixed(5)}`;
   const hit = cacheGet(key);
   if (hit) return hit;
   // Ask the configured server first; if it cannot give a usable answer -
@@ -158,7 +158,8 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car', withSt
   const ask = async (base, path) => {
     const json = await upstream(
       `${base}/route/v1/${path}/${fromLng},${fromLat};${toLng},${toLat}` +
-        `?overview=full&geometries=geojson&alternatives=false&steps=${withSteps ? 'true' : 'false'}`
+        `?overview=full&geometries=geojson&steps=${withSteps ? 'true' : 'false'}` +
+        `&alternatives=${wantAlts > 0 ? wantAlts : 'false'}`
     );
     if (!json || json.code !== 'Ok' || !json.routes || !json.routes[0]) {
       throw httpError(502, 'no route found');
@@ -176,14 +177,19 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car', withSt
     if (profile.url === fallback) throw e;
     json = await ask(fallback, resolved === 'car' ? 'driving' : resolved);
   }
+  // GeoJSON is [lng, lat]; the app works in [lat, lng].
+  const shape = (x) => ({
+    distanceM: Math.round(x.distance),
+    durationS: Math.round(x.duration),
+    points: (x.geometry && x.geometry.coordinates ? x.geometry.coordinates : []).map((c) => [c[1], c[0]]),
+  });
   const r = json.routes[0];
-  const value = {
-    mode: resolved,
-    distanceM: Math.round(r.distance),
-    durationS: Math.round(r.duration),
-    // GeoJSON is [lng, lat]; the app works in [lat, lng].
-    points: (r.geometry && r.geometry.coordinates ? r.geometry.coordinates : []).map((c) => [c[1], c[0]]),
-  };
+  const value = { mode: resolved, ...shape(r) };
+  // Alternatives, when asked for and when the road network offers any. OSRM
+  // returns the primary first, so the extras are everything after it.
+  if (wantAlts > 0 && json.routes.length > 1) {
+    value.alts = json.routes.slice(1, 1 + wantAlts).map(shape);
+  }
   if (withSteps) {
     // Compact turn-by-turn steps for the navigation banner: what to do, where,
     // onto which street, and how far that leg runs. Everything else OSRM

@@ -123,6 +123,7 @@ export default function RideTab() {
   const [liftOffer, setLiftOffer] = useState(null); // a driver has offered this walker a lift
   const [nearWalkers, setNearWalkers] = useState([]); // driving: pickup-seeking people on my corridor
   const [live, setLive] = useState(false); // broadcasting availability right now (either role)
+  const [altPick, setAltPick] = useState(0); // 0 = the primary route, 1..n = an alternative
   const [center, setCenter] = useState(FALLBACK_CENTER);
   const [trails, setTrails] = useState([]);
   const [address, setAddress] = useState('');
@@ -400,7 +401,8 @@ export default function RideTab() {
         try {
           const r = await api(
             'GET',
-            `/api/geo/route?fromLat=${from.lat}&fromLng=${from.lng}&toLat=${to.lat}&toLng=${to.lng}&mode=${m}`,
+            `/api/geo/route?fromLat=${from.lat}&fromLng=${from.lng}&toLat=${to.lat}&toLng=${to.lng}&mode=${m}` +
+              (m === 'car' ? '&alts=2' : ''),
             null,
             token
           );
@@ -414,6 +416,7 @@ export default function RideTab() {
     );
     if (seq !== fitSeq.current) return;
     const map = Object.fromEntries(pairs);
+    setAltPick(0);
     setModeRoutes(map);
     const fit = map.car && map.car.points.length ? map.car.points : [[from.lat, from.lng], [to.lat, to.lng]];
     if (mapRef.current) mapRef.current.fitBounds(fit);
@@ -421,8 +424,26 @@ export default function RideTab() {
 
   const showMode = (m) => {
     setMode(m);
+    setAltPick(0);
     const r = modeRoutes[m];
     if (r && r.points && r.points.length && mapRef.current) mapRef.current.fitBounds(r.points);
+  };
+
+  // The route options for a mode: the primary first, then its alternatives.
+  // Picking one only changes which is drawn solid and which is navigated -
+  // no new request, the geometry is already in hand.
+  const optionsFor = (m) => {
+    const r = modeRoutes[m];
+    if (!r) return [];
+    return [{ distanceM: r.distanceM, durationS: r.durationS, points: r.points }, ...(r.alts || [])];
+  };
+  const chosenRoute = () => optionsFor(mode)[altPick] || modeRoutes[mode] || null;
+
+  const pickAlt = (i) => {
+    const opts = optionsFor(mode);
+    if (!opts[i]) return;
+    setAltPick(i);
+    if (opts[i].points && opts[i].points.length && mapRef.current) mapRef.current.fitBounds(opts[i].points);
   };
 
   // "Ask for a shared ride": the destination is already set, so the only thing
@@ -470,12 +491,15 @@ export default function RideTab() {
     try {
       const r = await api(
         'GET',
-        `/api/geo/route?fromLat=${from.lat}&fromLng=${from.lng}&toLat=${dest.lat}&toLng=${dest.lng}&mode=${mode}&steps=1`,
+        `/api/geo/route?fromLat=${from.lat}&fromLng=${from.lng}&toLat=${dest.lat}&toLng=${dest.lng}&mode=${mode}&steps=1` +
+          (altPick > 0 ? `&alts=${altPick}` : ''),
         null,
         token
       );
       if (seq !== fitSeq.current) return;
-      const model = buildNavModel(r);
+      // Navigate the option the user picked on the map, with its own steps.
+      const picked = altPick > 0 && r.alts && r.alts[altPick - 1] ? { ...r, ...r.alts[altPick - 1] } : r;
+      const model = buildNavModel(picked);
       navModelRef.current = model;
       setNavModel(model);
       setNavInfo(null);
@@ -842,17 +866,25 @@ export default function RideTab() {
     return list;
   }, [cars, pickup, dest, origin, step, navPos, mode, nearWalkers]);
 
+  const chosen = step === 'mode' ? chosenRoute() : null;
   const polyline =
     step === 'nav'
       ? navModel
         ? navModel.points
         : null
       : step === 'mode'
-      ? modeRoutes[mode]
-        ? modeRoutes[mode].points
+      ? chosen
+        ? chosen.points
         : null
       : step === 'confirm' && route
       ? route.points
+      : null;
+  // The options not currently chosen, drawn dashed and tappable underneath.
+  const altPolylines =
+    step === 'mode'
+      ? optionsFor(mode)
+          .map((o, i) => (i === altPick ? null : { points: o.points, i }))
+          .filter(Boolean)
       : null;
 
   // ---------------------------------------------------------------- render
@@ -926,6 +958,13 @@ export default function RideTab() {
           initialZoom={15}
           markers={markers}
           polyline={polyline}
+          alts={altPolylines}
+          onAltPick={(i) => {
+            // The map hands back an index into the dashed list; map it back
+            // to the option it stands for.
+            const item = altPolylines && altPolylines[i];
+            if (item) pickAlt(item.i);
+          }}
           trails={trails}
           onMoveEnd={onMoveEnd}
         />
@@ -1171,6 +1210,40 @@ export default function RideTab() {
                 onPress={() => setPickMeUp(!pickMeUp)}
               />
             )}
+            {optionsFor(mode).length > 1 ? (
+              <Row style={{ flexWrap: 'wrap', marginBottom: 4 }}>
+                {optionsFor(mode).map((o, i) => {
+                  const on = i === altPick;
+                  const base = optionsFor(mode)[0];
+                  const deltaMin = Math.round((o.durationS - base.durationS) / 60);
+                  return (
+                    <Pressable
+                      key={i}
+                      onPress={() => pickAlt(i)}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 7,
+                        borderRadius: 999,
+                        borderWidth: on ? 2 : 1,
+                        borderColor: on ? colors.primary : colors.border,
+                        backgroundColor: colors.card,
+                        marginRight: 8,
+                        marginBottom: 6,
+                      }}
+                    >
+                      <Text style={{ color: on ? colors.primary : colors.text, fontWeight: '700', fontSize: 13 }}>
+                        {fmtDuration(o.durationS)}
+                        <Text style={{ color: colors.sub, fontWeight: '600' }}>
+                          {'  '}
+                          {fmtDistance(o.distanceM)}
+                          {i > 0 && deltaMin !== 0 ? `  ${deltaMin > 0 ? '+' : ''}${deltaMin} min` : ''}
+                        </Text>
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </Row>
+            ) : null}
             {originGuessed ? <Sub style={{ marginBottom: 4 }}>{t('ride.fromCentre')}</Sub> : null}
             <ErrorText>{error}</ErrorText>
             <Row>

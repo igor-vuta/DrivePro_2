@@ -7,7 +7,7 @@ import { colors } from './theme';
 // iframe, so the app is fully testable in a desktop browser too. No API keys.
 //
 // Ref methods: setCenter({lat, lng, zoom?, animate?}), fitBounds([[lat,lng],...])
-// Props: initialCenter, initialZoom, markers, polyline, onMoveEnd, onMoveStart, onReady
+// Props: initialCenter, initialZoom, markers, polyline, alts, onAltPick, onMoveEnd, onMoveStart, onReady
 
 // Built per render so the tiles and marker colours follow the active scheme;
 // the map is remounted on a scheme change because App keys the whole tree.
@@ -42,6 +42,7 @@ const makeHtml = () => `<!DOCTYPE html>
 
   var markers = {};
   var polyline = null;
+  var altLayer = null;
   var trailLayer = null;
 
   function post(obj) {
@@ -86,6 +87,24 @@ const makeHtml = () => `<!DOCTYPE html>
           L.polyline(c.points, { color: '${colors.primary}', weight: 10, opacity: 0.16, lineCap: 'round' }).addTo(polyline);
           L.polyline(c.points, { color: '${colors.primary}', weight: 3, opacity: 0.95, lineCap: 'round' }).addTo(polyline);
           polyline.addTo(map);
+          if (polyline.bringToFront) polyline.bringToFront();
+        }
+      } else if (c.type === 'setAlts') {
+        if (altLayer) { map.removeLayer(altLayer); altLayer = null; }
+        if (c.alts && c.alts.length) {
+          altLayer = L.layerGroup();
+          c.alts.forEach(function (alt, i) {
+            if (!alt.points || alt.points.length < 2) return;
+            // A fat invisible line makes the thin dashed one easy to hit.
+            var hit = L.polyline(alt.points, { color: '#000', weight: 22, opacity: 0, lineCap: 'round' });
+            var line = L.polyline(alt.points, { color: '${colors.sub}', weight: 5, opacity: 0.75, dashArray: '10 8', lineCap: 'round', interactive: false });
+            hit.on('click', function (ev) { L.DomEvent.stop(ev); post({ type: 'altpick', index: i }); });
+            line.addTo(altLayer);
+            hit.addTo(altLayer);
+          });
+          altLayer.addTo(map);
+          // Alternatives sit under the chosen route, never over it.
+          if (polyline && polyline.bringToFront) polyline.bringToFront();
         }
       } else if (c.type === 'setTrails') {
         if (trailLayer) { map.removeLayer(trailLayer); trailLayer = null; }
@@ -120,7 +139,7 @@ const makeHtml = () => `<!DOCTYPE html>
 
 
 const MapViewCmp = forwardRef(function MapViewCmp(
-  { initialCenter, initialZoom = 15, markers = [], polyline = null, trails = null, onMoveEnd, onMoveStart, onReady, style },
+  { initialCenter, initialZoom = 15, markers = [], polyline = null, alts = null, trails = null, onMoveEnd, onMoveStart, onReady, onAltPick, style },
   ref
 ) {
   const isWeb = Platform.OS === 'web';
@@ -129,7 +148,7 @@ const MapViewCmp = forwardRef(function MapViewCmp(
   const readyRef = useRef(false);
   const queueRef = useRef([]);
   const callbacksRef = useRef({});
-  callbacksRef.current = { onMoveEnd, onMoveStart, onReady, initialCenter, initialZoom };
+  callbacksRef.current = { onMoveEnd, onMoveStart, onReady, onAltPick, initialCenter, initialZoom };
 
   const send = (cmd) => {
     if (!readyRef.current) {
@@ -155,6 +174,8 @@ const MapViewCmp = forwardRef(function MapViewCmp(
       queueRef.current = [];
       q.forEach(send);
       if (cb.onReady) cb.onReady();
+    } else if (msg.type === 'altpick') {
+      if (cb.onAltPick) cb.onAltPick(msg.index);
     } else if (msg.type === 'moveend') {
       if (cb.onMoveEnd) cb.onMoveEnd({ lat: msg.lat, lng: msg.lng, zoom: msg.zoom });
     } else if (msg.type === 'movestart') {
@@ -178,6 +199,10 @@ const MapViewCmp = forwardRef(function MapViewCmp(
   useEffect(() => {
     send({ type: 'setPolyline', points: polyline });
   }, [JSON.stringify(polyline)]);
+
+  React.useEffect(() => {
+    send({ type: 'setAlts', alts: alts || [] });
+  }, [JSON.stringify(alts)]);
 
   useEffect(() => {
     if (trails) send({ type: 'setTrails', trails });

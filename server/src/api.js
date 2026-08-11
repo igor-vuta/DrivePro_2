@@ -1137,7 +1137,9 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const mode = String(url.searchParams.get('mode') || 'car');
     // steps=1 adds compact turn-by-turn maneuvers for the navigation banner.
     const withSteps = url.searchParams.get('steps') === '1';
-    sendJson(res, 200, await geoRoute(fromLat, fromLng, toLat, toLng, mode, withSteps));
+    // alts=N asks for up to N alternative routes beside the primary one.
+    const alts = Math.max(0, Math.min(3, Number(url.searchParams.get('alts')) || 0));
+    sendJson(res, 200, await geoRoute(fromLat, fromLng, toLat, toLng, mode, withSteps, alts));
   });
 
   // --------------------------------------------------------- dispatch ---

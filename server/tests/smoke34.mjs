@@ -33,6 +33,7 @@ const check = (label, cond, extra = '') => {
 const asked = [];
 const osrm = http.createServer((req, res) => {
   const withSteps = /steps=true/.test(req.url);
+  const wantAlts = /alternatives=[1-9]/.test(req.url);
   asked.push(withSteps);
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(
@@ -56,6 +57,16 @@ const osrm = http.createServer((req, res) => {
             },
           ],
         },
+        ...(wantAlts
+          ? [
+              {
+                distance: 2000,
+                duration: 900,
+                geometry: { coordinates: [[76.89, 43.24], [76.91, 43.26]] },
+                legs: [{ steps: [] }],
+              },
+            ]
+          : []),
       ],
     })
   );
@@ -130,6 +141,20 @@ const plainAgain = await api('GET', `/api/geo/route?${Q}`, null, user.token);
 check('a cached plain route still has no steps', !('steps' in plainAgain.json));
 const steppedAgain = await api('GET', `/api/geo/route?${Q}&steps=1`, null, user.token);
 check('a cached stepped route keeps its steps', (steppedAgain.json.steps || []).length === 3);
+
+// ---- alternatives ----
+//
+// alts=N asks the upstream for alternatives and returns the extras beside the
+// primary; without the flag the field is absent, and the two shapes must not
+// share a cache entry (the same trap as steps).
+{
+  const alt = await api('GET', `/api/geo/route?${Q}&alts=2`, null, user.token);
+  check('alts=2 returns the extra routes', (alt.json.alts || []).length === 1, JSON.stringify(alt.json.alts));
+  check('...each with its own distance, duration and geometry', alt.json.alts[0].distanceM === 2000 && alt.json.alts[0].durationS === 900 && alt.json.alts[0].points.length === 2, JSON.stringify(alt.json.alts[0]));
+  check('...and the primary is still the first route', alt.json.durationS === 600);
+  const plainNow = await api('GET', `/api/geo/route?${Q}`, null, user.token);
+  check('a route asked without alts has none', !('alts' in plainNow.json));
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 cleanup();
