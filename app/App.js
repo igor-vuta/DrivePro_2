@@ -9,6 +9,7 @@ import VerifyScreen from './src/screens/VerifyScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
+import SchedulesScreen from './src/screens/SchedulesScreen';
 import RateScreen from './src/screens/RateScreen';
 import PermissionsScreen from './src/screens/PermissionsScreen';
 import GuideScreen from './src/screens/GuideScreen';
@@ -26,7 +27,7 @@ const GUIDE_KEY = 'drivepro.guideDone';
 
 function Root() {
   const { booting, token, pendingRating, pendingVerification } = useAuth();
-  const [screen, setScreen] = useState('home'); // 'home' | 'profile' | 'history'
+  const [screen, setScreen] = useState('home'); // 'home' | 'profile' | 'history' | 'schedules'
   // History is reachable from the profile and from the avatar sheet - back
   // goes wherever it was opened from.
   const [historyFrom, setHistoryFrom] = useState('profile');
@@ -40,7 +41,7 @@ function Root() {
         setScreen(historyFrom);
         return true;
       }
-      if (screen === 'profile') {
+      if (screen === 'profile' || screen === 'schedules') {
         setScreen('home');
         return true;
       }
@@ -139,8 +140,14 @@ function Root() {
       <ProfileScreen goBack={() => setScreen('home')} openHistory={() => openHistory('profile')} />
     ) : screen === 'history' ? (
       <HistoryScreen goBack={() => setScreen(historyFrom)} />
+    ) : screen === 'schedules' ? (
+      <SchedulesScreen goBack={() => setScreen('home')} />
     ) : (
-      <HomeScreen openProfile={() => setScreen('profile')} openHistory={() => openHistory('home')} />
+      <HomeScreen
+        openProfile={() => setScreen('profile')}
+        openHistory={() => openHistory('home')}
+        openSchedules={() => setScreen('schedules')}
+      />
     );
   return (
     <FadeIn keyId={screen} style={{ flex: 1 }}>

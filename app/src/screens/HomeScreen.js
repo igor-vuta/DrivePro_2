@@ -101,7 +101,7 @@ function CityStrip({ impact, connected }) {
   );
 }
 
-export default function HomeScreen({ openProfile, openHistory }) {
+export default function HomeScreen({ openProfile, openHistory, openSchedules }) {
   const { me, wsConnected, activeRide, cityImpact } = useAuth();
   const [tab, setTab] = useState('ride');
   const [menu, setMenu] = useState(false);
@@ -166,6 +166,10 @@ export default function HomeScreen({ openProfile, openHistory }) {
           setMenu(false);
           openHistory();
         }}
+        openSchedules={() => {
+          setMenu(false);
+          openSchedules();
+        }}
       />
       <WeeklyRecap />
     </Screen>
@@ -199,7 +203,7 @@ function MenuRow({ icon, label, sub, onPress, danger }) {
 // Everything that is not "get me somewhere" lives behind the avatar: which
 // side of the ride you are on, your crew and history, the language, the way
 // out. The map stays visible behind it.
-function MenuSheet({ visible, onClose, tab, onTab, openProfile, openHistory }) {
+function MenuSheet({ visible, onClose, tab, onTab, openProfile, openHistory, openSchedules }) {
   const { me, logout, langPref, setLanguage } = useAuth();
   const driving = tab === 'drive';
   return (
@@ -239,6 +243,7 @@ function MenuSheet({ visible, onClose, tab, onTab, openProfile, openHistory }) {
             onPress={() => onTab(driving ? 'ride' : 'drive')}
           />
           <MenuRow icon="👤" label={t('menu.profile')} onPress={openProfile} />
+          <MenuRow icon="⏰" label={t('menu.schedules')} onPress={openSchedules} />
           <MenuRow icon="🏴" label={t('crew.title')} onPress={openProfile} />
           <MenuRow icon="🕘" label={t('menu.history')} onPress={openHistory} />
 

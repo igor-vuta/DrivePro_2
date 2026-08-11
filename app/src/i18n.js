@@ -114,6 +114,9 @@ const en = {
 
   // scheduled rides
   'sched.title': 'Scheduled rides',
+  'sched.empty': 'No saved commutes yet.',
+  'sched.screenHint': 'Save one from the ride confirmation screen — pick where and when, and DrivePro will look for a driver about 10 minutes before departure.',
+  'sched.paused': 'paused',
   'sched.plan': 'Schedule instead',
   'sched.timeLabel': 'Departure time (HH:MM)',
   'sched.daysLabel': 'Repeat on',
@@ -278,6 +281,7 @@ const en = {
   // profile
   'profile.history': 'Ride history ›',
   'menu.history': 'Ride history',
+  'menu.schedules': 'Saved commutes',
   'profile.say': 'What people say about you',
   'profile.personal': 'Personal details',
   'profile.name': 'Name',
@@ -541,6 +545,9 @@ const ru = {
 
   // scheduled rides
   'sched.title': 'Поездки по расписанию',
+  'sched.empty': 'Сохранённых маршрутов пока нет.',
+  'sched.screenHint': 'Сохраните маршрут на экране подтверждения поездки — выберите куда и когда, и DrivePro начнёт искать водителя примерно за 10 минут до выезда.',
+  'sched.paused': 'на паузе',
   'sched.plan': 'Запланировать',
   'sched.timeLabel': 'Время выезда (ЧЧ:ММ)',
   'sched.daysLabel': 'Повторять по',
@@ -666,6 +673,7 @@ const ru = {
 
   'profile.history': 'История поездок ›',
   'menu.history': 'История поездок',
+  'menu.schedules': 'Сохранённые маршруты',
   'profile.say': 'Что о вас говорят',
   'profile.personal': 'Личные данные',
   'profile.name': 'Имя',
@@ -973,6 +981,9 @@ const kk = {
 
   // scheduled rides
   'sched.title': 'Кесте бойынша сапарлар',
+  'sched.empty': 'Сақталған бағыттар әзірге жоқ.',
+  'sched.screenHint': 'Бағытты сапарды растау экранында сақтаңыз — қайда және қашан баратыныңызды таңдаңыз, DrivePro жүргізушіні шығуға шамамен 10 минут қалғанда іздей бастайды.',
+  'sched.paused': 'кідіртілген',
   'sched.plan': 'Жоспарлау',
   'sched.timeLabel': 'Шығу уақыты (СС:ММ)',
   'sched.daysLabel': 'Қайталау күндері',
@@ -1095,6 +1106,7 @@ const kk = {
   // profile
   'profile.history': 'Сапарлар тарихы ›',
   'menu.history': 'Сапарлар тарихы',
+  'menu.schedules': 'Сақталған бағыттар',
   'profile.say': 'Сіз туралы не дейді',
   'profile.personal': 'Жеке деректер',
   'profile.name': 'Аты',
