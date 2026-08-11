@@ -1135,7 +1135,9 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const toLng = Number(url.searchParams.get('toLng'));
     // Unknown modes fall back to car in geo.js; only these three are offered.
     const mode = String(url.searchParams.get('mode') || 'car');
-    sendJson(res, 200, await geoRoute(fromLat, fromLng, toLat, toLng, mode));
+    // steps=1 adds compact turn-by-turn maneuvers for the navigation banner.
+    const withSteps = url.searchParams.get('steps') === '1';
+    sendJson(res, 200, await geoRoute(fromLat, fromLng, toLat, toLng, mode, withSteps));
   });
 
   // --------------------------------------------------------- dispatch ---

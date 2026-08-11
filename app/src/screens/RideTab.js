@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Linking, Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Linking, Platform, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { notify, confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
@@ -10,6 +10,8 @@ import { wsClient } from '../ws';
 import UserProfileModal from '../UserProfileModal';
 import { t, errMsg, getLang } from '../i18n';
 import { API_URL } from '../config';
+import { buildNavModel, progress as navProgress, instructionKey, instructionArrow } from '../nav';
+import { stopWatching } from '../location';
 
 // Almaty, Kazakhstan - used until real geolocation arrives.
 // Thin a polyline before sending it over the socket.
@@ -103,11 +105,17 @@ export default function RideTab() {
   // The shared-ride path reuses the original pickup -> confirm -> request
   // machinery untouched.
   //   landing -> mode -> [pickup -> confirm] (shared ride)
-  const [step, setStep] = useState('landing'); // landing | mode | pickup | dest | confirm
+  //                   -> [from]              (change where the route starts)
+  //                   -> [nav]               (Start: follow-along navigation)
+  const [step, setStep] = useState('landing'); // landing | mode | from | pickup | dest | confirm | nav
   const [mode, setMode] = useState('car'); // car | foot | bike (solo route shown)
   const [modeRoutes, setModeRoutes] = useState({}); // mode -> route
   const [origin, setOrigin] = useState(null); // where the solo routes start from
   const [originGuessed, setOriginGuessed] = useState(false); // origin is the fallback centre, not the user
+  const [navModel, setNavModel] = useState(null); // buildNavModel() output while navigating
+  const [navPos, setNavPos] = useState(null); // last GPS fix during navigation
+  const [navInfo, setNavInfo] = useState(null); // progress(): remaining, ETA, next maneuver
+  const [navPhase, setNavPhase] = useState('going'); // going | rerouting | arrived
   const [center, setCenter] = useState(FALLBACK_CENTER);
   const [trails, setTrails] = useState([]);
   const [address, setAddress] = useState('');
@@ -135,6 +143,10 @@ export default function RideTab() {
   const myLocRef = useRef(null); // last known real location, for the pickup default
   const pickedRef = useRef(null); // point chosen by name, awaiting its moveend
   const interactedRef = useRef(false); // the user has chosen a point of their own
+  const navModelRef = useRef(null); // progress runs against the ref, not stale state
+  const navWatchRef = useRef(null); // the live position subscription
+  const navOffCount = useRef(0); // consecutive off-route fixes before rerouting
+  const wakeLockRef = useRef(null); // keeps the screen on while navigating (web)
 
   // Scheduled rides (L14): list + refresh after planner/list mutations.
   const loadSchedules = async () => {
@@ -232,7 +244,7 @@ export default function RideTab() {
 
   const onMoveEnd = (c) => {
     setCenter({ lat: c.lat, lng: c.lng });
-    if (step === 'landing' || step === 'pickup' || step === 'dest') {
+    if (step === 'landing' || step === 'pickup' || step === 'dest' || step === 'from') {
       // A point the user picked by name (search result or saved place) already
       // carries the label they chose - re-reverse-geocoding it would replace
       // "Medeu" with whatever street the pin happens to land on. Any move to a
@@ -314,6 +326,13 @@ export default function RideTab() {
       setOrigin(from);
       setStep('mode');
       loadModeRoutes(from, point);
+    } else if (step === 'from') {
+      // A hand-picked starting point: the solo routes now begin here, not at
+      // the phone's location.
+      setOrigin(point);
+      setOriginGuessed(false);
+      setStep('mode');
+      loadModeRoutes(point, dest);
     } else if (step === 'pickup') {
       setPickup(point);
       // Destination is already known (chosen on the landing step), so a shared
@@ -395,6 +414,153 @@ export default function RideTab() {
     backTo(dest);
   };
 
+  // Change where the solo route starts: pick a point the same way the
+  // destination was picked, then rebuild the three mode routes from it.
+  const changeOrigin = () => {
+    fitSeq.current++;
+    setStep('from');
+    if (origin && origin.address) {
+      goTo(origin);
+    } else {
+      const c = origin || myLocRef.current || centerRef.current;
+      setCenter(c);
+      if (mapRef.current) mapRef.current.setCenter({ ...c, zoom: 16 });
+      reverseLookup(c);
+    }
+  };
+
+  // ------------------------------------------------ follow-along navigation
+
+  const startNav = async () => {
+    if (!dest) return;
+    const from = origin || myLocRef.current || centerRef.current;
+    const seq = ++fitSeq.current;
+    setError('');
+    try {
+      const r = await api(
+        'GET',
+        `/api/geo/route?fromLat=${from.lat}&fromLng=${from.lng}&toLat=${dest.lat}&toLng=${dest.lng}&mode=${mode}&steps=1`,
+        null,
+        token
+      );
+      if (seq !== fitSeq.current) return;
+      const model = buildNavModel(r);
+      navModelRef.current = model;
+      setNavModel(model);
+      setNavInfo(null);
+      setNavPos(null);
+      setNavPhase('going');
+      setStep('nav');
+      if (mapRef.current) mapRef.current.setCenter({ ...from, zoom: 17 });
+      beginNavWatch();
+      // Navigation with the screen off is no navigation; best-effort only.
+      try {
+        if (typeof navigator !== 'undefined' && navigator.wakeLock) {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+        }
+      } catch (e) {}
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  };
+
+  const beginNavWatch = async () => {
+    try {
+      // On web, talk to the browser's geolocation directly: watchPosition
+      // raises the permission prompt itself, and it sidesteps the expo-location
+      // web wrapper whose teardown already needs the shim in location.js.
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
+        const id = navigator.geolocation.watchPosition(
+          (loc) => onNavPos({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
+          () => {}, // denied or unavailable: route + banner still show, without the dot
+          { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 }
+        );
+        navWatchRef.current = { remove: () => navigator.geolocation.clearWatch(id) };
+        return;
+      }
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== 'granted') return;
+      navWatchRef.current = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Highest, timeInterval: 2000, distanceInterval: 3 },
+        (loc) => onNavPos({ lat: loc.coords.latitude, lng: loc.coords.longitude })
+      );
+    } catch (e) {}
+  };
+
+  const onNavPos = (c) => {
+    myLocRef.current = c;
+    setNavPos(c);
+    const model = navModelRef.current;
+    if (!model) return;
+    const p = navProgress(model, c);
+    if (!p) return;
+    setNavInfo(p);
+    if (mapRef.current) mapRef.current.setCenter({ ...c, zoom: 17 });
+    if (p.remainM < 40) {
+      setNavPhase('arrived');
+      endNavWatch();
+      return;
+    }
+    // Two consecutive fixes far from every route vertex = genuinely off the
+    // route, not GPS noise; rebuild from where the user actually is.
+    if (p.offM > 60) {
+      navOffCount.current++;
+      if (navOffCount.current >= 2) rerouteNav(c);
+    } else {
+      navOffCount.current = 0;
+    }
+  };
+
+  const rerouteNav = async (c) => {
+    if (!dest) return;
+    navOffCount.current = 0;
+    setNavPhase('rerouting');
+    const seq = ++fitSeq.current;
+    try {
+      const r = await api(
+        'GET',
+        `/api/geo/route?fromLat=${c.lat}&fromLng=${c.lng}&toLat=${dest.lat}&toLng=${dest.lng}&mode=${mode}&steps=1`,
+        null,
+        token
+      );
+      if (seq !== fitSeq.current) return;
+      const model = buildNavModel(r);
+      navModelRef.current = model;
+      setNavModel(model);
+      setNavPhase('going');
+    } catch (e) {
+      // Keep the old route; the next off-route fix will try again.
+      setNavPhase('going');
+    }
+  };
+
+  const endNavWatch = () => {
+    if (navWatchRef.current) {
+      stopWatching(navWatchRef.current);
+      navWatchRef.current = null;
+    }
+    if (wakeLockRef.current) {
+      try {
+        wakeLockRef.current.release();
+      } catch (e) {}
+      wakeLockRef.current = null;
+    }
+  };
+
+  const exitNav = () => {
+    endNavWatch();
+    navModelRef.current = null;
+    setNavModel(null);
+    setNavInfo(null);
+    setNavPhase('going');
+    setStep('mode');
+    const r = modeRoutes[mode];
+    if (r && r.points && r.points.length && mapRef.current) mapRef.current.fitBounds(r.points);
+  };
+
+  // The watch must not outlive the component.
+  useEffect(() => () => endNavWatch(), []);
+
   const loadRoute = async (from, to) => {
     const seq = ++fitSeq.current;
     setRouteLoading(true);
@@ -468,6 +634,11 @@ export default function RideTab() {
 
   const resetFlow = () => {
     fitSeq.current++;
+    endNavWatch();
+    navModelRef.current = null;
+    setNavModel(null);
+    setNavInfo(null);
+    setNavPhase('going');
     setStep('landing');
     setPickup(null);
     setDest(null);
@@ -489,11 +660,17 @@ export default function RideTab() {
     // The destination is chosen first now, so it stays pinned for every step
     // after the landing one (except while it is being re-picked on 'dest').
     if (dest && step !== 'landing' && step !== 'dest') list.push({ id: 'dest', lat: dest.lat, lng: dest.lng, kind: 'dest' });
+    // While navigating, the moving dot is the user themselves.
+    if (navPos && step === 'nav') list.push({ id: 'me', lat: navPos.lat, lng: navPos.lng, kind: mode === 'car' ? 'car' : 'pickup' });
     return list;
-  }, [cars, pickup, dest, origin, step]);
+  }, [cars, pickup, dest, origin, step, navPos, mode]);
 
   const polyline =
-    step === 'mode'
+    step === 'nav'
+      ? navModel
+        ? navModel.points
+        : null
+      : step === 'mode'
       ? modeRoutes[mode]
         ? modeRoutes[mode].points
         : null
@@ -545,13 +722,23 @@ export default function RideTab() {
       ? t('ride.whereTo')
       : step === 'mode'
       ? t('ride.travelTitle')
+      : step === 'from'
+      ? t('nav.fromTitle')
       : step === 'pickup'
       ? t('ride.setPickup')
       : step === 'dest'
       ? t('ride.setDest')
       : t('ride.confirm');
   const places = me && me.places ? me.places : null;
-  const showCenterPin = step === 'landing' || step === 'pickup' || step === 'dest';
+  const showCenterPin = step === 'landing' || step === 'pickup' || step === 'dest' || step === 'from';
+
+  // The next-maneuver banner line, whole-sentence templated per language.
+  const bannerStep = navInfo ? navInfo.next : navModel && navModel.steps.length ? navModel.steps[0] : null;
+  const bannerText = (() => {
+    const { key, name } = instructionKey(bannerStep);
+    const turn = t(key);
+    return name ? t('nav.onto', { turn, name }) : turn;
+  })();
 
   return (
     <Bleed top>
@@ -593,15 +780,69 @@ export default function RideTab() {
             </Card>
           </View>
         ) : null}
+        {step === 'nav' && navPhase !== 'arrived' ? (
+          <View pointerEvents="none" style={{ position: 'absolute', left: 12, right: 12, top: CHROME_H + 8 }}>
+            <Card style={{ marginBottom: 0, paddingVertical: 12 }}>
+              <Row>
+                <Text style={{ fontSize: 30, color: colors.primary, width: 44, textAlign: 'center' }}>
+                  {instructionArrow(bannerStep)}
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontWeight: '800', fontSize: 16 }} numberOfLines={2}>
+                    {bannerText}
+                  </Text>
+                  {navInfo && navInfo.next ? (
+                    <Text style={{ color: colors.sub, fontSize: 13, marginTop: 1 }}>{fmtDistance(navInfo.distToStepM)}</Text>
+                  ) : null}
+                </View>
+              </Row>
+            </Card>
+          </View>
+        ) : null}
       </View>
 
       <View style={{ paddingHorizontal: SCREEN_PAD, paddingTop: 10, backgroundColor: colors.bg }}>
+        {step === 'nav' ? (
+          <Row style={{ paddingBottom: 12 }}>
+            {navPhase === 'arrived' ? (
+              <>
+                <Text style={{ flex: 1, fontSize: 20, fontWeight: '800', color: colors.ok }}>🏁 {t('nav.arrived')}</Text>
+                <Button title={t('nav.done')} onPress={resetFlow} style={{ paddingHorizontal: 22, marginTop: 0 }} />
+              </>
+            ) : (
+              <>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text }}>
+                    {fmtDistance(navInfo ? navInfo.remainM : navModel ? navModel.distanceM : 0)}
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: colors.sub }}>
+                      {'  '}
+                      {fmtDuration(navInfo ? navInfo.etaS : navModel ? navModel.durationS : 0)}
+                    </Text>
+                  </Text>
+                  <Sub style={{ marginBottom: 0, fontSize: 12 }}>
+                    {navPhase === 'rerouting' ? t('nav.rerouting') : !navPos ? t('nav.waitGps') : dest ? dest.address : ''}
+                  </Sub>
+                </View>
+                <Button kind="ghost" title={t('nav.exit')} onPress={exitNav} style={{ height: 44, paddingHorizontal: 16, marginTop: 0 }} />
+              </>
+            )}
+          </Row>
+        ) : (
         <FadeIn keyId={step} from={18}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 8 }}>{stepTitle}</Text>
 
         {step === 'mode' ? (
           <View>
             <Card style={{ marginBottom: 10 }}>
+              <Row style={{ marginBottom: 6 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.ok, marginRight: 8 }} />
+                <Text style={{ color: colors.text, flex: 1 }} numberOfLines={1}>
+                  {origin && origin.address ? origin.address : t('nav.myLocation')}
+                </Text>
+                <Pressable onPress={changeOrigin} hitSlop={8}>
+                  <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>{t('nav.changeFrom')}</Text>
+                </Pressable>
+              </Row>
               <Row>
                 <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.danger, marginRight: 8 }} />
                 <Text style={{ color: colors.text, flex: 1 }} numberOfLines={1}>{dest ? dest.address : ''}</Text>
@@ -622,7 +863,10 @@ export default function RideTab() {
             </Row>
             <Sub style={{ marginBottom: 8 }}>{originGuessed ? t('ride.fromCentre') : t('ride.soloHint')}</Sub>
             <ErrorText>{error}</ErrorText>
-            <Button title={t('ride.askShared')} onPress={askSharedRide} />
+            <Row>
+              <Button title={`▶ ${t('nav.start')}`} onPress={startNav} style={{ flex: 1, marginRight: 8 }} />
+              <Button kind="ghost" title={t('ride.askShared')} onPress={askSharedRide} style={{ flex: 1.5 }} />
+            </Row>
             <Button kind="ghost" title={t('ride.changeDest')} onPress={backToLanding} style={{ height: 42 }} />
           </View>
         ) : step !== 'confirm' ? (
@@ -652,7 +896,7 @@ export default function RideTab() {
               <Button title={t('common.find')} onPress={doSearch} style={{ marginLeft: 8, height: 48, paddingHorizontal: 16, marginTop: 0 }} />
             </Row>
             <Input
-              label={step === 'pickup' ? t('ride.pickupAddr') : t('ride.destAddr')}
+              label={step === 'pickup' ? t('ride.pickupAddr') : step === 'from' ? t('nav.fromAddr') : t('ride.destAddr')}
               value={addrLoading ? '…' : address}
               onChangeText={setAddress}
               placeholder={t('ride.addrPh')}
@@ -664,9 +908,19 @@ export default function RideTab() {
                 <Button kind="ghost" title={t('common.back')} onPress={() => { setStep('pickup'); backTo(pickup); }} style={{ flex: 1, marginRight: 8 }} />
               ) : step === 'pickup' && dest ? (
                 <Button kind="ghost" title={t('common.back')} onPress={() => setStep('mode')} style={{ flex: 1, marginRight: 8 }} />
+              ) : step === 'from' ? (
+                <Button kind="ghost" title={t('common.back')} onPress={() => setStep('mode')} style={{ flex: 1, marginRight: 8 }} />
               ) : null}
               <Button
-                title={step === 'landing' ? t('ride.seeRoutes') : step === 'pickup' && !dest ? t('ride.nextDest') : t('ride.nextConfirm')}
+                title={
+                  step === 'landing'
+                    ? t('ride.seeRoutes')
+                    : step === 'from'
+                    ? t('nav.setFrom')
+                    : step === 'pickup' && !dest
+                    ? t('ride.nextDest')
+                    : t('ride.nextConfirm')
+                }
                 onPress={confirmPoint}
                 disabled={addrLoading || !(addrLoading ? true : (address || '').trim())}
                 style={{ flex: 2 }}
@@ -719,6 +973,7 @@ export default function RideTab() {
         )}
         <View style={{ height: 12 }} />
         </FadeIn>
+        )}
       </View>
     </Bleed>
   );

@@ -139,7 +139,7 @@ export async function searchAddress(q, lat, lng, lang) {
   return value;
 }
 
-export async function route(fromLat, fromLng, toLat, toLng, mode = 'car') {
+export async function route(fromLat, fromLng, toLat, toLng, mode = 'car', withSteps = false) {
   if (![fromLat, fromLng, toLat, toLng].every(isFiniteNum)) {
     throw httpError(400, 'from and to coordinates are required');
   }
@@ -147,7 +147,7 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car') {
   // both reflect what actually ran rather than an unknown input.
   const resolved = PROFILES[mode] ? mode : 'car';
   const profile = PROFILES[resolved];
-  const key = `route:${resolved}:${fromLat.toFixed(5)},${fromLng.toFixed(5)}:${toLat.toFixed(5)},${toLng.toFixed(5)}`;
+  const key = `route:${resolved}:${withSteps ? 's:' : ''}${fromLat.toFixed(5)},${fromLng.toFixed(5)}:${toLat.toFixed(5)},${toLng.toFixed(5)}`;
   const hit = cacheGet(key);
   if (hit) return hit;
   // Ask the configured server first; if it cannot give a usable answer -
@@ -158,7 +158,7 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car') {
   const ask = async (base, path) => {
     const json = await upstream(
       `${base}/route/v1/${path}/${fromLng},${fromLat};${toLng},${toLat}` +
-        `?overview=full&geometries=geojson&alternatives=false&steps=false`
+        `?overview=full&geometries=geojson&alternatives=false&steps=${withSteps ? 'true' : 'false'}`
     );
     if (!json || json.code !== 'Ok' || !json.routes || !json.routes[0]) {
       throw httpError(502, 'no route found');
@@ -184,6 +184,21 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car') {
     // GeoJSON is [lng, lat]; the app works in [lat, lng].
     points: (r.geometry && r.geometry.coordinates ? r.geometry.coordinates : []).map((c) => [c[1], c[0]]),
   };
+  if (withSteps) {
+    // Compact turn-by-turn steps for the navigation banner: what to do, where,
+    // onto which street, and how far that leg runs. Everything else OSRM
+    // returns per step (geometry, intersections, lanes) is dropped - the
+    // banner does not need it and the payload stays small.
+    value.steps = (r.legs || []).flatMap((leg) =>
+      (leg.steps || []).map((s) => ({
+        type: s.maneuver && s.maneuver.type ? s.maneuver.type : '',
+        mod: s.maneuver && s.maneuver.modifier ? s.maneuver.modifier : null,
+        name: s.name || '',
+        distM: Math.round(s.distance || 0),
+        loc: s.maneuver && s.maneuver.location ? [s.maneuver.location[1], s.maneuver.location[0]] : null,
+      }))
+    );
+  }
   cacheSet(key, value);
   return value;
 }
