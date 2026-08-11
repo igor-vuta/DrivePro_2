@@ -9,13 +9,23 @@ const NOMINATIM_URL = process.env.NOMINATIM_URL || 'https://nominatim.openstreet
 const COUNTRIES = (process.env.DRIVEPRO_COUNTRIES || '').trim().toLowerCase();
 
 // One OSRM endpoint per travel profile. A self-hosted deploy runs three
-// instances (see deploy/setup-osrm.sh) and sets these env vars; the fallback
-// is the FOSSGIS demo servers, which - unlike the plain OSRM demo - actually
-// serve car, foot AND bike, so walk/cycle routing works even before the VM is
-// set up. Each falls back to the driving endpoint if unset.
-const OSRM_CAR = process.env.OSRM_URL || 'https://routing.openstreetmap.de/routed-car';
-const OSRM_FOOT = process.env.OSRM_FOOT_URL || 'https://routing.openstreetmap.de/routed-foot';
-const OSRM_BIKE = process.env.OSRM_BIKE_URL || 'https://routing.openstreetmap.de/routed-bike';
+// instances (see deploy/setup-osrm.sh) and sets these env vars; the FOSSGIS
+// demo servers - which, unlike the plain OSRM demo, actually serve car, foot
+// AND bike - are both the default when nothing is configured and the
+// per-request fallback when the configured server cannot answer. The
+// self-hosted graphs cover one region (Kazakhstan), so a request from
+// anywhere else must fail over to the worldwide servers, not error out.
+// OSRM_FALLBACK_URL is a test seam: it points all three fallbacks at one
+// stub, the same way TWILIO_API_URL keeps smoke26 off the real network.
+const FALLBACK_OVERRIDE = process.env.OSRM_FALLBACK_URL || null;
+const FOSSGIS = {
+  car: FALLBACK_OVERRIDE || 'https://routing.openstreetmap.de/routed-car',
+  foot: FALLBACK_OVERRIDE || 'https://routing.openstreetmap.de/routed-foot',
+  bike: FALLBACK_OVERRIDE || 'https://routing.openstreetmap.de/routed-bike',
+};
+const OSRM_CAR = process.env.OSRM_URL || FOSSGIS.car;
+const OSRM_FOOT = process.env.OSRM_FOOT_URL || FOSSGIS.foot;
+const OSRM_BIKE = process.env.OSRM_BIKE_URL || FOSSGIS.bike;
 
 // mode -> { url, osrmProfile }. The path segment after /route/v1/ is fixed to
 // the profile each server was built with, so a self-hosted car server still
@@ -25,6 +35,14 @@ const PROFILES = {
   foot: { url: OSRM_FOOT, path: 'foot' },
   bike: { url: OSRM_BIKE, path: 'bike' },
 };
+
+// A request outside the self-hosted graph does not necessarily error: OSRM
+// snaps each point to the nearest edge it knows, however far away, and
+// happily routes between the snapped points - from Leicester that is a
+// confident route through western Kazakhstan. The response reports how far
+// each waypoint snapped, so anything beyond this is treated as "the graph
+// does not cover you" rather than an answer.
+const SNAP_MAX_M = Number(process.env.OSRM_SNAP_MAX_M || 5000);
 
 export const routeModes = () => Object.keys(PROFILES);
 
@@ -132,12 +150,31 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car') {
   const key = `route:${resolved}:${fromLat.toFixed(5)},${fromLng.toFixed(5)}:${toLat.toFixed(5)},${toLng.toFixed(5)}`;
   const hit = cacheGet(key);
   if (hit) return hit;
-  const url =
-    `${profile.url}/route/v1/${profile.path}/${fromLng},${fromLat};${toLng},${toLat}` +
-    `?overview=full&geometries=geojson&alternatives=false&steps=false`;
-  const json = await upstream(url);
-  if (!json || json.code !== 'Ok' || !json.routes || !json.routes[0]) {
-    throw httpError(502, 'no route found');
+  // Ask the configured server first; if it cannot give a usable answer -
+  // an error, no route, or waypoints snapped implausibly far because the
+  // points lie outside its regional graph - fail over to the worldwide
+  // FOSSGIS server for the same profile. When no self-hosted server is
+  // configured the two URLs are identical and there is nothing to retry.
+  const ask = async (base, path) => {
+    const json = await upstream(
+      `${base}/route/v1/${path}/${fromLng},${fromLat};${toLng},${toLat}` +
+        `?overview=full&geometries=geojson&alternatives=false&steps=false`
+    );
+    if (!json || json.code !== 'Ok' || !json.routes || !json.routes[0]) {
+      throw httpError(502, 'no route found');
+    }
+    if ((json.waypoints || []).some((w) => isFiniteNum(w.distance) && w.distance > SNAP_MAX_M)) {
+      throw httpError(502, 'no route found near these points');
+    }
+    return json;
+  };
+  const fallback = FOSSGIS[resolved];
+  let json;
+  try {
+    json = await ask(profile.url, profile.path);
+  } catch (e) {
+    if (profile.url === fallback) throw e;
+    json = await ask(fallback, resolved === 'car' ? 'driving' : resolved);
   }
   const r = json.routes[0];
   const value = {
