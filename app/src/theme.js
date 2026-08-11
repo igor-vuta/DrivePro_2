@@ -43,7 +43,10 @@ const light = {
   // a near-white ground reads as blur rather than light.
   shadow: 'rgba(68,84,108,0.16)',
   glow: 'transparent',
-  mapTiles: 'light_all',
+  // Voyager draws shop, cafe and park names and colours parks and water -
+  // denser and more map-like than the near-blank light_all, which was chosen
+  // when the map was only a backdrop for picking a point.
+  mapTiles: 'rastertiles/voyager',
   statusBar: 'dark-content',
 };
 
@@ -64,6 +67,8 @@ const dark = {
   ok: '#12B45C',
   shadow: 'rgba(0,0,0,0.45)',
   glow: 'rgba(0,143,210,0.45)',
+  // No dark Voyager exists; dark_all already carries street names, and a
+  // light style under a dark UI would glare at night.
   mapTiles: 'dark_all',
   statusBar: 'light-content',
 };

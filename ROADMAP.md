@@ -35,7 +35,7 @@ Conventions live in CLAUDE.md.
 | ~~L44~~ | ~~The pickup toggle mid-route, not only before Start~~ | ✅ shipped — reported from a real walk |
 | ~~L45~~ | ~~Alternative car routes: all drawn, tap to choose~~ | ✅ shipped |
 | ~~L46~~ | ~~Places from 2GIS: name search, category chips, tap-a-building~~ | ✅ shipped |
-| L47 | Labelled basemap | **decision needed — see below** |
+| L47 | Labelled basemap | **blocked on a MapGL key — see below** |
 
 \* misnumbered — that commit lands *after* L33 and is really L34's
 predecessor. Left alone rather than rewriting pushed history; the next free
@@ -100,15 +100,26 @@ that OSM does not. The proxy in `server/src/places.js` normalises to a
 provider-neutral shape precisely so OpenStreetMap can be added beside it, which
 was the stated long-term intent ("I would do three of those").
 
-**Basemap — open decision.** The agreed direction was to switch to a labelled,
-denser basemap. Two honest options:
-- **2GIS raster tiles** (`tile2.maps.2gis.com`) serve without a key and look
-  exactly like 2GIS. Technically trivial; whether our licence permits using
-  them as our basemap is a question for the account holder, not something to
-  assume. **Not wired up pending that answer.**
-- **A licensed labelled style** (MapTiler/Thunderforest/Stadia, or 2GIS MapGL
-  with a MapGL-type key) — clearly permitted, needs a key, and MapGL would mean
-  replacing Leaflet in `MapView.js`.
+**Basemap — half done, blocked on a key.** The light theme moved from
+`light_all` to CARTO **Voyager**, which colours parks and water and makes
+buildings legible. Measured honestly, that is a step and not the goal: no
+CARTO raster style carries shop or cafe names, which is what makes 2GIS feel
+dense. Revert by changing one token in `theme.js` if the warmer palette
+fights the Almaty colours.
+
+The real answer is **2GIS MapGL**, and it needs its own key:
+- the existing `TWOGIS_KEY` is **Catalog-only** — `keys.api.2gis.com` 404s it,
+  so MapGL would refuse to start;
+- a MapGL key is **public by design** (it ships inside the page), so it must be
+  a *separate* key restricted by domain, never the Catalog key, which would
+  otherwise let anyone spend our catalog quota;
+- MapGL replaces Leaflet inside `MapView.js`. The external contract
+  (setCenter/fitBounds/markers/polyline/alts/taps) stays, the engine changes;
+  note MapGL takes `[lng, lat]`, the opposite of Leaflet.
+
+Using 2GIS's raster tiles directly (`tile2.maps.2gis.com` serves without a key)
+was considered and **not** done: it works technically, but it is not what the
+licence is for, and the downside lands on Igor's account, not on the code.
 
 Deliberately **not** attempted (discussed 2026-08-11): live traffic and a
 2GIS-grade POI directory. Traffic needs fleet-scale probe data — the honest
