@@ -52,6 +52,43 @@ function fmtDuration(s) {
   return min < 60 ? `~${min} min` : `~${Math.floor(min / 60)} h ${min % 60} min`;
 }
 
+// The three ways to get there on your own, in the order they are offered.
+// Each maps to a real OSRM profile server-side (L31).
+const TRAVEL_MODES = [
+  { key: 'foot', icon: '🚶', label: 'ride.modeFoot' },
+  { key: 'bike', icon: '🚲', label: 'ride.modeBike' },
+  { key: 'car', icon: '🚗', label: 'ride.modeCar' },
+];
+
+// One tile in the walk / cycle / drive picker: icon, name, real ETA.
+function ModeTile({ icon, label, route, active, onPress, style }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          flex: 1,
+          alignItems: 'center',
+          paddingVertical: 10,
+          borderRadius: 16,
+          borderWidth: active ? 2 : 1,
+          borderColor: active ? colors.primary : colors.border,
+          backgroundColor: colors.card,
+          opacity: pressed ? 0.75 : 1,
+        },
+        style,
+      ]}
+    >
+      <Text style={{ fontSize: 20 }}>{icon}</Text>
+      <Text style={{ color: active ? colors.primary : colors.text, fontWeight: '700', fontSize: 13, marginTop: 2 }}>{label}</Text>
+      <Text style={{ color: colors.sub, fontSize: 12, marginTop: 2 }}>
+        {route ? fmtDuration(route.durationS) : '…'}
+      </Text>
+      {route ? <Text style={{ color: colors.sub, fontSize: 11 }}>{fmtDistance(route.distanceM)}</Text> : null}
+    </Pressable>
+  );
+}
+
 export default function RideTab() {
   const { token, me, activeRide, counterpart, driverLoc } = useAuth();
   const mapRef = useRef(null);
@@ -61,7 +98,15 @@ export default function RideTab() {
   const searching = myRide && myRide.status === 'requested';
   const matched = myRide && myRide.status !== 'requested';
 
-  const [step, setStep] = useState('pickup'); // pickup | dest | confirm
+  // Map-first flow: land on the map, pick where you're going, see how long it
+  // takes to walk / cycle / drive there, and optionally ask for a shared ride.
+  // The shared-ride path reuses the original pickup -> confirm -> request
+  // machinery untouched.
+  //   landing -> mode -> [pickup -> confirm] (shared ride)
+  const [step, setStep] = useState('landing'); // landing | mode | pickup | dest | confirm
+  const [mode, setMode] = useState('car'); // car | foot | bike (solo route shown)
+  const [modeRoutes, setModeRoutes] = useState({}); // mode -> route
+  const [origin, setOrigin] = useState(null); // where the solo routes start from
   const [center, setCenter] = useState(FALLBACK_CENTER);
   const [trails, setTrails] = useState([]);
   const [address, setAddress] = useState('');
@@ -80,6 +125,8 @@ export default function RideTab() {
   const [busy, setBusy] = useState(false);
   const [schedules, setSchedules] = useState([]);
   const geoSeq = useRef(0);
+  const myLocRef = useRef(null); // last known real location, for the pickup default
+  const pickedRef = useRef(null); // point chosen by name, awaiting its moveend
 
   // Scheduled rides (L14): list + refresh after planner/list mutations.
   const loadSchedules = async () => {
@@ -92,9 +139,12 @@ export default function RideTab() {
     loadSchedules();
   }, [token]);
 
-  // Center on the user's real location once.
+  // Center on the user's real location once. The landing step needs an address
+  // straight away, so seed one for the fallback centre first - if geolocation
+  // is refused the map never moves and no moveend would ever fire.
   useEffect(() => {
     let cancelled = false;
+    reverseLookup(centerRef.current);
     (async () => {
       try {
         const perm = await Location.requestForegroundPermissionsAsync();
@@ -102,6 +152,7 @@ export default function RideTab() {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         if (cancelled) return;
         const c = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+        myLocRef.current = c;
         setCenter(c);
         if (mapRef.current) mapRef.current.setCenter({ ...c, zoom: 16, animate: false });
         wsClient.send({ type: 'map:watch', ...c });
@@ -170,8 +221,15 @@ export default function RideTab() {
 
   const onMoveEnd = (c) => {
     setCenter({ lat: c.lat, lng: c.lng });
-    if (step === 'pickup' || step === 'dest') {
-      reverseLookup(c);
+    if (step === 'landing' || step === 'pickup' || step === 'dest') {
+      // A point the user picked by name (search result or saved place) already
+      // carries the label they chose - re-reverse-geocoding it would replace
+      // "Medeu" with whatever street the pin happens to land on. Any move to a
+      // different point clears the mark, so a stale one cannot linger.
+      const picked = pickedRef.current;
+      pickedRef.current = null;
+      const samePoint = picked && Math.abs(picked.lat - c.lat) < 1e-6 && Math.abs(picked.lng - c.lng) < 1e-6;
+      if (!samePoint) reverseLookup(c);
       wsClient.send({ type: 'map:watch', lat: c.lat, lng: c.lng });
     }
   };
@@ -194,30 +252,108 @@ export default function RideTab() {
     }
   };
 
+  // Jump the map to a point the user named. `center` is normally only updated
+  // by the map's moveend, which lands a frame or two later - so set it here
+  // too, or confirming straight away would pair the new label with the old
+  // coordinates.
+  const goTo = (p) => {
+    const c = { lat: p.lat, lng: p.lng };
+    pickedRef.current = c;
+    setAddress(p.address);
+    setCenter(c);
+    if (mapRef.current) mapRef.current.setCenter({ ...c, zoom: 16 });
+  };
+
   const pickResult = (r) => {
     setResults(null);
     setQuery('');
-    setAddress(r.address);
-    if (mapRef.current) mapRef.current.setCenter({ lat: r.lat, lng: r.lng, zoom: 16 });
+    goTo(r);
   };
 
-  const goPlace = (p) => {
-    setAddress(p.address);
-    if (mapRef.current) mapRef.current.setCenter({ lat: p.lat, lng: p.lng, zoom: 16 });
-  };
+  const goPlace = (p) => goTo(p);
 
   const confirmPoint = async () => {
     const point = { ...center, address: address.trim() || `${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}` };
-    if (step === 'pickup') {
+    if (step === 'landing') {
+      // Destination chosen: show how to get there, per travel mode. The routes
+      // start where the user actually is, not at the map centre - which by now
+      // sits on the destination they just dropped the pin on.
+      const from = myLocRef.current || pickup || FALLBACK_CENTER;
+      setDest(point);
+      setOrigin(from);
+      setStep('mode');
+      loadModeRoutes(from, point);
+    } else if (step === 'pickup') {
       setPickup(point);
-      setStep('dest');
-      setAddress('');
-      reverseLookup(center);
+      // Destination is already known (chosen on the landing step), so a shared
+      // ride goes straight to confirmation. The old pickup -> dest path is kept
+      // as a fallback if dest is somehow unset.
+      if (dest) {
+        setStep('confirm');
+        loadRoute(point, dest);
+      } else {
+        setStep('dest');
+        setAddress('');
+        reverseLookup(center);
+      }
     } else if (step === 'dest') {
       setDest(point);
       setStep('confirm');
       loadRoute(pickup, point);
     }
+  };
+
+  // Route to the destination for all three travel modes at once, so the mode
+  // step can show real walk / cycle / drive times side by side. Each failure
+  // falls back to a straight-line estimate rather than blocking.
+  const loadModeRoutes = async (from, to) => {
+    setModeRoutes({});
+    setMode('car');
+    const modes = ['foot', 'bike', 'car'];
+    const pairs = await Promise.all(
+      modes.map(async (m) => {
+        try {
+          const r = await api(
+            'GET',
+            `/api/geo/route?fromLat=${from.lat}&fromLng=${from.lng}&toLat=${to.lat}&toLng=${to.lng}&mode=${m}`,
+            null,
+            token
+          );
+          return [m, { ...r, approx: false }];
+        } catch (e) {
+          const d = haversineM(from, to);
+          const speed = m === 'foot' ? 1.35 : m === 'bike' ? 4.2 : 8.3; // m/s
+          return [m, { distanceM: d, durationS: Math.round(d / speed), points: [[from.lat, from.lng], [to.lat, to.lng]], approx: true }];
+        }
+      })
+    );
+    const map = Object.fromEntries(pairs);
+    setModeRoutes(map);
+    const fit = map.car && map.car.points.length ? map.car.points : [[from.lat, from.lng], [to.lat, to.lng]];
+    if (mapRef.current) mapRef.current.fitBounds(fit);
+  };
+
+  const showMode = (m) => {
+    setMode(m);
+    const r = modeRoutes[m];
+    if (r && r.points && r.points.length && mapRef.current) mapRef.current.fitBounds(r.points);
+  };
+
+  // "Ask for a shared ride": the destination is already set, so the only thing
+  // left is where to be picked up. Default that to the rider's real location.
+  const askSharedRide = () => {
+    const c = myLocRef.current || origin || centerRef.current;
+    setStep('pickup');
+    setCenter(c);
+    if (mapRef.current) mapRef.current.setCenter({ ...c, zoom: 16 });
+    reverseLookup(c);
+  };
+
+  const backToLanding = () => {
+    setStep('landing');
+    setModeRoutes({});
+    setAddress(dest ? dest.address : '');
+    if (dest && mapRef.current) mapRef.current.setCenter({ lat: dest.lat, lng: dest.lng, zoom: 16 });
   };
 
   const loadRoute = async (from, to) => {
@@ -264,6 +400,15 @@ export default function RideTab() {
     if (activeRide) setBusy(false);
   }, [activeRide]);
 
+  // When a ride ends - finished, cancelled or swept - go back to the map
+  // rather than leaving the stale confirmation sheet up.
+  const prevRideRef = useRef(null);
+  useEffect(() => {
+    const id = myRide ? myRide.id : null;
+    if (prevRideRef.current && !id) resetFlow();
+    prevRideRef.current = id;
+  }, [myRide]);
+
   const cancelRide = () => {
     if (!myRide) return;
     if (myRide.status === 'requested') {
@@ -280,9 +425,11 @@ export default function RideTab() {
   };
 
   const resetFlow = () => {
-    setStep('pickup');
+    setStep('landing');
     setPickup(null);
     setDest(null);
+    setOrigin(null);
+    setModeRoutes({});
     setRoute(null);
     setComment('');
     setPickupDetails({});
@@ -294,11 +441,22 @@ export default function RideTab() {
   const markers = useMemo(() => {
     const list = cars.map((c) => ({ id: `car-${c.id}`, lat: c.lat, lng: c.lng, kind: 'car' }));
     if (pickup && step !== 'pickup') list.push({ id: 'pickup', lat: pickup.lat, lng: pickup.lng, kind: 'pickup' });
-    if (dest && step === 'confirm') list.push({ id: 'dest', lat: dest.lat, lng: dest.lng, kind: 'dest' });
+    // On the mode step there is no pickup yet - the green dot is simply "you".
+    if (origin && step === 'mode') list.push({ id: 'origin', lat: origin.lat, lng: origin.lng, kind: 'pickup' });
+    // The destination is chosen first now, so it stays pinned for every step
+    // after the landing one (except while it is being re-picked on 'dest').
+    if (dest && step !== 'landing' && step !== 'dest') list.push({ id: 'dest', lat: dest.lat, lng: dest.lng, kind: 'dest' });
     return list;
-  }, [cars, pickup, dest, step]);
+  }, [cars, pickup, dest, origin, step]);
 
-  const polyline = step === 'confirm' && route ? route.points : null;
+  const polyline =
+    step === 'mode'
+      ? modeRoutes[mode]
+        ? modeRoutes[mode].points
+        : null
+      : step === 'confirm' && route
+      ? route.points
+      : null;
 
   // ---------------------------------------------------------------- render
 
@@ -337,9 +495,20 @@ export default function RideTab() {
     );
   }
 
-  const pinColor = step === 'dest' ? colors.danger : colors.ok;
-  const stepTitle = step === 'pickup' ? t('ride.setPickup') : step === 'dest' ? t('ride.setDest') : t('ride.confirm');
+  // Landing picks a destination, so its pin is the destination colour.
+  const pinColor = step === 'dest' || step === 'landing' ? colors.danger : colors.ok;
+  const stepTitle =
+    step === 'landing'
+      ? t('ride.whereTo')
+      : step === 'mode'
+      ? t('ride.travelTitle')
+      : step === 'pickup'
+      ? t('ride.setPickup')
+      : step === 'dest'
+      ? t('ride.setDest')
+      : t('ride.confirm');
   const places = me && me.places ? me.places : null;
+  const showCenterPin = step === 'landing' || step === 'pickup' || step === 'dest';
 
   return (
     <Bleed>
@@ -353,7 +522,7 @@ export default function RideTab() {
           trails={trails}
           onMoveEnd={onMoveEnd}
         />
-        {step !== 'confirm' ? (
+        {showCenterPin ? (
           <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
             <View style={{ alignItems: 'center', marginBottom: 34 }}>
               <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: pinColor, borderWidth: 3, borderColor: colors.text, elevation: 6, shadowColor: pinColor, shadowOpacity: 0.9, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } }} />
@@ -384,9 +553,35 @@ export default function RideTab() {
         <FadeIn keyId={step} from={18}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 8 }}>{stepTitle}</Text>
 
-        {step !== 'confirm' ? (
+        {step === 'mode' ? (
           <View>
-            {step === 'pickup' && schedules.length ? (
+            <Card style={{ marginBottom: 10 }}>
+              <Row>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.danger, marginRight: 8 }} />
+                <Text style={{ color: colors.text, flex: 1 }} numberOfLines={1}>{dest ? dest.address : ''}</Text>
+              </Row>
+            </Card>
+            <Row style={{ marginBottom: 10 }}>
+              {TRAVEL_MODES.map((m, i) => (
+                <ModeTile
+                  key={m.key}
+                  icon={m.icon}
+                  label={t(m.label)}
+                  route={modeRoutes[m.key]}
+                  active={mode === m.key}
+                  onPress={() => showMode(m.key)}
+                  style={{ marginRight: i < TRAVEL_MODES.length - 1 ? 8 : 0 }}
+                />
+              ))}
+            </Row>
+            <Sub style={{ marginBottom: 8 }}>{t('ride.soloHint')}</Sub>
+            <ErrorText>{error}</ErrorText>
+            <Button title={t('ride.askShared')} onPress={askSharedRide} />
+            <Button kind="ghost" title={t('ride.changeDest')} onPress={backToLanding} style={{ height: 42 }} />
+          </View>
+        ) : step !== 'confirm' ? (
+          <View>
+            {step === 'landing' && schedules.length ? (
               <ScheduleList schedules={schedules} onChanged={loadSchedules} />
             ) : null}
             {places && (places.home || places.work) ? (
@@ -421,9 +616,11 @@ export default function RideTab() {
             <Row>
               {step === 'dest' ? (
                 <Button kind="ghost" title={t('common.back')} onPress={() => { setStep('pickup'); setAddress(pickup ? pickup.address : ''); }} style={{ flex: 1, marginRight: 8 }} />
+              ) : step === 'pickup' && dest ? (
+                <Button kind="ghost" title={t('common.back')} onPress={() => setStep('mode')} style={{ flex: 1, marginRight: 8 }} />
               ) : null}
               <Button
-                title={step === 'pickup' ? t('ride.nextDest') : t('ride.nextConfirm')}
+                title={step === 'landing' ? t('ride.seeRoutes') : step === 'pickup' && !dest ? t('ride.nextDest') : t('ride.nextConfirm')}
                 onPress={confirmPoint}
                 disabled={addrLoading || !(addrLoading ? true : (address || '').trim())}
                 style={{ flex: 2 }}
@@ -460,7 +657,7 @@ export default function RideTab() {
             />
             <ErrorText>{error}</ErrorText>
             <Row>
-              <Button kind="ghost" title={t('common.back')} onPress={() => { setStep('dest'); setRoute(null); setAddress(dest ? dest.address : ''); }} style={{ flex: 1, marginRight: 8 }} />
+              <Button kind="ghost" title={t('common.back')} onPress={() => { setStep('pickup'); setRoute(null); setAddress(pickup ? pickup.address : ''); }} style={{ flex: 1, marginRight: 8 }} />
               <Button title={t('ride.request')} onPress={requestRide} loading={busy} disabled={routeLoading} style={{ flex: 2 }} />
             </Row>
             <SchedulePlanner
