@@ -26,6 +26,7 @@ Conventions live in CLAUDE.md.
 | ~~L30, L33~~ | ~~Security hardening + multi-agent audit (18 findings)~~ | ✅ shipped — `smoke32` pins each fix |
 | ~~L32*~~ | ~~Map-first ride flow: destination → walk/cycle/drive → shared ride~~ | ✅ shipped |
 | ~~L34~~ | ~~Map-first shell: floating chrome, avatar sheet, no tab bar~~ | ✅ shipped |
+| ~~L35, L36~~ | ~~Adversarial review of both map-first commits: 10 confirmed defects fixed~~ | ✅ shipped — four reviewers, each finding refuted-or-confirmed before acting |
 
 \* misnumbered — that commit lands *after* L33 and is really L34's
 predecessor. Left alone rather than rewriting pushed history; the next free

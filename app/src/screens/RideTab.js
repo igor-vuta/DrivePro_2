@@ -126,7 +126,12 @@ export default function RideTab() {
   const [busy, setBusy] = useState(false);
   const [schedules, setSchedules] = useState([]);
   const geoSeq = useRef(0);
-  const modeSeq = useRef(0);
+  // Both route loaders end in fitBounds, and fitBounds fires a moveend that
+  // onMoveEnd turns into setCenter + reverseLookup. If the user has navigated
+  // away in the meantime that rewrites the point they are currently choosing,
+  // so every navigation bumps this and a late response checks it before it
+  // touches the map.
+  const fitSeq = useRef(0);
   const myLocRef = useRef(null); // last known real location, for the pickup default
   const pickedRef = useRef(null); // point chosen by name, awaiting its moveend
   const interactedRef = useRef(false); // the user has chosen a point of their own
@@ -288,6 +293,7 @@ export default function RideTab() {
   // would leave the next confirm reading the route's midpoint under the right
   // address, and the driver would be sent somewhere nobody picked.
   const backTo = (p) => {
+    fitSeq.current++; // same reason as askSharedRide: revoke in-flight fitBounds
     if (p) goTo(p);
     else setAddress('');
   };
@@ -335,7 +341,7 @@ export default function RideTab() {
     // Three requests in flight; if the user changes destination or leaves the
     // step before they land, the stale batch must not overwrite the new routes
     // or yank the map back with its fitBounds.
-    const seq = ++modeSeq.current;
+    const seq = ++fitSeq.current;
     setModeRoutes({});
     setMode('car');
     const modes = ['foot', 'bike', 'car'];
@@ -356,7 +362,7 @@ export default function RideTab() {
         }
       })
     );
-    if (seq !== modeSeq.current) return;
+    if (seq !== fitSeq.current) return;
     const map = Object.fromEntries(pairs);
     setModeRoutes(map);
     const fit = map.car && map.car.points.length ? map.car.points : [[from.lat, from.lng], [to.lat, to.lng]];
@@ -373,6 +379,10 @@ export default function RideTab() {
   // left is where to be picked up. Default that to the rider's real location.
   const askSharedRide = () => {
     const c = myLocRef.current || origin || centerRef.current;
+    // The three mode routes may still be in flight; leaving the step revokes
+    // their right to move the map, or their fitBounds would land on top of the
+    // pickup being chosen here and silently relocate it to the route midpoint.
+    fitSeq.current++;
     setStep('pickup');
     setCenter(c);
     if (mapRef.current) mapRef.current.setCenter({ ...c, zoom: 16 });
@@ -386,6 +396,7 @@ export default function RideTab() {
   };
 
   const loadRoute = async (from, to) => {
+    const seq = ++fitSeq.current;
     setRouteLoading(true);
     setRoute(null);
     try {
@@ -395,14 +406,16 @@ export default function RideTab() {
         null,
         token
       );
+      if (seq !== fitSeq.current) return;
       setRoute({ ...r, approx: false });
       if (mapRef.current) mapRef.current.fitBounds(r.points.length ? r.points : [[from.lat, from.lng], [to.lat, to.lng]]);
     } catch (e) {
+      if (seq !== fitSeq.current) return;
       const d = haversineM(from, to);
       setRoute({ distanceM: d, durationS: null, points: [[from.lat, from.lng], [to.lat, to.lng]], approx: true });
       if (mapRef.current) mapRef.current.fitBounds([[from.lat, from.lng], [to.lat, to.lng]]);
     } finally {
-      setRouteLoading(false);
+      if (seq === fitSeq.current) setRouteLoading(false);
     }
   };
 
@@ -454,6 +467,7 @@ export default function RideTab() {
   };
 
   const resetFlow = () => {
+    fitSeq.current++;
     setStep('landing');
     setPickup(null);
     setDest(null);
