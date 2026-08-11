@@ -67,11 +67,14 @@ ride — which drops into the unchanged pickup → confirm → request path.
 Everything else lives behind the floating avatar.
 
 Still open here:
-- **Schedules are not in the avatar sheet.** Saved commutes still render on
-  the ride landing step, where they already lived; the sheet links to
-  profile/crew/history/language instead. Worth a proper screen.
-- **Crew opens the profile screen** rather than scrolling to the crew card —
-  there is no scroll-to-section, so the row lands on the page that holds it.
+- ~~Schedules are not in the avatar sheet~~ — ✅ L37. `SchedulesScreen`
+  manages saved commutes (pause/resume/delete) from the sheet; creation
+  stays on the ride confirmation screen, where pickup and destination exist.
+  The compact list on the landing step stays as the at-a-glance reminder.
+- ~~Crew opens the profile screen~~ — ✅ L38. `CrewCard` extracted to a
+  shared component; a thin `CrewScreen` serves it straight from the sheet.
+  (Also fixed there: the invite-code box was hardcoded to the pre-L29 dark
+  navy and looked broken in light mode.)
 - ~~The online-driver map was not visually confirmed~~ — ✅ verified after
   L36 with a stubbed geolocation: the map reaches the top edge, the
   Taking-orders / Go-offline chips sit below the floating chrome

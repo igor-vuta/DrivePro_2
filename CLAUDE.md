@@ -101,7 +101,14 @@ point) and L34 the shell (chrome floats over the map, avatar sheet replaces the
 Ride/Drive tab bar, `CHROME_H` reserved at the top and given back by
 `<Bleed top>` in full-screen-map states).
 
+L35 + L36 map-first review fixes (10 confirmed
+findings from a four-reviewer adversarial pass: back-navigation restoring
+labels without coordinates, a `fitSeq` counter revoking in-flight fitBounds
+on every navigation, `box-none` re-armed by a full-width child, chrome
+overlaps) · L37 `SchedulesScreen` + L38 `CrewScreen` behind the avatar sheet
+(`CrewCard` shared with the profile).
+
 Layer numbering slipped once: the ride-flow commit is labelled **L32** but
-lands after L33. Next free number is **L35**.
+lands after L33. Next free number is **L39**.
 
 Remaining work and its running order live in `ROADMAP.md`.
