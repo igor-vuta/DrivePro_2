@@ -32,6 +32,10 @@ Conventions live in CLAUDE.md.
 | ~~L41~~ | ~~Live navigation: Start, follow-along, turn banners, custom origin~~ | ✅ shipped |
 | ~~L42~~ | ~~One flow: driving is a toggle on your own route~~ | ✅ shipped |
 | ~~L43~~ | ~~Pickup along the way: symmetric toggles, corridor match, mutual confirm~~ | ✅ shipped |
+| ~~L44~~ | ~~The pickup toggle mid-route, not only before Start~~ | ✅ shipped — reported from a real walk |
+| ~~L45~~ | ~~Alternative car routes: all drawn, tap to choose~~ | ✅ shipped |
+| ~~L46~~ | ~~Places from 2GIS: name search, category chips, tap-a-building~~ | ✅ shipped |
+| L47 | Labelled basemap | **decision needed — see below** |
 
 \* misnumbered — that commit lands *after* L33 and is really L34's
 predecessor. Left alone rather than rewriting pushed history; the next free
@@ -89,6 +93,22 @@ one, is a toggle on top of your own journey rather than a separate mode.
   existing lifecycle/rating/trail behaviour applies.
 - Drivers may propose a meeting point, capped at 300 m from the walker.
 - "Ask for a shared ride" stays for requesting from a standstill.
+
+**Places** (decided 2026-08-11, key in `/etc/drivepro.env`). 2GIS Catalog is
+the provider: its Kazakhstan data carries names, categories and opening hours
+that OSM does not. The proxy in `server/src/places.js` normalises to a
+provider-neutral shape precisely so OpenStreetMap can be added beside it, which
+was the stated long-term intent ("I would do three of those").
+
+**Basemap — open decision.** The agreed direction was to switch to a labelled,
+denser basemap. Two honest options:
+- **2GIS raster tiles** (`tile2.maps.2gis.com`) serve without a key and look
+  exactly like 2GIS. Technically trivial; whether our licence permits using
+  them as our basemap is a question for the account holder, not something to
+  assume. **Not wired up pending that answer.**
+- **A licensed labelled style** (MapTiler/Thunderforest/Stadia, or 2GIS MapGL
+  with a MapGL-type key) — clearly permitted, needs a key, and MapGL would mean
+  replacing Leaflet in `MapView.js`.
 
 Deliberately **not** attempted (discussed 2026-08-11): live traffic and a
 2GIS-grade POI directory. Traffic needs fleet-scale probe data — the honest

@@ -120,7 +120,14 @@ in place) · L43 pickup along the way (`hub.walkers` + `walk:*` messages;
 `fitsDriverRoute` reused so the corridor rule is shared; ~100 m stable fuzz and
 opaque ids until both sides confirm, then an ordinary accepted ride).
 
+L44 the pickup toggle mid-route (a `live` state, not a ref, so the nav bar
+reacts) · L45 alternative car routes (`?alts=N`; MLD does serve them, no rebuild
+needed) · L46 places via 2GIS (`server/src/places.js`, `TWOGIS_KEY` on the VM
+only, `/api/places/{search,near,at,:id}` returning a provider-neutral shape;
+`placesProvider` in `/api/me` — deliberately not `places`, which the user object
+already uses for saved Home/Work).
+
 Layer numbering slipped once: the ride-flow commit is labelled **L32** but
-lands after L33. Next free number is **L44**.
+lands after L33. Next free number is **L47**.
 
 Remaining work and its running order live in `ROADMAP.md`.
