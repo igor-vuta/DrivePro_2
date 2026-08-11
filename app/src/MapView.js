@@ -1,7 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Platform, View } from 'react-native';
 import { colors } from './theme';
-import { getMapKey, getMapStyle } from './mapconfig';
+import { getMapKey, getMapStyle, covers2gis } from './mapconfig';
 
 // The map, rendered inside a frame and driven over a small JSON command
 // bridge. On phones the frame is a WebView; on web it is an iframe, so the
@@ -395,13 +395,18 @@ ${postFn}
 </body>
 </html>`;
 
-// Which engine can draw this scheme. MapGL's own style is a light one, and
-// 2GIS publishes no dark style anyone can use - a dark map has to be authored
-// in their Style Editor and its id configured. So without that id the night
-// map stays raster rather than glaring white at 2am.
-export function chooseEngine() {
+// Which engine can draw this map, here, in this scheme. Three things can send
+// it back to raster, and all three are "MapGL cannot actually do this":
+//
+//   - no key configured at all;
+//   - dark, with no dark style id - 2GIS publishes no dark style anyone can
+//     reference, so the night map would be a white glare;
+//   - a place 2GIS has no data for, where MapGL renders an empty world that
+//     looks exactly like a broken app. OpenStreetMap covers everywhere.
+export function chooseEngine(at) {
   const key = getMapKey();
   if (!key) return { engine: 'raster' };
+  if (at && !covers2gis(at.lat, at.lng)) return { engine: 'raster' };
   const styleId = getMapStyle(colors.scheme);
   if (colors.scheme === 'dark' && !styleId) return { engine: 'raster' };
   return { engine: 'gl', key, styleId };
@@ -426,7 +431,9 @@ const MapViewCmp = forwardRef(function MapViewCmp(
   const contentRef = useRef({});
   contentRef.current = { markers, polyline, alts, trails };
 
-  const picked = chooseEngine();
+  // Judged from where the map opens: a session in Almaty gets 2GIS, a session
+  // in Leicester gets OpenStreetMap, and moving between them remounts once.
+  const picked = chooseEngine(initialCenter);
   const html = picked.engine === 'gl' ? makeGlHtml(picked.key, picked.styleId) : makeRasterHtml();
 
   const send = (cmd) => {

@@ -36,3 +36,45 @@ export function setMapStyles(s) {
 export function getMapStyle(scheme) {
   return (scheme === 'dark' ? styles.dark : styles.light) || null;
 }
+
+// Where 2GIS actually has a map.
+//
+// MapGL does not refuse a request outside its footprint - it hands back an
+// empty world, which looks exactly like a broken app. Routing already learned
+// this lesson from Leicester (see geo.js): the answer is not to trust a
+// provider outside the ground it covers. OpenStreetMap covers everywhere, so
+// beyond these boxes the raster engine draws the map.
+//
+// Boxes rather than a polygon because the question is "is there a map here",
+// not "which country is this" - a generous box that includes some empty steppe
+// costs nothing, and anything not listed simply gets OSM, which works. Listed
+// deliberately conservatively: when in doubt, leave it out and get a map that
+// definitely renders.
+const COVERED = [
+  // name            latMin  latMax  lngMin  lngMax
+  ['Kazakhstan',      40.5,   55.5,   46.4,   87.4],
+  ['Russia',          41.0,   82.0,   19.0,  180.0],
+  ['Russia (far east)', 60.0, 72.0, -180.0, -168.0],
+  ['Kyrgyzstan',      39.0,   43.4,   69.0,   80.3],
+  ['Uzbekistan',      37.0,   45.7,   55.9,   73.2],
+  ['Tajikistan',      36.6,   41.1,   67.3,   75.2],
+  ['Azerbaijan',      38.3,   42.0,   44.7,   50.6],
+  ['Georgia',         41.0,   43.6,   40.0,   46.8],
+  ['Armenia',         38.8,   41.4,   43.4,   46.7],
+  ['Belarus',         51.2,   56.2,   23.1,   32.8],
+  ['Ukraine',         44.0,   52.4,   22.0,   40.3],
+  ['UAE',             22.6,   26.2,   51.0,   56.4],
+  ['Saudi Arabia',    16.0,   32.2,   34.5,   55.7],
+  ['Czechia',         48.5,   51.1,   12.0,   18.9],
+  ['Cyprus',          34.5,   35.8,   32.2,   34.6],
+  ['Chile',          -56.0,  -17.0,  -76.0,  -66.0],
+];
+
+export function covers2gis(lat, lng) {
+  if (typeof lat !== 'number' || typeof lng !== 'number' || Number.isNaN(lat) || Number.isNaN(lng)) {
+    // Nothing to judge yet - the deployment's own city is the safe assumption,
+    // and an engine switch when the real position arrives is one remount.
+    return true;
+  }
+  return COVERED.some(([, laMin, laMax, lnMin, lnMax]) => lat >= laMin && lat <= laMax && lng >= lnMin && lng <= lnMax);
+}
