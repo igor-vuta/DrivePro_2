@@ -21,9 +21,9 @@ Conventions live in CLAUDE.md.
 | ~~L26~~ | ~~4c Telegram verification + delivery~~ | ✅ shipped — free, no approvals, works where KZ SMS does not |
 | ~~L27~~ | ~~TOTP authenticator (auth step 1)~~ | ✅ shipped — RFC 4226/6238, zero deps |
 | ~~L28~~ | ~~Passkeys / WebAuthn (auth step 2)~~ | ✅ shipped — zero deps, verified with a virtual authenticator |
-| L30 | Self-hosted OSRM: car + foot + bike | needed before walk/cycle routing can be real |
+| ~~L31~~ | ~~Multi-profile routing car/foot/bike~~ | ✅ shipped — FOSSGIS fallback works now; `setup-osrm.sh` for self-host (run attended) |
 | ~~L29~~ | ~~Design system: palette, light+dark, airier spacing, brand~~ | ✅ shipped |
-| L31 | Map-first restructure | the map becomes the app |
+| L32 | Map-first restructure | the map becomes the app |
 
 ## Agreed direction (decided with Igor, before the redesign)
 

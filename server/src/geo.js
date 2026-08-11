@@ -7,8 +7,30 @@ import { httpError, isFiniteNum } from './util.js';
 const NOMINATIM_URL = process.env.NOMINATIM_URL || 'https://nominatim.openstreetmap.org';
 // Optional comma-separated ISO codes to limit search results, e.g. 'kz,ru'.
 const COUNTRIES = (process.env.DRIVEPRO_COUNTRIES || '').trim().toLowerCase();
-const OSRM_URL = process.env.OSRM_URL || 'https://router.project-osrm.org';
-const USER_AGENT = 'DrivePro/0.1 (personal project)';
+
+// One OSRM endpoint per travel profile. A self-hosted deploy runs three
+// instances (see deploy/setup-osrm.sh) and sets these env vars; the fallback
+// is the FOSSGIS demo servers, which - unlike the plain OSRM demo - actually
+// serve car, foot AND bike, so walk/cycle routing works even before the VM is
+// set up. Each falls back to the driving endpoint if unset.
+const OSRM_CAR = process.env.OSRM_URL || 'https://routing.openstreetmap.de/routed-car';
+const OSRM_FOOT = process.env.OSRM_FOOT_URL || 'https://routing.openstreetmap.de/routed-foot';
+const OSRM_BIKE = process.env.OSRM_BIKE_URL || 'https://routing.openstreetmap.de/routed-bike';
+
+// mode -> { url, osrmProfile }. The path segment after /route/v1/ is fixed to
+// the profile each server was built with, so a self-hosted car server still
+// wants "driving" in the path even though it only knows cars.
+const PROFILES = {
+  car: { url: OSRM_CAR, path: 'driving' },
+  foot: { url: OSRM_FOOT, path: 'foot' },
+  bike: { url: OSRM_BIKE, path: 'bike' },
+};
+
+export const routeModes = () => Object.keys(PROFILES);
+
+// Nominatim's usage policy requires a contactable User-Agent; a generic one
+// risks being blocked. Overridable so a real contact can be set in prod.
+const USER_AGENT = process.env.GEO_USER_AGENT || 'DrivePro/1.0 (+https://drivepro-almaty.duckdns.org)';
 const TIMEOUT_MS = 8000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const CACHE_MAX = 500;
@@ -99,15 +121,19 @@ export async function searchAddress(q, lat, lng, lang) {
   return value;
 }
 
-export async function route(fromLat, fromLng, toLat, toLng) {
+export async function route(fromLat, fromLng, toLat, toLng, mode = 'car') {
   if (![fromLat, fromLng, toLat, toLng].every(isFiniteNum)) {
     throw httpError(400, 'from and to coordinates are required');
   }
-  const key = `route:${fromLat.toFixed(5)},${fromLng.toFixed(5)}:${toLat.toFixed(5)},${toLng.toFixed(5)}`;
+  // Resolve to a known mode up front, so the reported mode and the cache key
+  // both reflect what actually ran rather than an unknown input.
+  const resolved = PROFILES[mode] ? mode : 'car';
+  const profile = PROFILES[resolved];
+  const key = `route:${resolved}:${fromLat.toFixed(5)},${fromLng.toFixed(5)}:${toLat.toFixed(5)},${toLng.toFixed(5)}`;
   const hit = cacheGet(key);
   if (hit) return hit;
   const url =
-    `${OSRM_URL}/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}` +
+    `${profile.url}/route/v1/${profile.path}/${fromLng},${fromLat};${toLng},${toLat}` +
     `?overview=full&geometries=geojson&alternatives=false&steps=false`;
   const json = await upstream(url);
   if (!json || json.code !== 'Ok' || !json.routes || !json.routes[0]) {
@@ -115,6 +141,7 @@ export async function route(fromLat, fromLng, toLat, toLng) {
   }
   const r = json.routes[0];
   const value = {
+    mode: resolved,
     distanceM: Math.round(r.distance),
     durationS: Math.round(r.duration),
     // GeoJSON is [lng, lat]; the app works in [lat, lng].

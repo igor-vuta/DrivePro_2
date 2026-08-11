@@ -154,6 +154,31 @@ webhook.
 `/etc/drivepro.env` (setup-oci.sh only writes that file when it is absent,
 so VMs provisioned earlier would otherwise never get the new keys).
 
+## Routing (OSRM)
+
+Walk / cycle / drive routing goes through `server/src/geo.js`, which proxies
+OSRM. By default it uses the **FOSSGIS demo servers**
+(`routing.openstreetmap.de/routed-{car,foot,bike}`) - unlike the plain OSRM
+demo, these serve all three profiles, so everything works with no setup. They
+are shared community servers, though, so for anything beyond a demo, self-host:
+
+```bash
+sudo bash /opt/drivepro/repo/deploy/setup-osrm.sh
+```
+
+This downloads the Kazakhstan extract, builds car/foot/bike profiles, runs
+each as a Docker container behind systemd on ports 5000-5002, and appends
+`OSRM_URL` / `OSRM_FOOT_URL` / `OSRM_BIKE_URL` to `/etc/drivepro.env`.
+
+> **Run it attended.** Building the profiles is memory-hungry - the script
+> adds a 4 GB swapfile first, but on a 1 OCPU / 6 GB instance it will compete
+> with the live service. Do it when you can watch `journalctl -u drivepro`,
+> not unattended. Nothing breaks without it; the FOSSGIS fallback keeps
+> serving in the meantime.
+
+`GEO_USER_AGENT` overrides the Nominatim User-Agent - set a real contact there
+before any serious geocoding volume, or Nominatim may block a generic one.
+
 ## Auto-deploy on push (GitHub Actions)
 
 `.github/workflows/deploy.yml` runs the full smoke suite on every push to

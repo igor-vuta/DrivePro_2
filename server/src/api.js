@@ -1066,7 +1066,9 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const fromLng = Number(url.searchParams.get('fromLng'));
     const toLat = Number(url.searchParams.get('toLat'));
     const toLng = Number(url.searchParams.get('toLng'));
-    sendJson(res, 200, await geoRoute(fromLat, fromLng, toLat, toLng));
+    // Unknown modes fall back to car in geo.js; only these three are offered.
+    const mode = String(url.searchParams.get('mode') || 'car');
+    sendJson(res, 200, await geoRoute(fromLat, fromLng, toLat, toLng, mode));
   });
 
   // --------------------------------------------------------- dispatch ---
