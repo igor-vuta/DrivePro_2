@@ -511,7 +511,7 @@ export default function RideTab() {
   const showCenterPin = step === 'landing' || step === 'pickup' || step === 'dest';
 
   return (
-    <Bleed>
+    <Bleed top>
       <View style={{ flex: 1 }}>
         <MapView
           ref={mapRef}
@@ -884,7 +884,7 @@ function DriverOnTheWay({ ride, driver, driverLoc, onCancel }) {
       : t('ride.onTrip');
 
   return (
-    <Bleed>
+    <Bleed top>
       <View style={{ flex: 1 }}>
         <MapView ref={mapRef} initialCenter={{ lat: target.lat, lng: target.lng }} markers={markers} />
       </View>

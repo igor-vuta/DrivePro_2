@@ -78,9 +78,17 @@ const en = {
   // home
   'home.connected': 'Connected ({host})',
   'home.connecting': 'Connecting to {host}…',
+  'home.reconnecting': 'Reconnecting…',
   'home.profile': 'Profile',
   'home.ride': 'Ride',
   'home.drive': 'Drive',
+  'menu.driveMode': 'Switch to driving',
+  'menu.rideMode': 'Switch to riding',
+  'menu.driveSub': 'Offer the seats you already have',
+  'menu.rideSub': 'Find a ride as a passenger',
+  'menu.profile': 'Profile & security',
+  'menu.schedules': 'Saved commutes',
+  'menu.close': 'Close',
   'home.cityToday': 'City today',
   'home.cityLine': '{rides} rides · {km} km · {drivers} at the wheel',
 
@@ -269,6 +277,7 @@ const en = {
 
   // profile
   'profile.history': 'Ride history ›',
+  'menu.history': 'Ride history',
   'profile.say': 'What people say about you',
   'profile.personal': 'Personal details',
   'profile.name': 'Name',
@@ -495,9 +504,17 @@ const ru = {
 
   'home.connected': 'В сети ({host})',
   'home.connecting': 'Подключение к {host}…',
+  'home.reconnecting': 'Переподключение…',
   'home.profile': 'Профиль',
   'home.ride': 'Поездка',
   'home.drive': 'За рулём',
+  'menu.driveMode': 'Сесть за руль',
+  'menu.rideMode': 'Стать пассажиром',
+  'menu.driveSub': 'Предложите места, которые и так едут',
+  'menu.rideSub': 'Найти попутку как пассажир',
+  'menu.profile': 'Профиль и безопасность',
+  'menu.schedules': 'Сохранённые маршруты',
+  'menu.close': 'Закрыть',
   'home.cityToday': 'Город сегодня',
   'home.cityLine': '{rides} поездок · {km} км · {drivers} за рулём',
 
@@ -648,6 +665,7 @@ const ru = {
   'drive.convoyTitle': 'Конвой · {n}',
 
   'profile.history': 'История поездок ›',
+  'menu.history': 'История поездок',
   'profile.say': 'Что о вас говорят',
   'profile.personal': 'Личные данные',
   'profile.name': 'Имя',
@@ -920,9 +938,17 @@ const kk = {
   // home
   'home.connected': 'Желіде ({host})',
   'home.connecting': '{host} серверіне қосылу…',
+  'home.reconnecting': 'Қайта қосылуда…',
   'home.profile': 'Профиль',
   'home.ride': 'Сапар',
   'home.drive': 'Рөлде',
+  'menu.driveMode': 'Рөлге отыру',
+  'menu.rideMode': 'Жолаушы болу',
+  'menu.driveSub': 'Бар орындарыңызды ұсыныңыз',
+  'menu.rideSub': 'Жолаушы ретінде жол табу',
+  'menu.profile': 'Профиль және қауіпсіздік',
+  'menu.schedules': 'Сақталған бағыттар',
+  'menu.close': 'Жабу',
   'home.cityToday': 'Бүгін қалада',
   'home.cityLine': '{rides} сапар · {km} км · {drivers} рөлде',
 
@@ -1068,6 +1094,7 @@ const kk = {
 
   // profile
   'profile.history': 'Сапарлар тарихы ›',
+  'menu.history': 'Сапарлар тарихы',
   'profile.say': 'Сіз туралы не дейді',
   'profile.personal': 'Жеке деректер',
   'profile.name': 'Аты',

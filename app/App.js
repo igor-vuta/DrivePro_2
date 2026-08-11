@@ -27,6 +27,9 @@ const GUIDE_KEY = 'drivepro.guideDone';
 function Root() {
   const { booting, token, pendingRating, pendingVerification } = useAuth();
   const [screen, setScreen] = useState('home'); // 'home' | 'profile' | 'history'
+  // History is reachable from the profile and from the avatar sheet - back
+  // goes wherever it was opened from.
+  const [historyFrom, setHistoryFrom] = useState('profile');
   const [permState, setPermState] = useState('unknown'); // 'unknown' | 'needed' | 'done'
   const [guideState, setGuideState] = useState('unknown'); // 'unknown' | 'needed' | 'done'
 
@@ -34,7 +37,7 @@ function Root() {
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (screen === 'history') {
-        setScreen('profile');
+        setScreen(historyFrom);
         return true;
       }
       if (screen === 'profile') {
@@ -127,13 +130,17 @@ function Root() {
 
   if (pendingRating) return <RateScreen />;
 
+  const openHistory = (from) => {
+    setHistoryFrom(from);
+    setScreen('history');
+  };
   const body =
     screen === 'profile' ? (
-      <ProfileScreen goBack={() => setScreen('home')} openHistory={() => setScreen('history')} />
+      <ProfileScreen goBack={() => setScreen('home')} openHistory={() => openHistory('profile')} />
     ) : screen === 'history' ? (
-      <HistoryScreen goBack={() => setScreen('profile')} />
+      <HistoryScreen goBack={() => setScreen(historyFrom)} />
     ) : (
-      <HomeScreen openProfile={() => setScreen('profile')} />
+      <HomeScreen openProfile={() => setScreen('profile')} openHistory={() => openHistory('home')} />
     );
   return (
     <FadeIn keyId={screen} style={{ flex: 1 }}>

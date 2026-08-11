@@ -559,7 +559,7 @@ export default function DriveTab({ openProfile }) {
       ) : driverActive ? (
         // Online and free: full-screen navigator, controls floating over it.
         <Pop keyId="online">
-          <Bleed>
+          <Bleed top>
             <MapView
               ref={navMapRef}
               initialCenter={coords || (routePlan ? routePlan.dest : { lat: 43.2389, lng: 76.8897 })}

@@ -14,14 +14,14 @@ import {
   View,
 } from 'react-native';
 
-import { colors, SCREEN_PAD, CARD_PAD, GAP, INPUT_H, BUTTON_H, RADIUS, RADIUS_LG } from './theme';
+import { colors, SCREEN_PAD, CARD_PAD, GAP, INPUT_H, BUTTON_H, RADIUS, RADIUS_LG, CHROME_H } from './theme';
 
 const NATIVE = Platform.OS !== 'web';
 
 // Design system in Almaty's colours, light and dark - tokens live in
 // theme.js. SCREEN_PAD is re-exported so full-bleed children can cancel the
 // screen padding instead of repeating the number.
-export { colors, SCREEN_PAD };
+export { colors, SCREEN_PAD, CHROME_H };
 
 export function Screen({ children, style }) {
   return (
@@ -97,8 +97,14 @@ export function Card({ children, style }) {
 
 // Cancels the Screen's horizontal padding so a child (the map) reaches both
 // edges while the panels around it stay inset.
-export function Bleed({ children, style }) {
-  return <View style={[{ flex: 1, marginHorizontal: -SCREEN_PAD }, style]}>{children}</View>;
+// `top` also cancels the space the home screen reserves for its floating
+// chrome, so a full-screen map reaches the very top of the display.
+export function Bleed({ children, style, top }) {
+  return (
+    <View style={[{ flex: 1, marginHorizontal: -SCREEN_PAD }, top ? { marginTop: -CHROME_H } : null, style]}>
+      {children}
+    </View>
+  );
 }
 
 export function Button({ title, onPress, disabled, loading, kind = 'primary', style }) {

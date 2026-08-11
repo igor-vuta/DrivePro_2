@@ -110,6 +110,10 @@ export const INPUT_H = 52;
 export const BUTTON_H = 54;
 export const RADIUS = 16;
 export const RADIUS_LG = 20;
+// Height reserved at the top of the home screen for the chrome that floats
+// over the content (city pill, streak, avatar). Map-first states cancel it
+// with <Bleed top> so the map runs under the chrome to the screen edge.
+export const CHROME_H = 52;
 export const LINE_HEIGHT = 1.45;
 
 applyScheme(systemScheme());
