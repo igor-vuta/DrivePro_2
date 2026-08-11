@@ -44,7 +44,59 @@ const PROFILES = {
 // does not cover you" rather than an answer.
 const SNAP_MAX_M = Number(process.env.OSRM_SNAP_MAX_M || 5000);
 
+// When a profile genuinely cannot answer, try the next one rather than giving
+// the app nothing - a cycling route to a place with no footpath is a worse
+// answer than a walking one, but it is an enormously better answer than the
+// straight line the app draws when a route request fails. Which one actually
+// replied is reported back, so the UI can say so instead of pretending.
+const MODE_FALLBACK = {
+  foot: ['bike', 'car'],
+  bike: ['foot', 'car'],
+  car: ['bike', 'foot'],
+};
+
 export const routeModes = () => Object.keys(PROFILES);
+
+// ------------------------------------------------------------ warming ---
+//
+// The self-hosted routers run with --mmap=1 because the three graphs total
+// ~3.3 GB on a machine with 956 MB of RAM. That works, but it means the graph
+// lives in the page cache rather than in the process, and the kernel evicts it
+// during idle. Measured on the production VM: a cold route took 2.2 s (car),
+// 4.1 s (foot) and 6.0 s (bike), while the same routes warm took 1-100 ms.
+//
+// The app asks for all three profiles at once, so the user waits for the
+// slowest of three cold graphs contending for one disk - which is why routes
+// "take forever", and why some requests exceeded the timeout and came back to
+// the app as a straight line. One tiny route per profile every couple of
+// minutes keeps the pages resident, and costs nothing measurable.
+const SELF_HOSTED = !!(process.env.OSRM_URL || process.env.OSRM_FOOT_URL || process.env.OSRM_BIKE_URL);
+const WARM_EVERY_MS = Number(process.env.OSRM_WARM_MS || 120_000);
+// Somewhere inside the region the graph covers; the point only has to touch
+// the part of the graph people actually use.
+const WARM_POINT = process.env.OSRM_WARM_POINT || '76.9286,43.2567;76.9130,43.2440';
+
+let warmTimer = null;
+
+export function startRouteWarmer() {
+  // Nothing to warm when routing goes to FOSSGIS: those are shared community
+  // servers and warming them would be someone else's bandwidth, not ours.
+  if (!SELF_HOSTED || process.env.NODE_ENV === 'test' || warmTimer) return false;
+  const tick = async () => {
+    for (const [mode, p] of Object.entries(PROFILES)) {
+      if (p.url === FOSSGIS[mode]) continue;
+      try {
+        await upstream(`${p.url}/route/v1/${p.path}/${WARM_POINT}?overview=false`);
+      } catch {
+        // A router that is down is the watchdog's problem, not the warmer's.
+      }
+    }
+  };
+  warmTimer = setInterval(tick, WARM_EVERY_MS);
+  if (warmTimer.unref) warmTimer.unref();
+  tick();
+  return true;
+}
 
 // Nominatim's usage policy requires a contactable User-Agent; a generic one
 // risks being blocked. Overridable so a real contact can be set in prod.
@@ -168,9 +220,9 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car', withSt
   // points lie outside its regional graph - fail over to the worldwide
   // FOSSGIS server for the same profile. When no self-hosted server is
   // configured the two URLs are identical and there is nothing to retry.
-  const ask = async (base, path) => {
+  const ask = async (base, path, a, b) => {
     const json = await upstream(
-      `${base}/route/v1/${path}/${fromLng},${fromLat};${toLng},${toLat}` +
+      `${base}/route/v1/${path}/${a.lng},${a.lat};${b.lng},${b.lat}` +
         `?overview=full&geometries=geojson&steps=${withSteps ? 'true' : 'false'}` +
         `&alternatives=${wantAlts > 0 ? wantAlts : 'false'}`
     );
@@ -182,13 +234,84 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car', withSt
     }
     return json;
   };
+
+  const from = { lat: fromLat, lng: fromLng };
+  const to = { lat: toLat, lng: toLng };
   const fallback = FOSSGIS[resolved];
-  let json;
+  const pathFor = (m) => (m === 'car' ? 'driving' : m);
+
+  // Repair rather than refuse. A point dropped on a building, inside a park or
+  // on a motorway a pedestrian cannot use is not a reason to give up: OSRM's
+  // nearest service says where the closest point that profile can actually
+  // start from is, and routing from there is the answer a person wanted. Where
+  // the point moved to is reported, so the app can show it instead of drawing
+  // a line to somewhere unreachable.
+  const repair = async (base, path, pt) => {
+    try {
+      const json = await upstream(`${base}/nearest/v1/${path}/${pt.lng},${pt.lat}?number=1`);
+      const w = json && json.waypoints && json.waypoints[0];
+      if (!w || !Array.isArray(w.location) || !isFiniteNum(w.location[0])) return null;
+      const moved = Math.round(w.distance || 0);
+      // A metre of correction is not worth a second request; the router had
+      // already snapped that far by itself.
+      if (moved < 5) return null;
+      return { lat: w.location[1], lng: w.location[0], movedM: moved };
+    } catch {
+      return null;
+    }
+  };
+
+  let json = null;
+  let usedMode = resolved;
+  let snapped = null;
+
+  const attempt = async (mode) => {
+    const p = PROFILES[mode];
+    const fb = FOSSGIS[mode];
+    // 1. the configured router, as asked
+    try {
+      return { json: await ask(p.url, p.path, from, to), snapped: null };
+    } catch (e) {
+      // 2. the same router, from the nearest points it can actually route
+      //    between - this is what turns "no route found near these points"
+      //    into a real route along a real path
+      const [a, b] = await Promise.all([repair(p.url, p.path, from), repair(p.url, p.path, to)]);
+      if (a || b) {
+        try {
+          return {
+            json: await ask(p.url, p.path, a || from, b || to),
+            snapped: { from: a, to: b },
+          };
+        } catch {
+          // fall through to the worldwide server
+        }
+      }
+      // 3. the worldwide server, for points outside a regional graph
+      if (p.url === fb) throw e;
+      return { json: await ask(fb, pathFor(mode), from, to), snapped: null };
+    }
+  };
+
   try {
-    json = await ask(profile.url, profile.path);
-  } catch (e) {
-    if (profile.url === fallback) throw e;
-    json = await ask(fallback, resolved === 'car' ? 'driving' : resolved);
+    const got = await attempt(resolved);
+    json = got.json;
+    snapped = got.snapped;
+  } catch (first) {
+    // 4. another profile, rather than nothing. Reported as viaMode so the app
+    //    can say "no walking route here - this is the cycling one" instead of
+    //    quietly showing the wrong thing.
+    for (const alt of MODE_FALLBACK[resolved] || []) {
+      try {
+        const got = await attempt(alt);
+        json = got.json;
+        snapped = got.snapped;
+        usedMode = alt;
+        break;
+      } catch {
+        // try the next profile
+      }
+    }
+    if (!json) throw first;
   }
   // GeoJSON is [lng, lat]; the app works in [lat, lng].
   const shape = (x) => ({
@@ -197,7 +320,15 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car', withSt
     points: (x.geometry && x.geometry.coordinates ? x.geometry.coordinates : []).map((c) => [c[1], c[0]]),
   });
   const r = json.routes[0];
+  // `mode` stays what was asked for, so the app's own bookkeeping does not
+  // change under it; `viaMode` and `snapped` are the honest footnotes.
   const value = { mode: resolved, ...shape(r) };
+  if (usedMode !== resolved) value.viaMode = usedMode;
+  if (snapped && (snapped.from || snapped.to)) {
+    value.snapped = {};
+    if (snapped.from) value.snapped.from = snapped.from;
+    if (snapped.to) value.snapped.to = snapped.to;
+  }
   // Alternatives, when asked for and when the road network offers any. OSRM
   // returns the primary first, so the extras are everything after it.
   if (wantAlts > 0 && json.routes.length > 1) {

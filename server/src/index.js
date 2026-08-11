@@ -17,6 +17,7 @@ import { otpModeBanner } from './otp.js';
 import { smsBanner } from './sms.js';
 import { initTelegram, telegramBanner } from './telegram.js';
 import { describeMapKey, initPlaces } from './places.js';
+import { startRouteWarmer } from './geo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -97,4 +98,8 @@ server.listen(PORT, '0.0.0.0', () => {
   if (tg) console.log(tg);
   console.log(otpModeBanner());
   console.log(describeMapKey());
+  // Self-hosted OSRM graphs are mmap'd and get evicted while idle; one tiny
+  // route per profile every couple of minutes keeps them answering in
+  // milliseconds instead of seconds. See the note in geo.js.
+  if (startRouteWarmer()) console.log('Routing: self-hosted OSRM, keeping the graphs warm');
 });
