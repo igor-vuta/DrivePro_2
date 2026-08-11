@@ -302,6 +302,76 @@ let first = null;
   check('...a readable sentence is sent instead', r.json && r.json.code === 'places_upstream', JSON.stringify(r.json));
 }
 
+// ---- the cache is blunt on purpose: the quota is 1,000 calls a month ----
+//
+// Two people on the same street asking the same question must cost one call,
+// not two, and the answer has to survive the restart that every deploy causes.
+{
+  const before = seenUrls.length;
+  await api(BASE, 'GET', '/api/places/near?q=кофе&lat=43.23891&lng=76.88971&radius=1200&lang=ru', null, user.token);
+  const first = seenUrls.length - before;
+  check('an uncached question does reach the provider', first === 1, `${first} calls`);
+  // Same block, a different doorway, and a radius nobody would call different.
+  await api(BASE, 'GET', '/api/places/near?q=кофе&lat=43.23955&lng=76.88840&radius=1250&lang=ru', null, user.token);
+  check('a neighbour asking the same thing costs nothing', seenUrls.length - before === first, `${seenUrls.length - before} calls`);
+
+  // A tap on a building must stay on that building - that key is not coarsened.
+  // Fresh coordinates, because an earlier case in this file already cached its.
+  const b4 = seenUrls.length;
+  await api(BASE, 'GET', '/api/places/at?lat=43.2601&lng=76.9401&lang=ru', null, user.token);
+  await api(BASE, 'GET', '/api/places/at?lat=43.2623&lng=76.9433&lang=ru', null, user.token);
+  check('a tap on a different building is a different question', seenUrls.length - b4 === 2, `${seenUrls.length - b4} calls`);
+}
+
+// ---- the cache outlives a restart ----
+//
+// This app redeploys on every push, so a cache that empties on restart is a
+// cache that never warms up. Note the local spawn helper: the shared one wipes
+// the data directory, which is exactly what must survive here.
+{
+  const dir = path.join(__dirname, '.tmp-data36c');
+  fs.rmSync(dir, { recursive: true, force: true });
+  const port = 4173;
+  const keepSpawn = () =>
+    new Promise((resolve, reject) => {
+      const proc = spawn(process.execPath, [path.join(__dirname, '..', 'src', 'index.js')], {
+        env: { ...process.env, PORT: String(port), DATA_DIR: dir, TWOGIS_API_URL: `http://localhost:${CAT_PORT}`, TWOGIS_KEY: KEY },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const t = setTimeout(() => reject(new Error('cache server did not start')), 15000);
+      let out = '';
+      proc.stdout.on('data', (d) => {
+        out += String(d);
+        if (out.includes('running')) {
+          clearTimeout(t);
+          resolve(proc);
+        }
+      });
+    });
+
+  const base = `http://localhost:${port}`;
+  const s1 = await keepSpawn();
+  const u = await reg(base, '+77015570003', 'Alua');
+  const b4 = seenUrls.length;
+  await api(base, 'GET', '/api/places/search?q=аптека&lang=ru', null, u.token);
+  check('a cold cache asks the provider', seenUrls.length === b4 + 1, `${seenUrls.length - b4} calls`);
+
+  // The cache is written on a 10s debounce; wait it out before pulling the plug.
+  await new Promise((r) => setTimeout(r, 11000));
+  await new Promise((r) => {
+    s1.once('exit', r);
+    s1.kill();
+  });
+
+  const s2 = await keepSpawn();
+  const after = seenUrls.length;
+  const again = await api(base, 'GET', '/api/places/search?q=аптека&lang=ru', null, u.token);
+  check('the same question after a restart costs nothing', seenUrls.length === after, `${seenUrls.length - after} calls`);
+  check('...and still answers with the same place', again.status === 200 && again.json.results[0] && again.json.results[0].name === 'Биосфера, аптека', JSON.stringify(again.json).slice(0, 140));
+  s2.kill();
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 cleanup();
 process.exit(failed ? 1 : 0);

@@ -140,4 +140,17 @@ dark style** anyone can reference - one is authored in their Style Editor and
 named by `TWOGIS_MAP_STYLE_DARK`, and without it the night map stays raster.
 MapGL is `[lng, lat]`; every crossing happens inside that one template.
 
+L52 ops: `deploy/backup.sh` (nightly, `sqlite3 .backup`, verified after
+writing, 14 kept) and `deploy/watchdog.sh` (service/disk/backup-age, alerts over
+the existing Telegram bot via `ALERT_TELEGRAM_CHAT_ID`, reports once per state
+change), both installed by `deploy/setup-ops.sh` which `update.sh` re-runs every
+deploy. Security updates are automatic; **reboots deliberately are not**.
+
+L53: the pre-L42 second driver window is gone - `DriveTab` is now only what a
+driver sees while carrying passengers, and `HomeScreen` sends them back to the
+one flow when the last passenger is out (it used to strand them). The places
+cache now lives a day (a week for buildings), keys round to ~1 km so neighbours
+share answers, and it persists to `DATA_DIR/places-cache.json` so a deploy does
+not spend the 1,000/month quota re-answering.
+
 Remaining work and its running order live in `ROADMAP.md`.

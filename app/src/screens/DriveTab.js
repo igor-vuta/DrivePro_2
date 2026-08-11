@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated, Easing, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text,
+  Animated, Easing, Linking, Platform, Pressable, ScrollView, StyleSheet, Text,
   useWindowDimensions, Vibration, View,
 } from 'react-native';
 import { notify, confirmAction } from '../dialogs';
 import * as Location from 'expo-location';
 import MapView from '../MapView';
-import { Card, Button, Sub, StatusDot, Row, Avatar, Input, Segmented, FadeIn, Pop, Chip, Bleed, SCREEN_PAD, CHROME_H, colors } from '../ui';
+import { Card, Button, Sub, Row, Avatar, FadeIn, Pop, Chip, Bleed, SCREEN_PAD, CHROME_H, colors } from '../ui';
 import { useAuth } from '../state';
 import { api } from '../api';
 import { wsClient } from '../ws';
@@ -29,27 +29,12 @@ function fmtKm(m) {
 }
 
 // Thin the OSRM geometry before shipping it over the socket.
-function simplifyPts(pts, max = 80) {
-  if (!Array.isArray(pts) || pts.length <= max) return pts || [];
-  const step = (pts.length - 1) / (max - 1);
-  const out = [];
-  for (let i = 0; i < max; i++) out.push(pts[Math.round(i * step)]);
-  return out;
-}
-
-// Route lengths in km (equirectangular - fine at city scale).
 function segKm(a, b) {
   const cos = Math.cos((a[0] * Math.PI) / 180);
   const dx = (b[1] - a[1]) * cos * 111.32;
   const dy = (b[0] - a[0]) * 110.54;
   return Math.hypot(dx, dy);
 }
-function routeTotalKm(pts) {
-  let d = 0;
-  for (let i = 0; i < pts.length - 1; i++) d += segKm(pts[i], pts[i + 1]);
-  return d;
-}
-// Distance still ahead: from the projection of `cur` on the route to its end.
 function remainingKm(cur, pts) {
   if (!cur || !Array.isArray(pts) || pts.length < 2) return null;
   const cos = Math.cos((cur.lat * Math.PI) / 180);
@@ -212,24 +197,15 @@ function fmtDetails(d) {
 
 export default function DriveTab({ openProfile }) {
   const { token, me, driverActive, activeRide, driverRides } = useAuth();
-  const [busyToggle, setBusyToggle] = useState(false);
   const [coords, setCoords] = useState(null);
   const [offers, setOffers] = useState([]);
   const [acceptingId, setAcceptingId] = useState(null);
   const [profileUserId, setProfileUserId] = useState(null);
   const [nowTick, setNowTick] = useState(Date.now());
-  const [routePlan, setRoutePlan] = useState(null); // { dest:{lat,lng,address}, points, radiusM }
-  const [routeQuery, setRouteQuery] = useState('');
-  const [routeResults, setRouteResults] = useState(null);
-  const [routeBusy, setRouteBusy] = useState(false);
-  const [routeErr, setRouteErr] = useState('');
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [navFollow, setNavFollow] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const watchRef = useRef(null);
   const navMapRef = useRef(null);
   const pendingAcceptRef = useRef(null);
-  const routeMapRef = useRef(null);
 
   const convoy = driverRides || [];
   const drivingRide = convoy.length ? convoy[0].ride : null;
@@ -294,13 +270,6 @@ export default function DriveTab({ openProfile }) {
     };
   }, []);
 
-  // Follow-me: keep the navigator map centered on the car while online.
-  useEffect(() => {
-    if (driverActive && routePlan && navFollow && coords && navMapRef.current && !drivingRide) {
-      navMapRef.current.setCenter({ lat: coords.lat, lng: coords.lng, animate: true });
-    }
-  }, [coords ? coords.lat : null, coords ? coords.lng : null, driverActive, navFollow]);
-
   // Accepting resolved successfully -> the ride joined the convoy.
   useEffect(() => {
     const pending = pendingAcceptRef.current;
@@ -345,96 +314,6 @@ export default function DriveTab({ openProfile }) {
       }
     };
   }, [driverActive, !!drivingRide]);
-
-  const searchRouteDest = async () => {
-    const q = routeQuery.trim();
-    if (q.length < 2) return;
-    setRouteErr('');
-    setRouteBusy(true);
-    try {
-      const base = coords ? `&lat=${coords.lat}&lng=${coords.lng}` : '';
-      const r = await api('GET', `/api/geo/search?q=${encodeURIComponent(q)}${base}&lang=${getLang()}`, null, token);
-      setRouteResults(r.results || []);
-    } catch (e) {
-      setRouteErr(errMsg(e));
-    } finally {
-      setRouteBusy(false);
-    }
-  };
-
-  const setDestination = async (rslt) => {
-    setRouteErr('');
-    setRouteBusy(true);
-    try {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (perm.status !== 'granted') {
-        notify(t('drive.locationNeeded'), t('drive.locationNeededText'));
-        return;
-      }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const from = { lat: loc.coords.latitude, lng: loc.coords.longitude };
-      setCoords(from);
-      let points = [[from.lat, from.lng], [rslt.lat, rslt.lng]];
-      try {
-        const r = await api(
-          'GET',
-          `/api/geo/route?fromLat=${from.lat}&fromLng=${from.lng}&toLat=${rslt.lat}&toLng=${rslt.lng}`,
-          null,
-          token
-        );
-        if (r.points && r.points.length >= 2) points = simplifyPts(r.points);
-      } catch (e) {
-        // straight-line corridor fallback
-      }
-      setRoutePlan((prev) => ({
-        dest: { lat: rslt.lat, lng: rslt.lng, address: rslt.address },
-        points,
-        radiusM: prev ? prev.radiusM : 1000,
-      }));
-      setRouteQuery('');
-      setRouteResults(null);
-    } catch (e) {
-      setRouteErr(errMsg(e));
-    } finally {
-      setRouteBusy(false);
-    }
-  };
-  const chooseRouteDest = setDestination;
-
-  const goOnline = async () => {
-    setBusyToggle(true);
-    try {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (perm.status !== 'granted') {
-        notify(t('drive.locationNeeded'), t('drive.locationNeededText'));
-        return;
-      }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const { latitude, longitude } = loc.coords;
-      setCoords({ lat: latitude, lng: longitude });
-      const sent = wsClient.send({
-        type: 'driver:activate',
-        lat: latitude,
-        lng: longitude,
-        ...(routePlan
-          ? {
-              route: {
-                destLat: routePlan.dest.lat,
-                destLng: routePlan.dest.lng,
-                destAddress: routePlan.dest.address,
-                radiusM: routePlan.radiusM,
-                points: routePlan.points,
-              },
-            }
-          : {}),
-      });
-      if (!sent) notify(t('drive.offline'), t('drive.offlineTryAgain'));
-    } catch (e) {
-      notify(t('drive.error'), errMsg(e));
-    } finally {
-      setBusyToggle(false);
-    }
-  };
 
   const goOffline = () => {
     wsClient.send({ type: 'driver:deactivate' });
@@ -535,16 +414,6 @@ export default function DriveTab({ openProfile }) {
   return (
     <View style={{ flex: 1 }}>
       <UserProfileModal userId={profileUserId} onClose={() => setProfileUserId(null)} />
-      <MapPickModal
-        visible={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onConfirm={(dest) => {
-          setPickerOpen(false);
-          setDestination(dest);
-        }}
-        initialCenter={coords || (routePlan ? routePlan.dest : { lat: 43.2389, lng: 76.8897 })}
-        token={token}
-      />
       {convoy.length ? (
         // Carrying passengers: the convoy map owns the screen and offers stay
         // one tap away in the sheet instead of below the fold.
@@ -564,71 +433,17 @@ export default function DriveTab({ openProfile }) {
           <Bleed top>
             <MapView
               ref={navMapRef}
-              initialCenter={coords || (routePlan ? routePlan.dest : { lat: 43.2389, lng: 76.8897 })}
+              initialCenter={coords || { lat: 43.2389, lng: 76.8897 }}
               initialZoom={15}
-              markers={[
-                ...(coords ? [{ id: 'me', lat: coords.lat, lng: coords.lng, kind: 'car' }] : []),
-                ...(routePlan ? [{ id: 'dest', lat: routePlan.dest.lat, lng: routePlan.dest.lng, kind: 'dest' }] : []),
-              ]}
-              polyline={routePlan ? routePlan.points : undefined}
+              markers={coords ? [{ id: 'me', lat: coords.lat, lng: coords.lng, kind: 'car' }] : []}
             />
 
             <View style={st.topChips} pointerEvents="box-none">
               <Chip tone="active">{`● ${t('drive.taking')}`}</Chip>
-              <Row>
-                {routePlan ? (
-                  <Chip
-                    tone={navFollow ? 'active' : 'default'}
-                    onPress={() => setNavFollow((f) => !f)}
-                    style={{ marginRight: 8 }}
-                  >
-                    {`🎯 ${t('drive.navFollow')}`}
-                  </Chip>
-                ) : null}
-                <Chip tone="danger" onPress={goOffline}>
-                  {`⏻ ${t('drive.goOffline')}`}
-                </Chip>
-              </Row>
+              <Chip tone="danger" onPress={goOffline}>
+                {`⏻ ${t('drive.goOffline')}`}
+              </Chip>
             </View>
-
-            {routePlan
-              ? (() => {
-                  const left = remainingKm(coords, routePlan.points);
-                  const total = routeTotalKm(routePlan.points);
-                  const pct =
-                    left != null && total > 0 ? Math.max(0, Math.min(100, Math.round((1 - left / total) * 100))) : 0;
-                  return (
-                    <View style={st.navStrip} pointerEvents="none">
-                      <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-                        <Text style={{ color: colors.text, fontWeight: '700' }}>
-                          {left != null ? t('drive.navLeft', { km: left.toFixed(1) }) : '…'}
-                        </Text>
-                        <Text style={{ color: colors.sub }}>
-                          {left != null ? t('drive.navEta', { min: Math.max(1, Math.round(left * 2.1)) }) : ''}
-                        </Text>
-                      </Row>
-                      <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.surface, overflow: 'hidden', marginBottom: 6 }}>
-                        <View
-                          style={{
-                            width: `${pct}%`,
-                            height: 6,
-                            backgroundColor: colors.primary,
-                            borderRadius: 3,
-                            shadowColor: colors.primary,
-                            shadowOpacity: 0.8,
-                            shadowRadius: 6,
-                            shadowOffset: { width: 0, height: 0 },
-                          }}
-                        />
-                      </View>
-                      <Sub style={{ marginBottom: 0 }} numberOfLines={1}>
-                        {t('drive.to', { addr: routePlan.dest.address })} · {t('drive.routeCorridor')}{' '}
-                        {fmtKm(routePlan.radiusM)}
-                      </Sub>
-                    </View>
-                  );
-                })()
-              : null}
 
             <OfferSheet count={offers.length} expanded={sheetOpen} onToggle={() => setSheetOpen((v) => !v)}>
               {offerCards}
@@ -636,89 +451,14 @@ export default function DriveTab({ openProfile }) {
           </Bleed>
         </Pop>
       ) : (
-      <ScrollView>
-      <Card>
-        <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>{t('drive.offline')}</Text>
-          <StatusDot on={false} labelOn={t('drive.taking')} labelOff={t('drive.notTaking')} />
-        </Row>
-        <Sub>{me.car ? `${me.car.color} ${me.car.make} ${me.car.model} · ${me.car.plate}` : ''}</Sub>
-        <Button title={t('drive.goOnline')} onPress={goOnline} loading={busyToggle} />
-      </Card>
-
+        // Reached only in the moment between accepting a ride and the
+        // convoy arriving from the server. Going online, choosing a route and
+        // setting a corridor all used to live here, in a second driver window
+        // that duplicated the ride flow; L42 moved them onto your own route
+        // and this stopped being somewhere anyone should end up.
         <Card>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 4 }}>{t('drive.routeTitle')}</Text>
-          <Sub>{routePlan ? t('drive.routeSet') : t('drive.routeHint')}</Sub>
-          {routePlan ? (
-            <View>
-              <Sub style={{ marginBottom: 8 }}>{t('drive.to', { addr: routePlan.dest.address })}</Sub>
-              <View style={{ height: 170, borderRadius: 12, overflow: 'hidden', marginBottom: 10 }}>
-                <MapView
-                  key={`${routePlan.dest.lat},${routePlan.dest.lng}`}
-                  ref={routeMapRef}
-                  initialCenter={{ lat: routePlan.dest.lat, lng: routePlan.dest.lng }}
-                  markers={[
-                    ...(coords ? [{ id: 'me', lat: coords.lat, lng: coords.lng, kind: 'car' }] : []),
-                    { id: 'dest', lat: routePlan.dest.lat, lng: routePlan.dest.lng, kind: 'dest' },
-                  ]}
-                  polyline={routePlan.points}
-                  onReady={() => {
-                    if (routeMapRef.current && routePlan.points.length >= 2) routeMapRef.current.fitBounds(routePlan.points);
-                  }}
-                />
-              </View>
-              <Sub style={{ marginBottom: 4 }}>{t('drive.routeCorridor')}</Sub>
-              <Segmented
-                value={routePlan.radiusM}
-                onChange={(v) => setRoutePlan((p) => (p ? { ...p, radiusM: v } : p))}
-                options={[
-                  { value: 200, label: '200 m' },
-                  { value: 500, label: '500 m' },
-                  { value: 1000, label: '1 km' },
-                  { value: 2000, label: '2 km' },
-                ]}
-              />
-              <Button kind="ghost" title={t('drive.routeClear')} onPress={() => setRoutePlan(null)} style={{ marginTop: 8 }} />
-            </View>
-          ) : (
-            <View>
-              <Row>
-                <Input
-                  value={routeQuery}
-                  onChangeText={setRouteQuery}
-                  placeholder={t('drive.routeSearchPh')}
-                  returnKeyType="search"
-                  onSubmitEditing={searchRouteDest}
-                  containerStyle={{ flex: 1, marginBottom: 0 }}
-                />
-                <Button
-                  title={t('common.find')}
-                  onPress={searchRouteDest}
-                  loading={routeBusy}
-                  style={{ marginLeft: 8, height: 48, paddingHorizontal: 16, marginTop: 0 }}
-                />
-              </Row>
-              {routeResults
-                ? routeResults.map((r, i) => (
-                    <Pressable
-                      key={i}
-                      onPress={() => chooseRouteDest(r)}
-                      style={{ paddingVertical: 8, borderBottomWidth: 1, borderColor: colors.border }}
-                    >
-                      <Text style={{ color: colors.text }}>{r.address}</Text>
-                      <Text style={{ color: colors.sub, fontSize: 12 }} numberOfLines={1}>
-                        {r.fullAddress}
-                      </Text>
-                    </Pressable>
-                  ))
-                : null}
-              {routeResults && !routeResults.length ? <Sub>{t('ride.nothingFound')}</Sub> : null}
-              {routeErr ? <Sub style={{ color: colors.danger }}>{routeErr}</Sub> : null}
-              <Button kind="ghost" title={`🗺 ${t('drive.routePickMap')}`} onPress={() => setPickerOpen(true)} style={{ marginTop: 8 }} />
-            </View>
-          )}
+          <Sub style={{ marginBottom: 0 }}>{t('drive.loadingRide')}</Sub>
         </Card>
-      </ScrollView>
       )}
     </View>
   );
@@ -901,80 +641,5 @@ function ConvoyView({ rides, myCoords, token, openProfile }) {
         );
       })}
     </View>
-  );
-}
-
-// Fullscreen center-pin destination picker for the driver's route.
-function MapPickModal({ visible, onClose, onConfirm, initialCenter, token }) {
-  const [addr, setAddr] = useState('');
-  const [c, setC] = useState(initialCenter);
-  const seqRef = useRef(0);
-
-  useEffect(() => {
-    if (visible) {
-      setC(initialCenter);
-      setAddr('');
-      lookup(initialCenter);
-    }
-  }, [visible]);
-
-  const lookup = async (pt) => {
-    const seq = ++seqRef.current;
-    try {
-      const r = await api('GET', `/api/geo/reverse?lat=${pt.lat}&lng=${pt.lng}&lang=${getLang()}`, null, token);
-      if (seq === seqRef.current) setAddr(r.address || `${pt.lat.toFixed(5)}, ${pt.lng.toFixed(5)}`);
-    } catch (e) {
-      if (seq === seqRef.current) setAddr(`${pt.lat.toFixed(5)}, ${pt.lng.toFixed(5)}`);
-    }
-  };
-
-  if (!visible) return null;
-  return (
-    <Modal animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: colors.bg }}>
-        <View style={{ flex: 1 }}>
-          <MapView
-            initialCenter={initialCenter}
-            initialZoom={14}
-            onMoveEnd={(pt) => {
-              const p = { lat: pt.lat, lng: pt.lng };
-              setC(p);
-              lookup(p);
-            }}
-          />
-          <View
-            pointerEvents="none"
-            style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <View style={{ alignItems: 'center', marginBottom: 34 }}>
-              <View
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 10,
-                  backgroundColor: colors.danger,
-                  borderWidth: 3,
-                  borderColor: colors.text,
-                  shadowColor: colors.danger,
-                  shadowOpacity: 0.9,
-                  shadowRadius: 8,
-                  shadowOffset: { width: 0, height: 0 },
-                }}
-              />
-              <View style={{ width: 2, height: 14, backgroundColor: colors.text }} />
-            </View>
-          </View>
-        </View>
-        <View style={{ padding: 16, backgroundColor: colors.bg }}>
-          <Text style={{ color: colors.text, fontWeight: '800', fontSize: 17, marginBottom: 4 }}>{t('drive.pickDestTitle')}</Text>
-          <Sub>{addr || '…'}</Sub>
-          <Button
-            title={t('drive.confirmDest')}
-            onPress={() => onConfirm({ ...c, address: addr || `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}` })}
-          />
-          <Button kind="ghost" title={t('common.cancel')} onPress={onClose} style={{ marginTop: 8 }} />
-        </View>
-      </View>
-    </Modal>
   );
 }

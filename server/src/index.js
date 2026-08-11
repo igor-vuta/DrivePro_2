@@ -16,7 +16,7 @@ import { verifyToken } from './auth.js';
 import { otpModeBanner } from './otp.js';
 import { smsBanner } from './sms.js';
 import { initTelegram, telegramBanner } from './telegram.js';
-import { describeMapKey } from './places.js';
+import { describeMapKey, initPlaces } from './places.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -32,6 +32,9 @@ if (!fs.existsSync(secretFile)) {
 const secret = fs.readFileSync(secretFile, 'utf8').trim();
 
 initPush(DATA_DIR);
+// A warm places cache across restarts is the difference between a monthly
+// quota that lasts and one that is spent re-answering the same questions.
+initPlaces(DATA_DIR).catch(() => {});
 const store = new Store(DATA_DIR);
 const hub = new Hub(store);
 setupRides({ store, hub });

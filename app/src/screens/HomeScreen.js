@@ -106,11 +106,14 @@ export default function HomeScreen({ openProfile, openHistory, openSchedules, op
   const [tab, setTab] = useState('ride');
   const [menu, setMenu] = useState(false);
 
-  // When a ride becomes active, jump to the tab where it lives.
+  // A driver carrying passengers gets the convoy view; everyone else, and
+  // every driver once the last passenger is out, belongs in the one flow the
+  // app actually has. Without the second half of this, finishing a ride left
+  // the driver parked in the convoy screen with nothing in it - the old
+  // pre-L42 driver window, reachable only by having been a driver a minute
+  // ago, and the only way back was to restart the app.
   useEffect(() => {
-    if (activeRide && me) {
-      setTab(activeRide.driverId === me.id ? 'drive' : 'ride');
-    }
+    setTab(activeRide && me && activeRide.driverId === me.id ? 'drive' : 'ride');
   }, [activeRide ? activeRide.id : null]);
 
   // The map is the app: it runs edge to edge and the chrome floats on top of
