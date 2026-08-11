@@ -11,6 +11,7 @@ import UserProfileModal from '../UserProfileModal';
 import { t, errMsg, getLang } from '../i18n';
 import { API_URL } from '../config';
 import { buildNavModel, progress as navProgress, instructionKey, instructionArrow } from '../nav';
+import PlaceCard from '../PlaceCard';
 import { stopWatching } from '../location';
 
 // Almaty, Kazakhstan - used until real geolocation arrives.
@@ -92,7 +93,7 @@ function ModeTile({ icon, label, route, active, onPress, style }) {
 }
 
 export default function RideTab() {
-  const { token, me, activeRide, counterpart, driverLoc, saveCar } = useAuth();
+  const { token, me, activeRide, counterpart, driverLoc, saveCar, placesProvider } = useAuth();
   const mapRef = useRef(null);
 
   const myRide = activeRide && me && activeRide.riderId === me.id ? activeRide : null;
@@ -124,6 +125,10 @@ export default function RideTab() {
   const [nearWalkers, setNearWalkers] = useState([]); // driving: pickup-seeking people on my corridor
   const [live, setLive] = useState(false); // broadcasting availability right now (either role)
   const [altPick, setAltPick] = useState(0); // 0 = the primary route, 1..n = an alternative
+  const [placeHits, setPlaceHits] = useState(null); // named places matching the search box
+  const [nearPlaces, setNearPlaces] = useState([]); // category chip results, drawn as pins
+  const [nearCat, setNearCat] = useState(null); // which category chip is active
+  const [place, setPlace] = useState(null); // the place whose card is open
   const [center, setCenter] = useState(FALLBACK_CENTER);
   const [trails, setTrails] = useState([]);
   const [address, setAddress] = useState('');
@@ -297,17 +302,91 @@ export default function RideTab() {
     if (q.length < 2) return;
     Keyboard.dismiss();
     setError('');
+    // Addresses and named places answer the same question - "where do you
+    // mean?" - so ask both and show places first, since typing a name is a
+    // stronger signal than a fuzzy address match.
+    const wantPlaces = placesProvider;
+    const [addr, places] = await Promise.all([
+      api('GET', `/api/geo/search?q=${encodeURIComponent(q)}&lat=${center.lat}&lng=${center.lng}&lang=${getLang()}`, null, token).catch(
+        (e) => ({ __err: e })
+      ),
+      wantPlaces
+        ? api('GET', `/api/places/search?q=${encodeURIComponent(q)}&lat=${center.lat}&lng=${center.lng}&lang=${getLang()}`, null, token).catch(
+            () => null
+          )
+        : Promise.resolve(null),
+    ]);
+    if (addr && addr.__err && !(places && places.results && places.results.length)) {
+      setError(errMsg(addr.__err));
+      return;
+    }
+    setPlaceHits(places && places.results ? places.results : null);
+    setResults((addr && addr.results) || []);
+  };
+
+  // Category chips: everything of one kind around the map centre, dropped on
+  // the map as pins you can tap.
+  const CATEGORIES = [
+    { key: 'pharmacy', q: 'аптека', label: 'place.catPharmacy' },
+    { key: 'cafe', q: 'кафе', label: 'place.catCafe' },
+    { key: 'food', q: 'ресторан', label: 'place.catFood' },
+    { key: 'atm', q: 'банкомат', label: 'place.catAtm' },
+    { key: 'fuel', q: 'азс', label: 'place.catFuel' },
+    { key: 'shop', q: 'супермаркет', label: 'place.catShop' },
+  ];
+
+  const toggleCategory = async (cat) => {
+    setPlace(null);
+    if (nearCat === cat.key) {
+      setNearCat(null);
+      setNearPlaces([]);
+      return;
+    }
+    setNearCat(cat.key);
+    setError('');
     try {
       const r = await api(
         'GET',
-        `/api/geo/search?q=${encodeURIComponent(q)}&lat=${center.lat}&lng=${center.lng}&lang=${getLang()}`,
+        `/api/places/near?q=${encodeURIComponent(cat.q)}&lat=${center.lat}&lng=${center.lng}&radius=1500&lang=${getLang()}`,
         null,
         token
       );
-      setResults(r.results || []);
+      setNearPlaces(r.results || []);
+      if (!(r.results || []).length) setError(t('place.nothing'));
     } catch (e) {
+      setNearPlaces([]);
       setError(errMsg(e));
     }
+  };
+
+  // Tapping the map asks what is there. The provider has no "point lookup",
+  // so this is a tight radius search: the nearest thing within a few tens of
+  // metres is what the finger was on. Nothing there means nothing shown -
+  // the tap simply does nothing, rather than opening an empty card.
+  const onMapTap = async (c) => {
+    if (step !== 'landing' || !(placesProvider)) return;
+    try {
+      const r = await api(
+        'GET',
+        `/api/places/at?lat=${c.lat}&lng=${c.lng}&radius=80&lang=${getLang()}`,
+        null,
+        token
+      );
+      const hit = (r.results || [])[0];
+      if (hit) setPlace(hit);
+    } catch (e) {}
+  };
+
+  // Route to a place: it becomes the destination, exactly as a searched
+  // address would.
+  const goToPlace = (p) => {
+    setPlace(null);
+    setNearPlaces([]);
+    setNearCat(null);
+    setPlaceHits(null);
+    setResults(null);
+    setQuery('');
+    goTo({ lat: p.lat, lng: p.lng, address: p.name || p.address });
   };
 
   // Jump the map to a point the user named. `center` is normally only updated
@@ -325,6 +404,7 @@ export default function RideTab() {
 
   const pickResult = (r) => {
     setResults(null);
+    setPlaceHits(null);
     setQuery('');
     goTo(r);
   };
@@ -863,8 +943,11 @@ export default function RideTab() {
     // Driving with the toggle on: everyone along the corridor who would like a
     // lift, at their fuzzed position until one of them is actually picked up.
     if (step === 'nav') for (const w of nearWalkers) list.push({ id: `w-${w.id}`, lat: w.lat, lng: w.lng, kind: 'pickup' });
+    // Category results, on the landing map only - browsing is a landing-step
+    // activity, not something to do mid-route.
+    if (step === 'landing') for (const p of nearPlaces) list.push({ id: `p-${p.id}`, lat: p.lat, lng: p.lng, kind: 'place' });
     return list;
-  }, [cars, pickup, dest, origin, step, navPos, mode, nearWalkers]);
+  }, [cars, pickup, dest, origin, step, navPos, mode, nearWalkers, nearPlaces]);
 
   const chosen = step === 'mode' ? chosenRoute() : null;
   const polyline =
@@ -938,6 +1021,7 @@ export default function RideTab() {
       : step === 'dest'
       ? t('ride.setDest')
       : t('ride.confirm');
+  // The user's own saved Home/Work - unrelated to the places provider.
   const places = me && me.places ? me.places : null;
   const showCenterPin = step === 'landing' || step === 'pickup' || step === 'dest' || step === 'from';
 
@@ -965,6 +1049,11 @@ export default function RideTab() {
             const item = altPolylines && altPolylines[i];
             if (item) pickAlt(item.i);
           }}
+          onMarkerTap={(id) => {
+            const hit = nearPlaces.find((p) => `p-${p.id}` === id);
+            if (hit) setPlace(hit);
+          }}
+          onMapTap={onMapTap}
           trails={trails}
           onMoveEnd={onMoveEnd}
         />
@@ -982,18 +1071,39 @@ export default function RideTab() {
         {results ? (
           <View style={{ position: 'absolute', left: 12, right: 12, top: CHROME_H + 8 }}>
             <Card style={{ padding: 6, marginBottom: 0 }}>
-              {results.length === 0 ? (
+              {results.length === 0 && !(placeHits && placeHits.length) ? (
                 <Sub style={{ margin: 10 }}>{t('ride.nothingFound')}</Sub>
               ) : (
-                results.map((r, i) => (
-                  <Pressable key={i} onPress={() => pickResult(r)} style={{ padding: 10, borderBottomWidth: i < results.length - 1 ? 1 : 0, borderColor: colors.border }}>
-                    <Text style={{ color: colors.text }}>{r.address}</Text>
-                    <Text style={{ color: colors.sub, fontSize: 12 }} numberOfLines={1}>{r.fullAddress}</Text>
-                  </Pressable>
-                ))
+                <>
+                  {(placeHits || []).map((p) => (
+                    <Pressable
+                      key={`p-${p.id}`}
+                      onPress={() => goToPlace(p)}
+                      style={{ padding: 10, borderBottomWidth: 1, borderColor: colors.border }}
+                    >
+                      <Text style={{ color: colors.text, fontWeight: '700' }} numberOfLines={1}>
+                        {p.name}
+                      </Text>
+                      <Text style={{ color: colors.sub, fontSize: 12 }} numberOfLines={1}>
+                        {(p.categories && p.categories[0] ? `${p.categories[0]} · ` : '') + (p.address || '')}
+                      </Text>
+                    </Pressable>
+                  ))}
+                  {results.map((r, i) => (
+                    <Pressable key={i} onPress={() => pickResult(r)} style={{ padding: 10, borderBottomWidth: i < results.length - 1 ? 1 : 0, borderColor: colors.border }}>
+                      <Text style={{ color: colors.text }}>{r.address}</Text>
+                      <Text style={{ color: colors.sub, fontSize: 12 }} numberOfLines={1}>{r.fullAddress}</Text>
+                    </Pressable>
+                  ))}
+                </>
               )}
-              <Button kind="ghost" title={t('common.close')} onPress={() => setResults(null)} style={{ height: 38 }} />
+              <Button kind="ghost" title={t('common.close')} onPress={() => { setResults(null); setPlaceHits(null); }} style={{ height: 38 }} />
             </Card>
+          </View>
+        ) : null}
+        {step === 'landing' && place ? (
+          <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
+            <PlaceCard place={place} onGo={goToPlace} onClose={() => setPlace(null)} />
           </View>
         ) : null}
         {step === 'nav' && liftOffer ? (
@@ -1266,6 +1376,30 @@ export default function RideTab() {
                   <Button kind="ghost" title={t('ride.workChip')} onPress={() => goPlace(places.work)} style={{ height: 36, paddingHorizontal: 12, marginTop: 0 }} />
                 ) : null}
               </Row>
+            ) : null}
+            {step === 'landing' && placesProvider ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }} keyboardShouldPersistTaps="handled">
+                {CATEGORIES.map((c) => {
+                  const on = nearCat === c.key;
+                  return (
+                    <Pressable
+                      key={c.key}
+                      onPress={() => toggleCategory(c)}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 999,
+                        borderWidth: on ? 2 : 1,
+                        borderColor: on ? colors.primary : colors.border,
+                        backgroundColor: colors.card,
+                        marginRight: 8,
+                      }}
+                    >
+                      <Text style={{ color: on ? colors.primary : colors.text, fontWeight: '700', fontSize: 13 }}>{t(c.label)}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             ) : null}
             <Row style={{ marginBottom: 10 }}>
               <Input

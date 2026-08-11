@@ -24,6 +24,7 @@ const makeHtml = () => `<!DOCTYPE html>
   .mk-dot { width: 15px; height: 15px; border-radius: 50%; border: 2px solid ${colors.card}; }
   .mk-pickup { background: ${colors.ok}; box-shadow: 0 0 8px 2px ${colors.ok}; }
   .mk-dest { background: ${colors.danger}; box-shadow: 0 0 8px 2px ${colors.danger}; }
+  .mk-place { width: 13px; height: 13px; border-radius: 50%; border: 3px solid ${colors.card}; background: ${colors.primary}; box-shadow: 0 1px 4px rgba(0,0,0,0.5); cursor: pointer; }
   .leaflet-control-attribution { font-size: 9px; background: ${colors.card} !important; color: ${colors.sub} !important; }
   .leaflet-control-attribution a { color: ${colors.sub} !important; }
 </style>
@@ -58,6 +59,9 @@ const makeHtml = () => `<!DOCTYPE html>
     if (kind === 'car') {
       return L.divIcon({ className: 'mk', html: '<div class="mk-car">&#128663;</div>', iconSize: [26, 26], iconAnchor: [13, 13] });
     }
+    if (kind === 'place') {
+      return L.divIcon({ className: 'mk', html: '<div class="mk-place"></div>', iconSize: [26, 26], iconAnchor: [13, 13] });
+    }
     var cls = kind === 'dest' ? 'mk-dest' : 'mk-pickup';
     return L.divIcon({ className: 'mk', html: '<div class="mk-dot ' + cls + '"></div>', iconSize: [22, 22], iconAnchor: [11, 11] });
   }
@@ -74,7 +78,14 @@ const makeHtml = () => `<!DOCTYPE html>
           if (markers[m.id]) {
             markers[m.id].setLatLng([m.lat, m.lng]);
           } else {
-            markers[m.id] = L.marker([m.lat, m.lng], { icon: iconFor(m.kind), interactive: false }).addTo(map);
+            var tappable = m.kind === 'place';
+            var mk = L.marker([m.lat, m.lng], { icon: iconFor(m.kind), interactive: tappable, keyboard: false });
+            if (tappable) {
+              (function (id) {
+                mk.on('click', function (ev) { L.DomEvent.stop(ev); post({ type: 'markertap', id: id }); });
+              })(m.id);
+            }
+            markers[m.id] = mk.addTo(map);
           }
         });
         Object.keys(markers).forEach(function (id) {
@@ -126,6 +137,7 @@ const makeHtml = () => `<!DOCTYPE html>
     } catch (e) {}
   };
 
+  map.on('click', function (ev) { post({ type: 'maptap', lat: ev.latlng.lat, lng: ev.latlng.lng }); });
   map.on('movestart', function () { post({ type: 'movestart' }); });
   map.on('moveend', function () {
     var c = map.getCenter();
@@ -139,7 +151,7 @@ const makeHtml = () => `<!DOCTYPE html>
 
 
 const MapViewCmp = forwardRef(function MapViewCmp(
-  { initialCenter, initialZoom = 15, markers = [], polyline = null, alts = null, trails = null, onMoveEnd, onMoveStart, onReady, onAltPick, style },
+  { initialCenter, initialZoom = 15, markers = [], polyline = null, alts = null, trails = null, onMoveEnd, onMoveStart, onReady, onAltPick, onMarkerTap, onMapTap, style },
   ref
 ) {
   const isWeb = Platform.OS === 'web';
@@ -148,7 +160,7 @@ const MapViewCmp = forwardRef(function MapViewCmp(
   const readyRef = useRef(false);
   const queueRef = useRef([]);
   const callbacksRef = useRef({});
-  callbacksRef.current = { onMoveEnd, onMoveStart, onReady, onAltPick, initialCenter, initialZoom };
+  callbacksRef.current = { onMoveEnd, onMoveStart, onReady, onAltPick, onMarkerTap, onMapTap, initialCenter, initialZoom };
 
   const send = (cmd) => {
     if (!readyRef.current) {
@@ -174,6 +186,10 @@ const MapViewCmp = forwardRef(function MapViewCmp(
       queueRef.current = [];
       q.forEach(send);
       if (cb.onReady) cb.onReady();
+    } else if (msg.type === 'markertap') {
+      if (cb.onMarkerTap) cb.onMarkerTap(msg.id);
+    } else if (msg.type === 'maptap') {
+      if (cb.onMapTap) cb.onMapTap({ lat: msg.lat, lng: msg.lng });
     } else if (msg.type === 'altpick') {
       if (cb.onAltPick) cb.onAltPick(msg.index);
     } else if (msg.type === 'moveend') {

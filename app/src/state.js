@@ -29,6 +29,8 @@ export function AuthProvider({ children }) {
   const [wsConnected, setWsConnected] = useState(false);
   const [cityImpact, setCityImpact] = useState(null); // { rides, km, driversOnline } for today
   const [totpEnabled, setTotpEnabled] = useState(false);
+  // Whether this deployment has a places provider configured (see /api/me).
+  const [placesProvider, setPlacesProvider] = useState(false);
   const [passkeyCount, setPasskeyCount] = useState(0);
   const meRef = useRef(null);
   useEffect(() => {
@@ -67,6 +69,7 @@ export function AuthProvider({ children }) {
           setToken(saved);
           setMe(data.user);
           setTotpEnabled(!!data.totpEnabled);
+          setPlacesProvider(!!data.placesProvider);
           setPasskeyCount(data.passkeys || 0);
           setDriverActive(!!data.driverActive);
           setActiveRide(data.activeRide || null);
@@ -97,6 +100,7 @@ export function AuthProvider({ children }) {
           .then((data) => {
             setMe(data.user);
             setTotpEnabled(!!data.totpEnabled);
+            setPlacesProvider(!!data.placesProvider);
             setPasskeyCount(data.passkeys || 0);
             setDriverActive(!!data.driverActive);
             setActiveRide(data.activeRide || null);
@@ -264,6 +268,7 @@ export function AuthProvider({ children }) {
       setPendingRating,
       pendingVerification,
       totpEnabled,
+      placesProvider,
       passkeyCount,
       langPref,
       lang,

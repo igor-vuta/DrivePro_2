@@ -182,6 +182,34 @@ region download, rerun the script; it skips whatever is already built.
 > build. Nothing breaks without it; the FOSSGIS fallback keeps serving in
 > the meantime.
 
+## Places (2GIS)
+
+Named places - search by name, category chips, tap-a-building - come from the
+2GIS Catalog API through `server/src/places.js`. The key lives only in
+`/etc/drivepro.env` and never reaches a browser; the app calls our own
+`/api/places/*` and gets a provider-neutral shape back.
+
+```bash
+sudo sh -c 'echo "TWOGIS_KEY=your_key_here" >> /etc/drivepro.env'
+sudo systemctl restart drivepro
+```
+
+Without the key the endpoints answer `503 places_off`, `/api/me` reports
+`placesProvider: false`, and the app hides the place features rather than
+offering dead buttons - so an unconfigured deployment degrades quietly.
+
+Provider quirks absorbed in `places.js`, learned by probing the live API:
+- "Nothing found" comes back as `meta.code` **404**, which is an empty list,
+  not an error.
+- There is no point-lookup call. A wildcard `q=*` returns 404; a point query
+  with no filter returns administrative districts. What a tap on a building
+  actually needs is `point` + small `radius` + `type=branch`.
+- Coordinates are `lon,lat`, and items can arrive with no `point` at all -
+  those are dropped rather than rendered at 0,0.
+
+`TWOGIS_API_URL` is a test seam; `smoke36` runs the whole surface against a
+stub and never touches the real API.
+
 `GEO_USER_AGENT` overrides the Nominatim User-Agent - set a real contact there
 before any serious geocoding volume, or Nominatim may block a generic one.
 

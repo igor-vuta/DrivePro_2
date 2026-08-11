@@ -6,6 +6,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { hashPassword, verifyPassword, signToken, verifyToken } from './auth.js';
 import { publicUser, rideCounterpart, directoryUser } from './views.js';
 import { reverseGeocode, searchAddress, route as geoRoute } from './geo.js';
+import { searchPlaces, placesNear, placesAt, placeById, placesEnabled } from './places.js';
 import { generateCode, sendCode, OTP_TTL_MS, OTP_RESEND_COOLDOWN_MS, OTP_ECHO } from './otp.js';
 import { vapidPublicKey } from './push.js';
 import {
@@ -584,6 +585,11 @@ export function createApi({ store, secret, hub, serveStatic }) {
       // is not public, so this sits beside the profile rather than in it.
       totpEnabled: !!user.totpEnabled,
       passkeys: store.listPasskeys(user.id).length,
+      // Whether a places provider is configured on this deployment, so the app
+      // can hide the map's place features rather than offer dead buttons.
+      // Deliberately not "places": the user object already has one of those
+      // (their saved Home/Work), and the two mean entirely different things.
+      placesProvider: placesEnabled(),
       driverActive: hub ? hub.drivers.has(user.id) : false,
       activeRide,
       counterpart: rideCounterpart(store, activeRide, user.id),
@@ -1124,6 +1130,49 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const lat = Number(url.searchParams.get('lat'));
     const lng = Number(url.searchParams.get('lng'));
     sendJson(res, 200, { results: await searchAddress(q, lat, lng, url.searchParams.get('lang')) });
+  });
+
+  // ------------------------------------------------------------- places ---
+  //
+  // A thin proxy so the provider key never reaches a browser. Same rate
+  // budget as the geo proxy: these are typeahead-frequency calls.
+  route('GET', '/api/places/search', async (req, res, params, url) => {
+    authUser(req);
+    rateLimit(req, 'places', 120, 60 * 1000);
+    const lat = Number(url.searchParams.get('lat'));
+    const lng = Number(url.searchParams.get('lng'));
+    const lang = String(url.searchParams.get('lang') || '');
+    const results = await searchPlaces(url.searchParams.get('q'), lat, lng, lang);
+    sendJson(res, 200, { results });
+  });
+
+  route('GET', '/api/places/near', async (req, res, params, url) => {
+    authUser(req);
+    rateLimit(req, 'places', 120, 60 * 1000);
+    const lat = Number(url.searchParams.get('lat'));
+    const lng = Number(url.searchParams.get('lng'));
+    const radius = Number(url.searchParams.get('radius'));
+    const lang = String(url.searchParams.get('lang') || '');
+    const results = await placesNear(lat, lng, url.searchParams.get('q'), radius, lang);
+    sendJson(res, 200, { results });
+  });
+
+  route('GET', '/api/places/at', async (req, res, params, url) => {
+    authUser(req);
+    rateLimit(req, 'places', 120, 60 * 1000);
+    const lat = Number(url.searchParams.get('lat'));
+    const lng = Number(url.searchParams.get('lng'));
+    const radius = Number(url.searchParams.get('radius'));
+    const lang = String(url.searchParams.get('lang') || '');
+    const results = await placesAt(lat, lng, radius, lang);
+    sendJson(res, 200, { results });
+  });
+
+  route('GET', '/api/places/:id', async (req, res, params, url) => {
+    authUser(req);
+    rateLimit(req, 'places', 120, 60 * 1000);
+    const lang = String(url.searchParams.get('lang') || '');
+    sendJson(res, 200, { place: await placeById(params.id, lang) });
   });
 
   route('GET', '/api/geo/route', async (req, res, params, url) => {
