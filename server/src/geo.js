@@ -68,28 +68,59 @@ export const routeModes = () => Object.keys(PROFILES);
 // The app asks for all three profiles at once, so the user waits for the
 // slowest of three cold graphs contending for one disk - which is why routes
 // "take forever", and why some requests exceeded the timeout and came back to
-// the app as a straight line. One tiny route per profile every couple of
-// minutes keeps the pages resident, and costs nothing measurable.
+// the app as a straight line.
+//
+// One route per profile is not enough, and measuring said so: with a single
+// corridor warmed, an unrelated route across the same city still took 2.6 s
+// (car) and 5.5 s (foot). mmap caches the pages a query actually reads, and a
+// different corridor reads different pages. Warming six corridors spanning the
+// city took 5.2 s once, after which three brand-new routes elsewhere in Almaty
+// answered in 94 ms, 82 ms and 14 ms - so the working set for a whole city is
+// small enough to hold, it just has to be touched.
+//
+// Override with OSRM_WARM_ROUTES for a deployment in another city: routes are
+// separated by "|", the two points of a route by ";", as OSRM writes them.
 const SELF_HOSTED = !!(process.env.OSRM_URL || process.env.OSRM_FOOT_URL || process.env.OSRM_BIKE_URL);
 const WARM_EVERY_MS = Number(process.env.OSRM_WARM_MS || 120_000);
-// Somewhere inside the region the graph covers; the point only has to touch
-// the part of the graph people actually use.
-const WARM_POINT = process.env.OSRM_WARM_POINT || '76.9286,43.2567;76.9130,43.2440';
+const WARM_ROUTES = (
+  process.env.OSRM_WARM_ROUTES ||
+  [
+    '76.85,43.20;76.95,43.28',
+    '76.88,43.24;76.93,43.26',
+    '76.92,43.21;76.97,43.30',
+    '76.83,43.26;76.99,43.22',
+    '76.90,43.30;76.96,43.19',
+    '76.86,43.22;76.94,43.25',
+  ].join('|')
+)
+  .split('|')
+  .map((r) => r.trim())
+  .filter(Boolean);
 
 let warmTimer = null;
+let warming = false;
 
 export function startRouteWarmer() {
   // Nothing to warm when routing goes to FOSSGIS: those are shared community
   // servers and warming them would be someone else's bandwidth, not ours.
   if (!SELF_HOSTED || process.env.NODE_ENV === 'test' || warmTimer) return false;
   const tick = async () => {
-    for (const [mode, p] of Object.entries(PROFILES)) {
-      if (p.url === FOSSGIS[mode]) continue;
-      try {
-        await upstream(`${p.url}/route/v1/${p.path}/${WARM_POINT}?overview=false`);
-      } catch {
-        // A router that is down is the watchdog's problem, not the warmer's.
+    // A cold sweep takes seconds; never start a second one on top of it.
+    if (warming) return;
+    warming = true;
+    try {
+      for (const [mode, p] of Object.entries(PROFILES)) {
+        if (p.url === FOSSGIS[mode]) continue;
+        for (const pair of WARM_ROUTES) {
+          try {
+            await upstream(`${p.url}/route/v1/${p.path}/${pair}?overview=false`);
+          } catch {
+            // A router that is down is the watchdog's problem, not the warmer's.
+          }
+        }
       }
+    } finally {
+      warming = false;
     }
   };
   warmTimer = setInterval(tick, WARM_EVERY_MS);

@@ -231,10 +231,17 @@ mandatory on this box, since the three graphs total ~3.3 GB and loading
 them into anonymous memory thrashes forever. To rebuild after a fresh
 region download, rerun the script; it skips whatever is already built.
 
-`OSRM_WARM_MS` (default 120000) and `OSRM_WARM_POINT` control the warmer that
+`OSRM_WARM_MS` (default 120000) and `OSRM_WARM_ROUTES` control the warmer that
 keeps the mmap'd graphs in the page cache; it only runs when a self-hosted
 `OSRM_*_URL` is configured. Without it the first route after a quiet spell takes
 seconds instead of milliseconds on this size of machine.
+
+`OSRM_WARM_ROUTES` is a `|`-separated list of `lng,lat;lng,lat` corridors, and
+it must **span the city**, not sample it: mmap caches only the pages a query
+reads, so one warmed corridor leaves an unrelated route across the same city
+just as cold (measured: 2.6 s car, 5.5 s foot). Six corridors across Almaty cost
+5.2 s once and then answered new routes in 14-94 ms. Deploying in another city
+means replacing this list.
 
 > **Run it attended.** It competes with the live service for the whole
 > build. Nothing breaks without it; the FOSSGIS fallback keeps serving in
