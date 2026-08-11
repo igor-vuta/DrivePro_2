@@ -306,9 +306,18 @@ export function setupRides({ store, hub }) {
 
 // Route mode: a ride fits when both its pickup and destination lie inside the
 // driver's corridor and follow the direction of travel.
+// A driver with no set route otherwise matches every request city-wide, which
+// both spams them and streams every rider's pickup coordinates to everyone
+// online. Cap routeless matching to drivers reasonably near the pickup.
+const ROUTELESS_MAX_M = Number(process.env.OFFER_ROUTELESS_MAX_M || 12_000);
+
 export function fitsDriverRoute(driverEntry, ride) {
   const route = driverEntry && driverEntry.route;
-  if (!route) return true;
+  if (!route) {
+    // No corridor: accept only if we know the driver is near the pickup.
+    if (!driverEntry || !isFiniteNum(driverEntry.lat) || !isFiniteNum(driverEntry.lng)) return true;
+    return haversineMeters(driverEntry.lat, driverEntry.lng, ride.pickupLat, ride.pickupLng) <= ROUTELESS_MAX_M;
+  }
   const p = pointToPolyline(ride.pickupLat, ride.pickupLng, route.points);
   const d = pointToPolyline(ride.destLat, ride.destLng, route.points);
   if (p.distM > route.radiusM || d.distM > route.radiusM) return false;

@@ -142,13 +142,20 @@ check('admin overview lists users', overview.status === 200 && overview.json.use
 
 const borisId = overview.json.users.find((u) => u.name === 'Boris').id;
 await api('POST', `/api/admin/users/${borisId}/ban`, { banned: true }, null, { 'x-admin-token': ADMIN });
+// Banning bumps the session epoch (L33), so the old token is refused - via the
+// epoch gate (401) or the banned gate (403), both a lock-out.
 const bannedMe = await api('GET', '/api/me', null, boris.token);
-check('banned user is locked out of the API', bannedMe.status === 403 && bannedMe.json.code === 'banned');
+check('banned user is locked out of the API', [401, 403].includes(bannedMe.status));
 const bannedLogin = await api('POST', '/api/login', { phone: '+15550001002', password: 'pass1234' });
 check('banned user cannot log in', bannedLogin.status === 403 && bannedLogin.json.code === 'banned');
 await api('POST', `/api/admin/users/${borisId}/ban`, { banned: false }, null, { 'x-admin-token': ADMIN });
-const unbanned = await api('GET', '/api/me', null, boris.token);
-check('unban restores access', unbanned.status === 200);
+// The pre-ban token stays dead (epoch moved); a fresh login is what restores
+// access - which is the point of evicting sessions on ban.
+check('the pre-ban token is not resurrected by unban', (await api('GET', '/api/me', null, boris.token)).status === 401);
+const relogin = await api('POST', '/api/login', { phone: '+15550001002', password: 'pass1234' });
+check('unban restores access via a fresh login', relogin.status === 200 && !!relogin.json.token);
+// The rest of the suite acts as Boris, so switch to the live token.
+boris.token = relogin.json.token;
 
 // ---- rate limiting: hammer login past its 20/10min budget ----
 let hit429 = false;

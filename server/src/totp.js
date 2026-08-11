@@ -72,22 +72,30 @@ export function totp(secretB32, atMs = Date.now(), digits = TOTP_DIGITS) {
   return hotp(base32Decode(secretB32), Math.floor(atMs / 1000 / TOTP_STEP_S), digits);
 }
 
-// True if `code` is valid now or within TOTP_WINDOW steps either side.
+// The step `code` actually matches within TOTP_WINDOW, or null. Returning the
+// matched step (not the wall-clock step) is what makes single-use burning
+// correct: because verification accepts a code one step either side, a code
+// from step N stays valid at wall-step N+1, so burning the wall step would
+// leave that code replayable. Callers store the matched step instead.
 // Comparison is constant-time so a wrong code leaks nothing by timing.
-export function verifyTotp(secretB32, code, atMs = Date.now(), window = TOTP_WINDOW) {
+export function matchTotpStep(secretB32, code, atMs = Date.now(), window = TOTP_WINDOW) {
   const clean = String(code || '').replace(/\D/g, '');
-  if (clean.length !== TOTP_DIGITS) return false;
+  if (clean.length !== TOTP_DIGITS) return null;
   const key = base32Decode(secretB32);
-  if (!key.length) return false;
+  if (!key.length) return null;
   const step = Math.floor(atMs / 1000 / TOTP_STEP_S);
   const given = Buffer.from(clean);
-  let ok = false;
+  let matched = null;
   for (let i = -window; i <= window; i++) {
     const expected = Buffer.from(hotp(key, step + i));
-    // Keep going after a match so the loop always costs the same.
-    if (expected.length === given.length && crypto.timingSafeEqual(expected, given)) ok = true;
+    // Keep scanning after a match so the loop always costs the same.
+    if (expected.length === given.length && crypto.timingSafeEqual(expected, given)) matched = step + i;
   }
-  return ok;
+  return matched;
+}
+
+export function verifyTotp(secretB32, code, atMs = Date.now(), window = TOTP_WINDOW) {
+  return matchTotpStep(secretB32, code, atMs, window) != null;
 }
 
 // The string an authenticator app expects, per Key Uri Format. Shown as text

@@ -1,5 +1,15 @@
+import crypto from 'node:crypto';
 import { isFiniteNum, isLat, isLng } from './util.js';
 import { publicUser, rideCounterpart } from './views.js';
+
+// Nearby-driver dots on the map must not carry the driver's real user id -
+// that id resolves through the public directory to their name, car and plate,
+// which turns "cars near me" into live de-anonymised tracking. The client only
+// needs a value stable enough to keep a marker attached to a car between
+// pushes, so emit an opaque per-process hash instead.
+const MAP_ID_SALT = crypto.randomBytes(16);
+const opaqueDriverId = (id) =>
+  crypto.createHash('sha256').update(MAP_ID_SALT).update(String(id)).digest('base64url').slice(0, 12);
 
 // Realtime hub: tracks connected users, online (active) drivers and routes
 // websocket messages. Ride matching events plug in here in later milestones.
@@ -9,6 +19,8 @@ const DRIVER_GRACE_MS = 60_000; // keep a driver online this long after disconne
 const MAP_PUSH_MS = 3_000; // how often nearby-driver positions are pushed to watching riders
 const MAP_RADIUS_M = 15_000;
 const MAP_MAX_DRIVERS = 20;
+const MAX_CONNS_PER_USER = 8; // one person across a few tabs/devices, not a flood
+const MAP_WATCH_MIN_MS = 1_000; // ignore map:watch repeated faster than this per user
 
 export class Hub {
   constructor(store) {
@@ -35,7 +47,19 @@ export class Hub {
       set = new Set();
       this.conns.set(user.id, set);
     }
+    // Cap connections per user: a single account cannot open unbounded sockets
+    // (each holds a ~1 MiB parse buffer). Over the cap, drop the oldest.
+    while (set.size >= MAX_CONNS_PER_USER) {
+      const oldest = set.values().next().value;
+      set.delete(oldest);
+      try {
+        oldest.terminate();
+      } catch {}
+    }
     set.add(conn);
+    // The token epoch this socket was authorised at. If the stored epoch moves
+    // (password reset) the socket is stale and gets evicted on its next frame.
+    const attachedEpoch = user.tokenEpoch || 0;
 
     // Reconnected driver: cancel pending drop.
     const t = this.driverDropTimers.get(user.id);
@@ -61,10 +85,25 @@ export class Hub {
         conn.send({ type: 'error', message: `unknown message type: ${msg.type}`, reqId: msg.reqId });
         return;
       }
+      // Re-read the account on every frame: a ban or a password reset that
+      // happened after this socket opened must take effect immediately, not
+      // only at the next upgrade. The handlers still receive the fresh object.
+      const fresh = this.store.getUser(user.id);
+      if (!fresh || fresh.banned || (fresh.tokenEpoch || 0) !== attachedEpoch) {
+        try {
+          conn.send({ type: 'session_revoked' });
+        } catch {}
+        conn.terminate();
+        return;
+      }
       try {
-        handler(user, msg, conn);
+        handler(fresh, msg, conn);
       } catch (e) {
-        conn.send({ type: 'error', message: e.message || 'internal error', reqId: msg.reqId });
+        // Never forward a raw internal message; only tagged app errors carry
+        // one deliberately (via conn.send in the handler), and those don't
+        // reach here. Anything caught here is unexpected.
+        console.error('[ws] handler error:', e && e.message);
+        conn.send({ type: 'error', message: 'internal error', reqId: msg.reqId });
       }
     };
 
@@ -110,6 +149,23 @@ export class Hub {
     if (!set) return false;
     for (const c of set) c.send(msg);
     return set.size > 0;
+  }
+
+  // Force every live socket for a user to close - used when they are banned or
+  // their sessions are revoked by a password reset, so revocation is immediate
+  // rather than only enforced at the next upgrade.
+  evictUser(userId) {
+    const set = this.conns.get(userId);
+    if (!set) return;
+    for (const c of [...set]) {
+      try {
+        c.send({ type: 'session_revoked' });
+        c.terminate();
+      } catch {}
+    }
+    this.conns.delete(userId);
+    this.mapWatchers.delete(userId);
+    this.drivers.delete(userId);
   }
 
   broadcast(msg) {
@@ -193,10 +249,19 @@ export class Hub {
       if (this.onDriverLocation) this.onDriverLocation(user.id, msg.lat, msg.lng);
     });
 
-    // Riders watching the map get periodic nearby-driver positions.
+    // Riders watching the map get periodic nearby-driver positions. Throttled
+    // so a client cannot sweep a coordinate grid every frame to harvest driver
+    // positions across the whole city.
     this.on('map:watch', (user, msg) => {
       if (!isFiniteNum(msg.lat) || !isFiniteNum(msg.lng)) return;
-      this.mapWatchers.set(user.id, { lat: msg.lat, lng: msg.lng });
+      const prev = this.mapWatchers.get(user.id);
+      const now = Date.now();
+      if (prev && now - prev.at < MAP_WATCH_MIN_MS) {
+        prev.lat = msg.lat;
+        prev.lng = msg.lng;
+        return; // position updated, but no immediate push
+      }
+      this.mapWatchers.set(user.id, { lat: msg.lat, lng: msg.lng, at: now });
       this._pushMapDriversTo(user.id);
     });
 
@@ -234,7 +299,7 @@ export class Hub {
       const dx = (loc.lat - watch.lat) * 111_000;
       const dy = (loc.lng - watch.lng) * 111_000 * Math.cos((watch.lat * Math.PI) / 180);
       if (dx * dx + dy * dy > MAP_RADIUS_M * MAP_RADIUS_M) continue;
-      list.push({ id: driverId, lat: loc.lat, lng: loc.lng });
+      list.push({ id: opaqueDriverId(driverId), lat: loc.lat, lng: loc.lng });
       if (list.length >= MAP_MAX_DRIVERS) break;
     }
     this.sendTo(userId, { type: 'map:drivers', drivers: list });

@@ -11,7 +11,7 @@ import { vapidPublicKey } from './push.js';
 import {
   telegramConfigured, telegramBotUsername, createLinkRequest, readLinkRequest, deepLink,
 } from './telegram.js';
-import { generateSecret, verifyTotp, otpauthUrl, TOTP_STEP_S } from './totp.js';
+import { generateSecret, verifyTotp, matchTotpStep, otpauthUrl, TOTP_STEP_S } from './totp.js';
 import {
   newChallenge, registrationOptions, assertionOptions, verifyRegistration, verifyAssertion, rpId,
 } from './webauthn.js';
@@ -20,22 +20,47 @@ const MAX_AVATAR_CHARS = 400_000; // ~300 KB of base64 image data
 const OTP_MAX_ATTEMPTS = 5;
 const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || '').trim();
 
-// Tiny in-memory per-IP rate limiter for the auth surface.
+// X-Forwarded-For is set by the client, so it can only be trusted from a
+// proxy we control. Caddy - the sole front door in prod - is the loopback,
+// so by default the client key is the socket peer, and XFF's LAST hop (the
+// address Caddy saw) is used only when the peer is a trusted proxy. Without
+// this, any client rotates the header to get a fresh bucket every request and
+// the whole rate limiter is a no-op.
+const TRUSTED_PROXIES = new Set(
+  (process.env.TRUSTED_PROXIES || '127.0.0.1,::1,::ffff:127.0.0.1').split(',').map((s) => s.trim()).filter(Boolean)
+);
+function clientIp(req) {
+  const peer = (req.socket && req.socket.remoteAddress) || '?';
+  if (TRUSTED_PROXIES.has(peer)) {
+    const fwd = String(req.headers['x-forwarded-for'] || '').split(',').map((s) => s.trim()).filter(Boolean);
+    // The last hop is the address the trusted proxy actually connected from;
+    // earlier entries are attacker-appendable.
+    if (fwd.length) return fwd[fwd.length - 1];
+  }
+  return peer;
+}
+
+// Tiny in-memory per-IP rate limiter for the auth surface. Hard-capped so a
+// flood of distinct keys evicts oldest rather than growing without bound.
 const rlBuckets = new Map(); // key -> number[] (timestamps)
+const RL_MAX_KEYS = 20_000;
 function rateLimit(req, name, max, windowMs = 10 * 60 * 1000) {
-  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  const ip = fwd || (req.socket && req.socket.remoteAddress) || '?';
-  const key = `${name}:${ip}`;
+  const key = `${name}:${clientIp(req)}`;
   const nowMs = Date.now();
   const arr = (rlBuckets.get(key) || []).filter((ts) => nowMs - ts < windowMs);
   if (arr.length >= max) {
+    // Re-insert so this key counts as most-recently-used for eviction.
+    rlBuckets.delete(key);
     rlBuckets.set(key, arr);
     throw httpError(429, 'Too many attempts. Try again later.', 'rate_limited');
   }
   arr.push(nowMs);
+  rlBuckets.delete(key);
   rlBuckets.set(key, arr);
-  if (rlBuckets.size > 5000) {
-    for (const [k, v] of rlBuckets) if (!v.length || nowMs - v[v.length - 1] > windowMs) rlBuckets.delete(k);
+  // Map preserves insertion order, so the first key is the least-recently
+  // touched - evict it once over the ceiling, regardless of staleness.
+  while (rlBuckets.size > RL_MAX_KEYS) {
+    rlBuckets.delete(rlBuckets.keys().next().value);
   }
 }
 
@@ -273,13 +298,26 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const body = await readJson(req);
     const phone = normPhone(body.phone);
     const user = phone ? store.findUserByPhone(phone) : null;
-    if (!user) throw httpError(404, 'No account with this phone number.', 'no_account');
-    if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
-    if (user.otpSentAt && Date.now() - user.otpSentAt < OTP_RESEND_COOLDOWN_MS) {
-      throw httpError(429, 'Wait a moment before requesting another code.', 'resend_too_soon');
+    // Uniform response whether or not the number is registered: an attacker
+    // must not be able to enumerate accounts here, nor pump SMS at arbitrary
+    // real numbers by diffing the reply. A code is only actually sent to a
+    // real, unbanned account that is off cooldown.
+    let code = null;
+    if (user && !user.banned && !(user.otpSentAt && Date.now() - user.otpSentAt < OTP_RESEND_COOLDOWN_MS)) {
+      try {
+        code = await issueOtp(user);
+      } catch (e) {
+        // Delivery failure is surfaced (the caller needs to know), but the
+        // not-registered case stays indistinguishable from a delivered one.
+        if (user) throw e;
+      }
     }
-    const code = await issueOtp(user);
-    verificationResponse(res, 200, user, code);
+    sendJson(res, 200, {
+      needsVerification: true,
+      phone: phone || String(body.phone || ''),
+      telegram: telegramReady(),
+      ...(OTP_ECHO && code ? { devCode: code } : {}),
+    });
   });
 
   route('POST', '/api/reset/confirm', async (req, res) => {
@@ -313,6 +351,9 @@ export function createApi({ store, secret, hub, serveStatic }) {
       tokenEpoch: (user.tokenEpoch || 0) + 1,
     });
     store.removeAllPasskeys(user.id);
+    // The old sessions are already invalid by epoch; close their live sockets
+    // now rather than waiting for the next frame.
+    if (hub) hub.evictUser(user.id);
     sendJson(res, 200, sessionPayload(store.getUser(user.id)));
   });
 
@@ -368,6 +409,10 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const t = Date.now();
     for (const [k, v] of challenges) if (t - v.at > CHALLENGE_TTL_MS) challenges.delete(k);
   };
+  // Also sweep on a timer, so unfinished registrations do not accumulate
+  // between the take() calls that would otherwise be the only sweep trigger.
+  const challengeSweep = setInterval(sweepChallenges, CHALLENGE_TTL_MS);
+  if (challengeSweep.unref) challengeSweep.unref();
   const takeChallenge = (challenge) => {
     sweepChallenges();
     const rec = challenges.get(challenge);
@@ -379,6 +424,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
 
   route('POST', '/api/passkey/register/options', async (req, res) => {
     const user = authUser(req);
+    rateLimit(req, 'passkey_reg', 30);
     const challenge = newChallenge();
     challenges.set(challenge, { userId: user.id, phone: user.phone, at: Date.now() });
     sendJson(res, 200, registrationOptions({ user, challenge }));
@@ -488,10 +534,10 @@ export function createApi({ store, secret, hub, serveStatic }) {
   // without remembering the last one used, a code observed over someone's
   // shoulder would work again for up to 30 seconds.
   const consumeTotp = (user, code) => {
-    if (!user.totpSecret || !verifyTotp(user.totpSecret, code)) {
-      throw httpError(401, 'Wrong authenticator code.', 'totp_invalid');
-    }
-    const step = Math.floor(Date.now() / 1000 / TOTP_STEP_S);
+    const step = user.totpSecret ? matchTotpStep(user.totpSecret, code) : null;
+    if (step == null) throw httpError(401, 'Wrong authenticator code.', 'totp_invalid');
+    // Burn the step the code actually matched, so a code observed once cannot
+    // be replayed during the window it stays valid.
     if (user.totpLastStep != null && step <= user.totpLastStep) {
       throw httpError(401, 'That code has already been used.', 'totp_reused');
     }
@@ -678,15 +724,28 @@ export function createApi({ store, secret, hub, serveStatic }) {
 
   route('POST', '/api/push/subscribe', async (req, res) => {
     const user = authUser(req);
+    rateLimit(req, 'push_sub', 60, 60 * 1000);
     const body = await readJson(req);
-    if (!store.savePushSub(user.id, body.subscription)) throw httpError(400, 'invalid subscription');
+    const sub = body.subscription;
+    // A subscription's endpoint is its identity, so refuse to overwrite one
+    // that belongs to a different account - otherwise submitting a known
+    // endpoint would steal it away from its owner.
+    const endpoint = sub && typeof sub.endpoint === 'string' ? sub.endpoint : '';
+    const existing = endpoint ? store.pushSubOwner(endpoint) : null;
+    if (existing && existing !== user.id) throw httpError(409, 'That subscription belongs to another account.', 'sub_conflict');
+    // Cap subscriptions per user so fabricated endpoints cannot grow the table
+    // without bound.
+    if (!existing && store.pushSubsFor(user.id).length >= 20) throw httpError(400, 'Too many devices - remove one first.', 'too_many_subs');
+    if (!store.savePushSub(user.id, sub)) throw httpError(400, 'invalid subscription');
     sendJson(res, 200, { ok: true });
   });
 
   route('POST', '/api/push/unsubscribe', async (req, res) => {
-    authUser(req);
+    const user = authUser(req);
     const body = await readJson(req);
-    if (typeof body.endpoint === 'string') store.dropPushSub(body.endpoint);
+    // Scope the delete to the caller so nobody can drop another user's
+    // subscription by naming its endpoint.
+    if (typeof body.endpoint === 'string') store.dropPushSubForUser(body.endpoint, user.id);
     sendJson(res, 200, { ok: true });
   });
 
@@ -783,8 +842,13 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const body = await readJson(req);
     const user = store.getUser(params.id);
     if (!user) throw httpError(404, 'user not found');
-    store.updateUser(user.id, { banned: !!body.banned });
-    sendJson(res, 200, { ok: true, banned: !!body.banned });
+    const banned = !!body.banned;
+    // Banning bumps the session epoch and force-closes live sockets, so the
+    // ban takes effect immediately instead of only when the user's current
+    // JWT expires or they reconnect.
+    store.updateUser(user.id, { banned, tokenEpoch: (user.tokenEpoch || 0) + 1 });
+    if (banned && hub) hub.evictUser(user.id);
+    sendJson(res, 200, { ok: true, banned });
   });
 
   // Weekly recap: your last 7 days plus the whole movement's totals.
@@ -1047,6 +1111,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
 
   route('GET', '/api/geo/reverse', async (req, res, params, url) => {
     authUser(req);
+    rateLimit(req, 'geo', 120, 60 * 1000);
     const lat = Number(url.searchParams.get('lat'));
     const lng = Number(url.searchParams.get('lng'));
     sendJson(res, 200, await reverseGeocode(lat, lng, url.searchParams.get('lang')));
@@ -1054,6 +1119,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
 
   route('GET', '/api/geo/search', async (req, res, params, url) => {
     authUser(req);
+    rateLimit(req, 'geo', 120, 60 * 1000);
     const q = url.searchParams.get('q');
     const lat = Number(url.searchParams.get('lat'));
     const lng = Number(url.searchParams.get('lng'));
@@ -1062,6 +1128,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
 
   route('GET', '/api/geo/route', async (req, res, params, url) => {
     authUser(req);
+    rateLimit(req, 'geo', 120, 60 * 1000);
     const fromLat = Number(url.searchParams.get('fromLat'));
     const fromLng = Number(url.searchParams.get('fromLng'));
     const toLat = Number(url.searchParams.get('toLat'));
@@ -1121,7 +1188,11 @@ export function createApi({ store, secret, hub, serveStatic }) {
       } catch (e) {
         const status = e.status || 500;
         if (status === 500) console.error('API error:', e);
-        sendJson(res, status, { error: e.message || 'internal error', ...(e.code ? { code: e.code } : {}) });
+        // Only errors we raised deliberately (httpError sets .status) carry a
+        // client-safe message; anything else is an unexpected internal error
+        // and must not have its raw message echoed to the caller.
+        const message = e.status ? e.message : 'internal error';
+        sendJson(res, status, { error: message || 'internal error', ...(e.code ? { code: e.code } : {}) });
       }
       return;
     }

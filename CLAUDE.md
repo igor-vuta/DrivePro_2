@@ -87,6 +87,9 @@ phone proven by Telegram's contact sharing; also delivers codes once linked) ·
 L27 TOTP (`server/src/totp.js`, RFC 4226/6238, zero deps; optional second
 factor — the verified phone stays identity and recovery, and a password reset
 over it clears the secret) · L28 passkeys (`server/src/webauthn.js`, own CBOR
-+ COSE + signature verification, zero deps; `rpId` from `PUBLIC_ORIGIN`).
++ COSE + signature verification, zero deps; `rpId` from `PUBLIC_ORIGIN`) · L33 security audit fixes (XFF trusted only from
+`TRUSTED_PROXIES`; ban/reset evict live sockets + bump `token_epoch`; per-frame
+WS re-auth; opaque map-driver ids; push-sub ownership; TOTP matched-step burn;
+geo/push/passkey rate limits; sanitized 500/WS errors; uniform reset/request).
 
 Remaining work and its running order live in `ROADMAP.md`.

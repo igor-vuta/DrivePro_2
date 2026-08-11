@@ -101,11 +101,16 @@ check('login reports wrong credentials, never the new rules', loginBad.status ==
 
 // ------------------------------------------------------------ reset: guard ---
 
+// Reset request is deliberately uniform: an unknown number returns the same
+// 200 as a real one, so it can neither be used to enumerate accounts nor to
+// pump SMS at arbitrary numbers (L33). No code is echoed for an unknown one.
 const noAcct = await api('POST', '/api/reset/request', { phone: '+77019998888' });
-check('reset for an unknown phone 404s', noAcct.status === 404 && noAcct.json.code === 'no_account');
+check('reset for an unknown phone looks identical (200, no code)', noAcct.status === 200 && !noAcct.json.devCode, JSON.stringify(noAcct.json));
 
+// A rapid repeat within the cooldown also returns the uniform 200, but sends
+// no second code (would-be enumeration of the cooldown state is closed too).
 const tooSoon = await api('POST', '/api/reset/request', { phone: PHONE });
-check('reset obeys the resend cooldown', tooSoon.status === 429 && tooSoon.json.code === 'resend_too_soon', JSON.stringify(tooSoon.json));
+check('a repeat within the cooldown still returns 200 and sends nothing', tooSoon.status === 200 && !tooSoon.json.devCode, JSON.stringify(tooSoon.json));
 
 // ----------------------------------------------------- reset: the happy path ---
 

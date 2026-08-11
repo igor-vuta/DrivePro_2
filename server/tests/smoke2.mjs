@@ -194,10 +194,18 @@ const rws = await connectWs(rider.token);
 
   rws.send({ type: 'map:watch', lat: 51.5, lng: -0.1 });
   const feed = await rws.nextOf('map:drivers');
-  check('nearby driver appears on map feed', feed.drivers.length === 1 && feed.drivers[0].id === driver.user.id, JSON.stringify(feed));
+  // The dot must NOT carry the real driver user id (that would resolve to
+  // name/car/plate via the public directory - L33); it is an opaque token.
+  check(
+    'nearby driver appears on map feed with an opaque id',
+    feed.drivers.length === 1 && feed.drivers[0].id !== driver.user.id && typeof feed.drivers[0].id === 'string' && feed.drivers[0].id.length <= 16,
+    JSON.stringify(feed)
+  );
 
+  // A far watch is throttled from an immediate push, so wait for the periodic
+  // one (every ~3s) to arrive with the updated, empty result.
   rws.send({ type: 'map:watch', lat: 40.0, lng: 30.0 }); // far away
-  const feed2 = await rws.nextOf('map:drivers');
+  const feed2 = await rws.nextOf('map:drivers', 8000);
   check('far-away watcher sees no drivers', feed2.drivers.length === 0);
   rws.send({ type: 'map:unwatch' });
 }

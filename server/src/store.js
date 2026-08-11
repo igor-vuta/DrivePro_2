@@ -518,6 +518,13 @@ class SqliteBackend {
   dropPushSub(endpoint) {
     this.db.prepare('DELETE FROM push_subs WHERE endpoint = ?').run(endpoint);
   }
+  dropPushSubForUser(endpoint, userId) {
+    this.db.prepare('DELETE FROM push_subs WHERE endpoint = ? AND user_id = ?').run(endpoint, userId);
+  }
+  pushSubOwner(endpoint) {
+    const row = this.db.prepare('SELECT user_id FROM push_subs WHERE endpoint = ?').get(endpoint);
+    return row ? row.user_id : null;
+  }
   pushSubsByUser(userId) {
     return this.db
       .prepare('SELECT sub_json FROM push_subs WHERE user_id = ?')
@@ -1017,6 +1024,14 @@ class JsonBackend {
     this.data.pushSubs = this._pushsubs().filter((x) => x.endpoint !== endpoint);
     this.save();
   }
+  dropPushSubForUser(endpoint, userId) {
+    this.data.pushSubs = this._pushsubs().filter((x) => !(x.endpoint === endpoint && x.userId === userId));
+    this.save();
+  }
+  pushSubOwner(endpoint) {
+    const row = this._pushsubs().find((x) => x.endpoint === endpoint);
+    return row ? row.userId : null;
+  }
   pushSubsByUser(userId) {
     return this._pushsubs()
       .filter((x) => x.userId === userId)
@@ -1306,6 +1321,12 @@ export class Store {
   }
   dropPushSub(endpoint) {
     this.b.dropPushSub(endpoint);
+  }
+  dropPushSubForUser(endpoint, userId) {
+    this.b.dropPushSubForUser(endpoint, userId);
+  }
+  pushSubOwner(endpoint) {
+    return this.b.pushSubOwner(endpoint);
   }
   pushSubsFor(userId) {
     return this.b.pushSubsByUser(userId);
