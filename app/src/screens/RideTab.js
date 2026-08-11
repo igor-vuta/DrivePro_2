@@ -119,6 +119,9 @@ export default function RideTab() {
   const [takeAlong, setTakeAlong] = useState(false); // car mode: pick up riders en route
   const [carModal, setCarModal] = useState(false); // one-time car details form
   const [offer, setOffer] = useState(null); // ride offer received while driving
+  const [pickMeUp, setPickMeUp] = useState(false); // walking/cycling: accept a lift en route
+  const [liftOffer, setLiftOffer] = useState(null); // a driver has offered this walker a lift
+  const [nearWalkers, setNearWalkers] = useState([]); // driving: pickup-seeking people on my corridor
   const [center, setCenter] = useState(FALLBACK_CENTER);
   const [trails, setTrails] = useState([]);
   const [address, setAddress] = useState('');
@@ -151,6 +154,7 @@ export default function RideTab() {
   const navOffCount = useRef(0); // consecutive off-route fixes before rerouting
   const wakeLockRef = useRef(null); // keeps the screen on while navigating (web)
   const driverOnRef = useRef(false); // online as a driver during this navigation
+  const walkOnRef = useRef(false); // available for pickup during this navigation
 
   // Scheduled rides (L14): list + refresh after planner/list mutations.
   const loadSchedules = async () => {
@@ -219,9 +223,15 @@ export default function RideTab() {
     const offGone = wsClient.on('ride:offer_gone', (msg) => {
       setOffer((cur) => (cur && cur.ride && cur.ride.id === msg.rideId ? null : cur));
     });
+    // Driving: who along my corridor would like a lift (fuzzed until agreed).
+    const offNear = wsClient.on('walk:nearby', (msg) => setNearWalkers(msg.walkers || []));
+    // Walking: a driver has offered me one.
+    const offLift = wsClient.on('walk:offer', (msg) => setLiftOffer(msg));
     return () => {
       offOffer();
       offGone();
+      offNear();
+      offLift();
     };
   }, []);
 
@@ -488,6 +498,19 @@ export default function RideTab() {
           },
         });
       }
+      // Walking or cycling and open to a lift: announce it with where we are
+      // and where we are going - both are what corridor matching needs.
+      if (mode !== 'car' && pickMeUp) {
+        walkOnRef.current = wsClient.send({
+          type: 'walk:available',
+          lat: from.lat,
+          lng: from.lng,
+          destLat: dest.lat,
+          destLng: dest.lng,
+          destAddress: dest.address || '',
+          mode,
+        });
+      }
       beginNavWatch();
       // Navigation with the screen off is no navigation; best-effort only.
       try {
@@ -527,6 +550,7 @@ export default function RideTab() {
     myLocRef.current = c;
     setNavPos(c);
     if (driverOnRef.current) wsClient.send({ type: 'driver:location', lat: c.lat, lng: c.lng });
+    if (walkOnRef.current) wsClient.send({ type: 'walk:location', lat: c.lat, lng: c.lng });
     const model = navModelRef.current;
     if (!model) return;
     const p = navProgress(model, c);
@@ -577,7 +601,13 @@ export default function RideTab() {
       wsClient.send({ type: 'driver:deactivate' });
       driverOnRef.current = false;
     }
+    if (walkOnRef.current) {
+      wsClient.send({ type: 'walk:unavailable' });
+      walkOnRef.current = false;
+    }
     setOffer(null);
+    setLiftOffer(null);
+    setNearWalkers([]);
   };
 
   const endNavWatch = () => {
@@ -613,6 +643,39 @@ export default function RideTab() {
     },
     []
   );
+
+  // Walking side: take the lift, or turn it down.
+  const acceptLift = async () => {
+    if (!liftOffer) return;
+    const offerId = liftOffer.offerId;
+    const meet = liftOffer.meet;
+    setLiftOffer(null);
+    walkOnRef.current = false;
+    // A driver-proposed meeting point is only coordinates; name it, so the
+    // ride card says a street rather than nothing at all.
+    let pickupAddress = address || '';
+    if (meet) {
+      pickupAddress = `${meet.lat.toFixed(5)}, ${meet.lng.toFixed(5)}`;
+      try {
+        const r = await api('GET', `/api/geo/reverse?lat=${meet.lat}&lng=${meet.lng}&lang=${getLang()}`, null, token);
+        if (r && r.address) pickupAddress = r.address;
+      } catch (e) {}
+    }
+    wsClient.send({ type: 'walk:accept', offerId, pickupAddress });
+  };
+  const declineLift = () => {
+    if (liftOffer) wsClient.send({ type: 'walk:decline', offerId: liftOffer.offerId });
+    setLiftOffer(null);
+  };
+  // Driving side: offer someone a lift, optionally meeting them at the map
+  // centre if that is easier than the kerb they happen to be standing on.
+  const offerLift = (w, atCentre) => {
+    wsClient.send({
+      type: 'walk:offer',
+      walkerId: w.id,
+      ...(atCentre ? { meetLat: centerRef.current.lat, meetLng: centerRef.current.lng } : {}),
+    });
+  };
 
   const acceptOffer = () => {
     if (!offer || !offer.ride) return;
@@ -724,8 +787,11 @@ export default function RideTab() {
     if (dest && step !== 'landing' && step !== 'dest') list.push({ id: 'dest', lat: dest.lat, lng: dest.lng, kind: 'dest' });
     // While navigating, the moving dot is the user themselves.
     if (navPos && step === 'nav') list.push({ id: 'me', lat: navPos.lat, lng: navPos.lng, kind: mode === 'car' ? 'car' : 'pickup' });
+    // Driving with the toggle on: everyone along the corridor who would like a
+    // lift, at their fuzzed position until one of them is actually picked up.
+    if (step === 'nav') for (const w of nearWalkers) list.push({ id: `w-${w.id}`, lat: w.lat, lng: w.lng, kind: 'pickup' });
     return list;
-  }, [cars, pickup, dest, origin, step, navPos, mode]);
+  }, [cars, pickup, dest, origin, step, navPos, mode, nearWalkers]);
 
   const polyline =
     step === 'nav'
@@ -842,6 +908,63 @@ export default function RideTab() {
             </Card>
           </View>
         ) : null}
+        {step === 'nav' && liftOffer ? (
+          <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
+            <Card style={{ marginBottom: 0 }}>
+              <Row style={{ marginBottom: 6 }}>
+                <Avatar user={liftOffer.driver} size={38} style={{ marginRight: 8 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontWeight: '800' }} numberOfLines={1}>
+                    🚗 {t('ride.liftOffer')} · {liftOffer.driver ? liftOffer.driver.name : ''}
+                  </Text>
+                  <Text style={{ color: colors.sub, fontSize: 12 }} numberOfLines={1}>
+                    {liftOffer.driver && liftOffer.driver.car
+                      ? `${liftOffer.driver.car.color} ${liftOffer.driver.car.make} ${liftOffer.driver.car.model} · ${liftOffer.driver.car.plate}`
+                      : ''}
+                  </Text>
+                  {liftOffer.meet ? (
+                    <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>
+                      {t('ride.liftMeet', { dist: fmtDistance(liftOffer.meet.distM) })}
+                    </Text>
+                  ) : null}
+                </View>
+              </Row>
+              <Row>
+                <Button kind="ghost" title={t('ride.liftDecline')} onPress={declineLift} style={{ flex: 1, marginRight: 8, marginTop: 0, height: 44 }} />
+                <Button title={t('ride.liftAccept')} onPress={acceptLift} style={{ flex: 2, marginTop: 0, height: 44 }} />
+              </Row>
+            </Card>
+          </View>
+        ) : null}
+        {step === 'nav' && driverOnRef.current && !offer && nearWalkers.length ? (
+          <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
+            <Card style={{ marginBottom: 0, paddingVertical: 10 }}>
+              <Text style={{ color: colors.sub, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                {t('ride.riders')}
+              </Text>
+              {nearWalkers.slice(0, 3).map((w) => (
+                <Row key={w.id} style={{ marginBottom: 6 }}>
+                  <Text style={{ fontSize: 16, marginRight: 6 }}>{w.mode === 'bike' ? '🚲' : '🚶'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }} numberOfLines={1}>
+                      {w.person ? w.person.name : ''} · {fmtDistance(w.aheadM)}
+                    </Text>
+                    <Text style={{ color: colors.sub, fontSize: 11 }} numberOfLines={1}>
+                      → {w.destAddress}
+                    </Text>
+                  </View>
+                  <Button
+                    kind={w.offered ? 'ghost' : 'primary'}
+                    title={w.offered ? t('ride.offered') : t('ride.offerLift')}
+                    onPress={() => offerLift(w, false)}
+                    disabled={w.offered}
+                    style={{ height: 38, paddingHorizontal: 12, marginTop: 0 }}
+                  />
+                </Row>
+              ))}
+            </Card>
+          </View>
+        ) : null}
         {step === 'nav' && offer && offer.ride ? (
           <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
             <Card style={{ marginBottom: 0 }}>
@@ -912,6 +1035,8 @@ export default function RideTab() {
                       ? t('nav.waitGps')
                       : takeAlong && mode === 'car'
                       ? `🟢 ${t('ride.takeAlongOn')}`
+                      : pickMeUp && mode !== 'car'
+                      ? `🟢 ${t('ride.pickMeUpOn')}`
                       : dest
                       ? dest.address
                       : ''}
@@ -955,36 +1080,29 @@ export default function RideTab() {
                 />
               ))}
             </Row>
+            {/* Symmetric toggles: by car you offer the spare seats, on foot or
+                by bike you accept a lift. Same row, same place, either way. */}
             {mode === 'car' ? (
-              <Pressable
+              <Toggle
+                on={takeAlong}
+                icon="🚗"
+                label={t('ride.takeAlong')}
+                sub={t('ride.takeAlongOn')}
                 onPress={() => {
                   if (!takeAlong && !(me && me.isDriver)) setCarModal(true);
                   else setTakeAlong(!takeAlong);
                 }}
-                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, marginBottom: 2 }}
-              >
-                <View
-                  style={{
-                    width: 44,
-                    height: 26,
-                    borderRadius: 13,
-                    backgroundColor: takeAlong ? colors.primary : colors.surface,
-                    borderWidth: 1,
-                    borderColor: takeAlong ? colors.primary : colors.border,
-                    padding: 2,
-                    marginRight: 10,
-                  }}
-                >
-                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.card, alignSelf: takeAlong ? 'flex-end' : 'flex-start' }} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14 }}>🚗 {t('ride.takeAlong')}</Text>
-                  {takeAlong ? <Text style={{ color: colors.sub, fontSize: 12 }}>{t('ride.takeAlongOn')}</Text> : null}
-                </View>
-              </Pressable>
+              />
             ) : (
-              <Sub style={{ marginBottom: 8 }}>{originGuessed ? t('ride.fromCentre') : t('ride.soloHint')}</Sub>
+              <Toggle
+                on={pickMeUp}
+                icon="🖐"
+                label={t('ride.pickMeUp')}
+                sub={t('ride.pickMeUpOn')}
+                onPress={() => setPickMeUp(!pickMeUp)}
+              />
             )}
+            {originGuessed ? <Sub style={{ marginBottom: 4 }}>{t('ride.fromCentre')}</Sub> : null}
             <ErrorText>{error}</ErrorText>
             <Row>
               <Button title={`▶ ${t('nav.start')}`} onPress={startNav} style={{ flex: 1, marginRight: 8 }} />
@@ -1238,6 +1356,34 @@ function SchedulePlanner({ pickup, dest, comment, onCreated }) {
         <Button title={t('sched.create')} onPress={create} loading={busy} style={{ flex: 2 }} />
       </Row>
     </Card>
+  );
+}
+
+// The one toggle shape both roles use on the mode step.
+function Toggle({ on, icon, label, sub, onPress }) {
+  return (
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, marginBottom: 2 }}>
+      <View
+        style={{
+          width: 44,
+          height: 26,
+          borderRadius: 13,
+          backgroundColor: on ? colors.primary : colors.surface,
+          borderWidth: 1,
+          borderColor: on ? colors.primary : colors.border,
+          padding: 2,
+          marginRight: 10,
+        }}
+      >
+        <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.card, alignSelf: on ? 'flex-end' : 'flex-start' }} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14 }}>
+          {icon} {label}
+        </Text>
+        {on && sub ? <Text style={{ color: colors.sub, fontSize: 12 }}>{sub}</Text> : null}
+      </View>
+    </Pressable>
   );
 }
 

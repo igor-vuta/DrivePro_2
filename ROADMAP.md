@@ -27,6 +27,11 @@ Conventions live in CLAUDE.md.
 | ~~L32*~~ | ~~Map-first ride flow: destination → walk/cycle/drive → shared ride~~ | ✅ shipped |
 | ~~L34~~ | ~~Map-first shell: floating chrome, avatar sheet, no tab bar~~ | ✅ shipped |
 | ~~L35, L36~~ | ~~Adversarial review of both map-first commits: 10 confirmed defects fixed~~ | ✅ shipped — four reviewers, each finding refuted-or-confirmed before acting |
+| ~~L37–L39~~ | ~~Schedules + crew screens; OSRM self-hosted on the VM~~ | ✅ shipped |
+| ~~L40~~ | ~~Worldwide routing fallback past the regional graph~~ | ✅ shipped — reported live from Leicester |
+| ~~L41~~ | ~~Live navigation: Start, follow-along, turn banners, custom origin~~ | ✅ shipped |
+| ~~L42~~ | ~~One flow: driving is a toggle on your own route~~ | ✅ shipped |
+| ~~L43~~ | ~~Pickup along the way: symmetric toggles, corridor match, mutual confirm~~ | ✅ shipped |
 
 \* misnumbered — that commit lands *after* L33 and is really L34's
 predecessor. Left alone rather than rewriting pushed history; the next free
@@ -69,6 +74,27 @@ longer top-level. Pick a destination, then choose how: walk, cycle or drive
 (real per-profile OSRM routes, drawn as you switch), or ask for a shared
 ride — which drops into the unchanged pickup → confirm → request path.
 Everything else lives behind the floating avatar.
+
+**Navigation-first, carpooling opportunistic** (decided with Igor, 2026-08-11).
+Everyone routes A→B the same way and presses Start; getting a lift, or giving
+one, is a toggle on top of your own journey rather than a separate mode.
+- Walk/cycle: "🖐 Let a driver pick me up". Car: "🚗 Take passengers along the
+  way" (car details asked once, in place, keeping the route you were building).
+- Matching is **corridor only** — a driver sees someone when both where they
+  stand and where they are going lie along the driver's route, so a lift always
+  goes the way you were already heading.
+- **Approximate until agreed**: walkers appear at a stable ~100 m fuzz behind an
+  opaque handle; precise coordinates and contact details are exchanged only
+  after both sides confirm, at which point it is an ordinary ride and every
+  existing lifecycle/rating/trail behaviour applies.
+- Drivers may propose a meeting point, capped at 300 m from the walker.
+- "Ask for a shared ride" stays for requesting from a standstill.
+
+Deliberately **not** attempted (discussed 2026-08-11): live traffic and a
+2GIS-grade POI directory. Traffic needs fleet-scale probe data — the honest
+path is accumulating our own drivers' speed traces, which only pays off with
+users. POI curation is thousands of staff; OSM gives category search and
+modest place cards, nothing like 2GIS's directory.
 
 Still open here:
 - ~~Schedules are not in the avatar sheet~~ — ✅ L37. `SchedulesScreen`

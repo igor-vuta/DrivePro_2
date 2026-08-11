@@ -11,6 +11,26 @@ const MAP_ID_SALT = crypto.randomBytes(16);
 const opaqueDriverId = (id) =>
   crypto.createHash('sha256').update(MAP_ID_SALT).update(String(id)).digest('base64url').slice(0, 12);
 
+// Walkers waiting to be picked up are broadcast to drivers before either side
+// has agreed to anything, so they get the same treatment as driver dots: an
+// opaque handle instead of a user id, and a position rounded to WALK_FUZZ_M
+// until both sides confirm. Precise coordinates are exchanged only once a
+// pickup is agreed, at which point it is an ordinary ride.
+const WALK_ID_SALT = crypto.randomBytes(16);
+export const opaqueWalkerId = (id) =>
+  crypto.createHash('sha256').update(WALK_ID_SALT).update(String(id)).digest('base64url').slice(0, 12);
+const WALK_FUZZ_M = 100;
+// Deterministic per-user jitter, so the fuzzed point does not dance around
+// (averaging many samples would otherwise recover the true position).
+export function fuzzPoint(userId, lat, lng) {
+  const h = crypto.createHash('sha256').update(WALK_ID_SALT).update(String(userId)).digest();
+  const angle = ((h[0] << 8) | h[1]) / 65535 * Math.PI * 2;
+  const r = WALK_FUZZ_M * (0.4 + (h[2] / 255) * 0.6);
+  const dLat = (r * Math.cos(angle)) / 111_000;
+  const dLng = (r * Math.sin(angle)) / (111_000 * Math.cos((lat * Math.PI) / 180) || 1);
+  return { lat: Number((lat + dLat).toFixed(5)), lng: Number((lng + dLng).toFixed(5)) };
+}
+
 // Realtime hub: tracks connected users, online (active) drivers and routes
 // websocket messages. Ride matching events plug in here in later milestones.
 
@@ -27,6 +47,7 @@ export class Hub {
     this.store = store;
     this.conns = new Map(); // userId -> Set<WsConnection>
     this.drivers = new Map(); // userId -> { lat, lng, updatedAt }
+    this.walkers = new Map(); // userId -> { lat, lng, destLat, destLng, destAddress, mode, updatedAt }
     this.driverDropTimers = new Map(); // userId -> Timeout
     this.mapWatchers = new Map(); // userId -> { lat, lng }
     this.handlers = new Map(); // type -> (user, msg, conn) => void
@@ -115,6 +136,10 @@ export class Hub {
           this.conns.delete(user.id);
           this.mapWatchers.delete(user.id);
           this._scheduleDriverDrop(user.id);
+          // A walker who closed the app is no longer walking anywhere a
+          // driver could reach them - drop them immediately rather than
+          // offering drivers a ghost.
+          if (this.walkers.delete(user.id) && this.onWalkersChange) this.onWalkersChange();
         }
       }
     };
@@ -166,6 +191,7 @@ export class Hub {
     this.conns.delete(userId);
     this.mapWatchers.delete(userId);
     this.drivers.delete(userId);
+    this.walkers.delete(userId);
   }
 
   broadcast(msg) {
@@ -180,6 +206,15 @@ export class Hub {
 
   driverLocation(userId) {
     return this.drivers.get(userId) || null;
+  }
+
+  onlineWalkerIds() {
+    return [...this.walkers.keys()];
+  }
+
+  walkerById(opaqueId) {
+    for (const id of this.walkers.keys()) if (opaqueWalkerId(id) === opaqueId) return id;
+    return null;
   }
 
   isOnline(userId) {
@@ -228,6 +263,42 @@ export class Hub {
       });
       if (this.onDriverReady) this.onDriverReady(user.id, conn);
       if (this.onPresenceChange) this.onPresenceChange();
+    });
+
+    // A walker (or cyclist) travelling their own route who is willing to be
+    // picked up along the way. Position and destination together are what make
+    // corridor matching possible; the destination is where they were already
+    // going, so a lift only helps if it goes the same way.
+    this.on('walk:available', (user, msg, conn) => {
+      if (!isLat(msg.lat) || !isLng(msg.lng) || !isLat(msg.destLat) || !isLng(msg.destLng)) {
+        conn.send({ type: 'error', code: 'points_required', message: 'Location and destination are required.', reqId: msg.reqId });
+        return;
+      }
+      this.walkers.set(user.id, {
+        lat: Number(msg.lat),
+        lng: Number(msg.lng),
+        destLat: Number(msg.destLat),
+        destLng: Number(msg.destLng),
+        destAddress: String(msg.destAddress || '').slice(0, 200),
+        mode: msg.mode === 'bike' ? 'bike' : 'foot',
+        updatedAt: Date.now(),
+      });
+      conn.send({ type: 'walk:status', available: true, reqId: msg.reqId });
+      if (this.onWalkersChange) this.onWalkersChange();
+    });
+
+    this.on('walk:location', (user, msg) => {
+      const w = this.walkers.get(user.id);
+      if (!w || !isLat(msg.lat) || !isLng(msg.lng)) return;
+      w.lat = Number(msg.lat);
+      w.lng = Number(msg.lng);
+      w.updatedAt = Date.now();
+    });
+
+    this.on('walk:unavailable', (user, msg, conn) => {
+      this.walkers.delete(user.id);
+      conn.send({ type: 'walk:status', available: false, reqId: msg.reqId });
+      if (this.onWalkersChange) this.onWalkersChange();
     });
 
     this.on('driver:deactivate', (user, msg, conn) => {
@@ -287,6 +358,7 @@ export class Hub {
 
   _pushMapDrivers() {
     for (const userId of this.mapWatchers.keys()) this._pushMapDriversTo(userId);
+    if (this.onWalkersPush) this.onWalkersPush();
   }
 
   _pushMapDriversTo(userId) {

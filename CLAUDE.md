@@ -111,7 +111,16 @@ overlaps) · L37 `SchedulesScreen` + L38 `CrewScreen` behind the avatar sheet
 956 MB of RAM; FOSSGIS stays the per-request fallback; `update.sh` health
 check now retries for 60 s so a slow boot cannot redden CI).
 
+L40 worldwide routing fallback (regional graph first, FOSSGIS on error or a
+waypoint snapped past `OSRM_SNAP_MAX_M`) · L41 live navigation (`app/src/nav.js`
+holds the pure model; `/api/geo/route?steps=1` returns compact maneuvers; on web
+the position watch uses `navigator.geolocation` directly, the expo wrapper never
+fires there) · L42 driving as a toggle on your own car route (car form asked once
+in place) · L43 pickup along the way (`hub.walkers` + `walk:*` messages;
+`fitsDriverRoute` reused so the corridor rule is shared; ~100 m stable fuzz and
+opaque ids until both sides confirm, then an ordinary accepted ride).
+
 Layer numbering slipped once: the ride-flow commit is labelled **L32** but
-lands after L33. Next free number is **L40**.
+lands after L33. Next free number is **L44**.
 
 Remaining work and its running order live in `ROADMAP.md`.

@@ -1,5 +1,6 @@
 import { isFiniteNum, isLat, isLng, cleanStr, cleanAddressDetails, haversineMeters, pointToPolyline } from './util.js';
 import { publicUser, rideCounterpart } from './views.js';
+import { opaqueWalkerId, fuzzPoint } from './hub.js';
 import { pushToUser } from './push.js';
 import { streakMultiplier, startOfDay } from './streaks.js';
 
@@ -58,6 +59,206 @@ export function setupRides({ store, hub }) {
   hub.impactProvider = cityImpact;
   const broadcastImpact = () => hub.broadcast({ type: 'city:impact', impact: cityImpact() });
   hub.onPresenceChange = broadcastImpact;
+
+  // ------------------------------------------------- pickup along the way ---
+  //
+  // Symmetric to the driver's "take passengers along the way": a walker or
+  // cyclist already navigating their own route flags that they would accept a
+  // lift. Drivers whose corridor covers both the walker's position and their
+  // destination see them - fuzzed to ~100 m and behind an opaque handle - and
+  // may offer, optionally naming a meeting point a short walk away. Nothing is
+  // precise, and no identity is exchanged, until both sides have agreed; the
+  // moment they do it becomes an ordinary accepted ride and every existing
+  // lifecycle, rating and trail behaviour applies unchanged.
+
+  const MEET_MAX_M = 300; // a driver-proposed meeting point stays a short walk away
+  const walkOffers = new Map(); // `${driverId}:${walkerId}` -> { at, meet }
+
+  // A walker fits a driver exactly when a ride from where they stand to where
+  // they are going would fit - so the corridor rule is shared, not re-derived.
+  const walkerAsRide = (w) => ({
+    pickupLat: w.lat,
+    pickupLng: w.lng,
+    destLat: w.destLat,
+    destLng: w.destLng,
+  });
+
+  const walkersForDriver = (driverId) => {
+    const loc = hub.driverLocation(driverId);
+    if (!loc || !loc.route) return []; // corridor mode only: no route, no walkers
+    if (store.listActiveRidesForDriver(driverId).length >= MAX_CONVOY) return [];
+    const out = [];
+    for (const [walkerId, w] of hub.walkers) {
+      if (walkerId === driverId) continue;
+      if (store.isBlockedEither(driverId, walkerId)) continue;
+      if (store.findActiveRideForUser(walkerId)) continue;
+      if (!fitsDriverRoute(loc, walkerAsRide(w))) continue;
+      const person = publicUser(store, walkerId);
+      if (person) {
+        delete person.phone;
+        delete person.email;
+        delete person.places;
+      }
+      const fuzzed = fuzzPoint(walkerId, w.lat, w.lng);
+      out.push({
+        id: opaqueWalkerId(walkerId),
+        ...fuzzed,
+        mode: w.mode,
+        destAddress: w.destAddress,
+        aheadM: haversineMeters(loc.lat, loc.lng, w.lat, w.lng),
+        person: person ? { name: person.name, rating: person.rating, ratingCount: person.ratingCount, avatar: person.avatar } : null,
+        offered: walkOffers.has(`${driverId}:${walkerId}`),
+      });
+      if (out.length >= 10) break;
+    }
+    out.sort((a, b) => a.aheadM - b.aheadM);
+    return out;
+  };
+
+  const pushWalkersToDriver = (driverId) => {
+    hub.sendTo(driverId, { type: 'walk:nearby', walkers: walkersForDriver(driverId) });
+  };
+  const pushWalkersToAllDrivers = () => {
+    for (const driverId of hub.onlineDriverIds()) pushWalkersToDriver(driverId);
+  };
+  // Recomputed on the hub's existing 3s tick and whenever availability flips.
+  hub.onWalkersPush = pushWalkersToAllDrivers;
+  hub.onWalkersChange = pushWalkersToAllDrivers;
+
+  // Driver offers a lift to a walker they can see.
+  hub.on('walk:offer', (user, msg, conn) => {
+    const loc = hub.driverLocation(user.id);
+    if (!loc || !store.getDriverProfile(user.id)) {
+      conn.send({ type: 'error', message: 'Only drivers on a route can offer a lift.', reqId: msg.reqId });
+      return;
+    }
+    const walkerId = hub.walkerById(String(msg.walkerId || ''));
+    const w = walkerId ? hub.walkers.get(walkerId) : null;
+    if (!w || !fitsDriverRoute(loc, walkerAsRide(w))) {
+      conn.send({ type: 'error', code: 'gone', message: 'They are no longer on your way.', reqId: msg.reqId });
+      return;
+    }
+    if (store.isBlockedEither(user.id, walkerId) || store.findActiveRideForUser(walkerId)) {
+      conn.send({ type: 'error', code: 'gone', message: 'They are no longer available.', reqId: msg.reqId });
+      return;
+    }
+    // Optional meeting point, but only if it is genuinely a short walk: a
+    // faraway "meet me here" is a different ride, not a pickup along the way.
+    let meet = null;
+    if (isLat(msg.meetLat) && isLng(msg.meetLng)) {
+      const d = haversineMeters(w.lat, w.lng, Number(msg.meetLat), Number(msg.meetLng));
+      if (d > MEET_MAX_M) {
+        conn.send({ type: 'error', code: 'meet_far', message: 'Pick a meeting point closer to them.', reqId: msg.reqId });
+        return;
+      }
+      meet = { lat: Number(msg.meetLat), lng: Number(msg.meetLng), distM: Math.round(d) };
+    }
+    walkOffers.set(`${user.id}:${walkerId}`, { at: Date.now(), meet });
+    const driver = publicUser(store, user.id);
+    if (driver) {
+      delete driver.phone;
+      delete driver.email;
+      delete driver.places;
+    }
+    hub.sendTo(walkerId, {
+      type: 'walk:offer',
+      offerId: opaqueWalkerId(user.id),
+      driver,
+      meet,
+      driverAwayM: Math.round(haversineMeters(loc.lat, loc.lng, w.lat, w.lng)),
+      destAddress: loc.route ? loc.route.destAddress : '',
+    });
+    pushToUser(store, walkerId, {
+      title: '🚗 Вас готовы подвезти',
+      body: `${driver ? driver.name : 'Водитель'} едет в вашу сторону`,
+      tag: `walkoffer-${user.id}`,
+      url: '/',
+    });
+    conn.send({ type: 'walk:offer_sent', walkerId: msg.walkerId, reqId: msg.reqId });
+    pushWalkersToDriver(user.id);
+  });
+
+  // Walker accepts: this is the moment both sides agree, so it becomes a real
+  // ride - already accepted, driver assigned - and precise positions flow.
+  hub.on('walk:accept', (user, msg, conn) => {
+    const w = hub.walkers.get(user.id);
+    if (!w) {
+      conn.send({ type: 'error', message: 'Turn on pickup first.', reqId: msg.reqId });
+      return;
+    }
+    if (store.findActiveRideForUser(user.id)) {
+      conn.send({ type: 'error', message: 'You already have an active ride.', reqId: msg.reqId });
+      return;
+    }
+    // Resolve the offering driver from the opaque id we handed the walker.
+    let driverId = null;
+    for (const key of walkOffers.keys()) {
+      const [did, wid] = key.split(':');
+      if (wid === user.id && opaqueWalkerId(did) === String(msg.offerId || '')) {
+        driverId = did;
+        break;
+      }
+    }
+    const offer = driverId ? walkOffers.get(`${driverId}:${user.id}`) : null;
+    if (!offer || !hub.driverLocation(driverId)) {
+      conn.send({ type: 'error', code: 'gone', message: 'That offer has expired.', reqId: msg.reqId });
+      return;
+    }
+    if (store.listActiveRidesForDriver(driverId).length >= MAX_CONVOY) {
+      conn.send({ type: 'error', code: 'gone', message: 'That offer has expired.', reqId: msg.reqId });
+      return;
+    }
+    const pick = offer.meet || { lat: w.lat, lng: w.lng };
+    const ride = store.createRide({
+      riderId: user.id,
+      driverId,
+      pickupLat: pick.lat,
+      pickupLng: pick.lng,
+      pickupAddress: cleanStr(msg.pickupAddress, 200),
+      destLat: w.destLat,
+      destLng: w.destLng,
+      destAddress: cleanStr(w.destAddress, 200),
+      distanceM: haversineMeters(pick.lat, pick.lng, w.destLat, w.destLng),
+      durationS: null,
+    });
+    const updated = store.updateRide(ride.id, { status: 'accepted', acceptedAt: Date.now() });
+    store.saveTrail(ride.id, [[pick.lat, pick.lng], [w.destLat, w.destLng]]);
+    hub.walkers.delete(user.id);
+    for (const key of [...walkOffers.keys()]) if (key.endsWith(`:${user.id}`)) walkOffers.delete(key);
+
+    const dloc = hub.driverLocation(driverId);
+    hub.sendTo(user.id, {
+      type: 'ride:update',
+      ride: updated,
+      counterpart: rideCounterpart(store, updated, user.id),
+      driverLocation: dloc ? { lat: dloc.lat, lng: dloc.lng } : null,
+      reqId: msg.reqId,
+    });
+    hub.sendTo(driverId, {
+      type: 'ride:update',
+      ride: updated,
+      counterpart: rideCounterpart(store, updated, driverId),
+    });
+    pushToUser(store, driverId, {
+      title: '👍 Попутчик согласился',
+      body: `${updated.destAddress || ''}`,
+      tag: `ride-${updated.id}`,
+      url: '/',
+    });
+    pushWalkersToAllDrivers();
+  });
+
+  hub.on('walk:decline', (user, msg, conn) => {
+    for (const key of [...walkOffers.keys()]) {
+      const [did, wid] = key.split(':');
+      if (wid === user.id && opaqueWalkerId(did) === String(msg.offerId || '')) {
+        walkOffers.delete(key);
+        hub.sendTo(did, { type: 'walk:declined', walkerId: opaqueWalkerId(user.id) });
+        pushWalkersToDriver(did);
+      }
+    }
+    conn.send({ type: 'walk:declined_ok', reqId: msg.reqId });
+  });
 
   // Rider requests a ride.
   hub.on('ride:request', (user, msg, conn) => {
