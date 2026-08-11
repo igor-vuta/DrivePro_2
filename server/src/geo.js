@@ -129,12 +129,25 @@ export async function searchAddress(q, lat, lng, lang) {
   if (hit) return hit;
   const url = `${NOMINATIM_URL}/search?format=jsonv2&limit=6&q=${encodeURIComponent(query)}${bias}${countries}&accept-language=${langParam(lang)}`;
   const json = await upstream(url);
-  const value = (Array.isArray(json) ? json : []).map((r) => ({
+  let value = (Array.isArray(json) ? json : []).map((r) => ({
     lat: Number(r.lat),
     lng: Number(r.lon),
     address: shortAddress(r.display_name),
     fullAddress: r.display_name || '',
   }));
+  // Nominatim ranks by importance, which is why typing "аптек" in Almaty
+  // offered pharmacies in Ulaanbaatar above local ones. This is a navigation
+  // app: what is near you matters more than what is famous. Nothing is
+  // dropped - somewhere genuinely distant is still reachable - it just sorts
+  // below the things you could actually walk to.
+  if (isFiniteNum(lat) && isFiniteNum(lng)) {
+    const d2 = (r) => {
+      const dx = (r.lat - lat) * 111_000;
+      const dy = (r.lng - lng) * 111_000 * Math.cos((lat * Math.PI) / 180);
+      return dx * dx + dy * dy;
+    };
+    value = value.slice().sort((a, b) => d2(a) - d2(b));
+  }
   cacheSet(key, value);
   return value;
 }

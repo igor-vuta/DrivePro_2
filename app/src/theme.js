@@ -23,13 +23,17 @@ const PALETTE = {
 
 const light = {
   scheme: 'light',
-  bg: PALETTE.white,
+  // bg and card were both white, so nothing on the sheet stood up from it -
+  // the app read as one flat white field. The ground is now a slate tint and
+  // cards stay pure white, which is what makes them look raised.
+  bg: '#E9EEF3',
   card: '#FFFFFF',
-  // A tint of the slate rather than grey, so surfaces stay in the family.
-  surface: '#F1F4F7',
+  // Deeper than the ground, so inputs and chips read as recessed into it
+  // rather than floating like cards.
+  surface: '#DCE4EC',
   text: PALETTE.slate,
   sub: '#7B8798',
-  border: '#DFE5EB',
+  border: '#C8D3DE',
   primary: PALETTE.blue,
   primaryText: PALETTE.white,
   accent: PALETTE.crimson,
@@ -41,7 +45,7 @@ const light = {
   ok: PALETTE.green,
   // Shadows carry depth in light; glow is reserved for dark, because glow on
   // a near-white ground reads as blur rather than light.
-  shadow: 'rgba(68,84,108,0.16)',
+  shadow: 'rgba(44,53,66,0.22)',
   glow: 'transparent',
   // Voyager draws shop, cafe and park names and colours parks and water -
   // denser and more map-like than the near-blank light_all, which was chosen

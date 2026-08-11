@@ -129,6 +129,10 @@ export default function RideTab() {
   const [nearPlaces, setNearPlaces] = useState([]); // category chip results, drawn as pins
   const [nearCat, setNearCat] = useState(null); // which category chip is active
   const [place, setPlace] = useState(null); // the place whose card is open
+  // The landing sheet starts collapsed so the map owns the screen; it opens
+  // when you reach for search, and closes again the moment you have picked
+  // something, so you are looking at the map and not at a form.
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [center, setCenter] = useState(FALLBACK_CENTER);
   const [trails, setTrails] = useState([]);
   const [address, setAddress] = useState('');
@@ -155,6 +159,9 @@ export default function RideTab() {
   const fitSeq = useRef(0);
   const myLocRef = useRef(null); // last known real location, for the pickup default
   const pickedRef = useRef(null); // point chosen by name, awaiting its moveend
+  const typeTimer = useRef(null); // debounce for search-as-you-type
+  const typeSeq = useRef(0); // so a slow answer cannot overwrite a newer one
+  const typeCache = useRef(new Map()); // query -> results, for backspacing
   const interactedRef = useRef(false); // the user has chosen a point of their own
   const navModelRef = useRef(null); // progress runs against the ref, not stale state
   const navWatchRef = useRef(null); // the live position subscription
@@ -324,6 +331,55 @@ export default function RideTab() {
     setResults((addr && addr.results) || []);
   };
 
+  // Search as you type. Two sources with very different costs: addresses come
+  // from Nominatim, which is free, and named places from 2GIS, which is
+  // metered at a thousand calls a month - so this waits for a pause in
+  // typing, ignores very short fragments, and remembers what it has already
+  // asked, which also makes backspacing instant.
+  const TYPE_DEBOUNCE_MS = 400;
+  const TYPE_MIN_CHARS = 3;
+
+  const runSuggest = async (q) => {
+    const key = `${q.toLowerCase()}|${center.lat.toFixed(2)},${center.lng.toFixed(2)}`;
+    const cached = typeCache.current.get(key);
+    if (cached) {
+      setResults(cached.addresses);
+      setPlaceHits(cached.places);
+      return;
+    }
+    const seq = ++typeSeq.current;
+    const [addr, places] = await Promise.all([
+      api('GET', `/api/geo/search?q=${encodeURIComponent(q)}&lat=${center.lat}&lng=${center.lng}&lang=${getLang()}`, null, token).catch(() => null),
+      placesProvider
+        ? api('GET', `/api/places/search?q=${encodeURIComponent(q)}&lat=${center.lat}&lng=${center.lng}&lang=${getLang()}`, null, token).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    if (seq !== typeSeq.current) return; // a newer keystroke already answered
+    const value = {
+      addresses: (addr && addr.results) || [],
+      places: places && places.results && places.results.length ? places.results : null,
+    };
+    if (typeCache.current.size > 40) typeCache.current.clear();
+    typeCache.current.set(key, value);
+    setResults(value.addresses);
+    setPlaceHits(value.places);
+  };
+
+  const onQueryChange = (v) => {
+    setQuery(v);
+    if (typeTimer.current) clearTimeout(typeTimer.current);
+    const q = v.trim();
+    if (q.length < TYPE_MIN_CHARS) {
+      typeSeq.current++; // cancel anything in flight
+      setResults(null);
+      setPlaceHits(null);
+      return;
+    }
+    typeTimer.current = setTimeout(() => runSuggest(q), TYPE_DEBOUNCE_MS);
+  };
+
+  useEffect(() => () => { if (typeTimer.current) clearTimeout(typeTimer.current); }, []);
+
   // Category chips: everything of one kind around the map centre, dropped on
   // the map as pins you can tap.
   const CATEGORIES = [
@@ -343,6 +399,7 @@ export default function RideTab() {
       return;
     }
     setNearCat(cat.key);
+    setSheetOpen(false); // the answer is on the map, so get out of its way
     setError('');
     try {
       const r = await api(
@@ -381,6 +438,7 @@ export default function RideTab() {
   // address would.
   const goToPlace = (p) => {
     setPlace(null);
+    setSheetOpen(false);
     setNearPlaces([]);
     setNearCat(null);
     setPlaceHits(null);
@@ -403,9 +461,11 @@ export default function RideTab() {
   };
 
   const pickResult = (r) => {
+    if (typeTimer.current) clearTimeout(typeTimer.current);
     setResults(null);
     setPlaceHits(null);
     setQuery('');
+    setSheetOpen(false);
     goTo(r);
   };
 
@@ -911,6 +971,7 @@ export default function RideTab() {
 
   const resetFlow = () => {
     fitSeq.current++;
+    setSheetOpen(false);
     endNavWatch();
     goOffline();
     navModelRef.current = null;
@@ -1266,7 +1327,11 @@ export default function RideTab() {
           </Row>
         ) : (
         <FadeIn keyId={step} from={18}>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 8 }}>{stepTitle}</Text>
+        {/* The collapsed bar says "Where to?" itself; a heading above it would
+            only repeat the words and cost map. */}
+        {step === 'landing' && !sheetOpen ? null : (
+          <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 8 }}>{stepTitle}</Text>
+        )}
 
         {step === 'mode' ? (
           <View>
@@ -1362,8 +1427,62 @@ export default function RideTab() {
             </Row>
             <Button kind="ghost" title={t('ride.changeDest')} onPress={backToLanding} style={{ height: 42 }} />
           </View>
+        ) : step === 'landing' && !sheetOpen ? (
+          /* Collapsed: one row. Tapping the pill opens search; the arrow
+             confirms whatever the centre pin is currently on, so the
+             move-the-map-and-go flow survives the collapse. */
+          <Row style={{ paddingBottom: 4 }}>
+            <Pressable
+              onPress={() => setSheetOpen(true)}
+              style={({ pressed }) => ({
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                height: 56,
+                borderRadius: 28,
+                paddingHorizontal: 16,
+                backgroundColor: colors.card,
+                borderWidth: 1,
+                borderColor: colors.border,
+                marginRight: 10,
+                opacity: pressed ? 0.75 : 1,
+              })}
+            >
+              <Text style={{ fontSize: 17, marginRight: 10 }}>🔍</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.text, fontWeight: '800', fontSize: 15 }} numberOfLines={1}>
+                  {t('ride.whereTo')}
+                </Text>
+                <Text style={{ color: colors.sub, fontSize: 12 }} numberOfLines={1}>
+                  {addrLoading ? '…' : address || t('ride.searchHere')}
+                </Text>
+              </View>
+            </Pressable>
+            <Pressable
+              onPress={confirmPoint}
+              disabled={addrLoading || !(address || '').trim()}
+              style={({ pressed }) => ({
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: colors.primary,
+                opacity: addrLoading || !(address || '').trim() ? 0.4 : pressed ? 0.85 : 1,
+              })}
+            >
+              <Text style={{ color: colors.primaryText, fontSize: 22, fontWeight: '800' }}>→</Text>
+            </Pressable>
+          </Row>
         ) : step !== 'confirm' ? (
           <View>
+            {step === 'landing' ? (
+              /* A grab handle that also collapses the sheet, so the map is
+                 always one tap away. */
+              <Pressable onPress={() => setSheetOpen(false)} hitSlop={10} style={{ alignItems: 'center', paddingBottom: 8 }}>
+                <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: colors.border }} />
+              </Pressable>
+            ) : null}
             {step === 'landing' && schedules.length ? (
               <ScheduleList schedules={schedules} onChanged={loadSchedules} />
             ) : null}
@@ -1404,10 +1523,11 @@ export default function RideTab() {
             <Row style={{ marginBottom: 10 }}>
               <Input
                 value={query}
-                onChangeText={setQuery}
+                onChangeText={onQueryChange}
                 placeholder={t('ride.searchPh')}
                 returnKeyType="search"
                 onSubmitEditing={doSearch}
+                autoCorrect={false}
                 containerStyle={{ flex: 1, marginBottom: 0 }}
               />
               <Button title={t('common.find')} onPress={doSearch} style={{ marginLeft: 8, height: 48, paddingHorizontal: 16, marginTop: 0 }} />
