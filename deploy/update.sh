@@ -21,5 +21,17 @@ EOF
 fi
 
 systemctl restart drivepro
-sleep 1
-curl -fsS http://localhost:4000/api/health && echo " <- updated & healthy"
+
+# Health check with a grace window: on a loaded box (the OSRM graph build,
+# a swap-heavy moment) node can take longer than a second to listen, and a
+# deploy that actually succeeded should not turn CI red over boot time.
+for i in $(seq 1 30); do
+  if curl -fsS http://localhost:4000/api/health 2>/dev/null; then
+    echo " <- updated & healthy (after ${i} tries)"
+    exit 0
+  fi
+  sleep 2
+done
+echo "service did not become healthy within 60s" >&2
+journalctl -u drivepro -n 20 --no-pager >&2 || true
+exit 1
