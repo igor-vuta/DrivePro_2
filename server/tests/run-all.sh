@@ -34,6 +34,7 @@ for n in 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 2
     echo PASS
   else
     echo FAIL
+    grep -E '^FAIL' "/tmp/smoke$n.out" || true
     tail -12 "/tmp/smoke$n.out"
     fail=1
   fi
@@ -47,6 +48,10 @@ if DRIVEPRO_STORAGE=json node server/tests/smoke20.mjs >/tmp/smoke20-json.out 2>
   echo PASS
 else
   echo FAIL
+  # The failing assertion is what matters and it is rarely in the last dozen
+  # lines - a run that fails early then passes everything after it printed
+  # twelve cheerful "ok"s and told us nothing.
+  grep -E '^FAIL' /tmp/smoke20-json.out || true
   tail -12 /tmp/smoke20-json.out
   fail=1
 fi
