@@ -126,7 +126,7 @@ export function startRouteWarmer() {
         if (!p || p.url === FOSSGIS[mode]) continue;
         for (const pair of WARM_ROUTES) {
           try {
-            await upstream(`${p.url}/route/v1/${p.path}/${pair}?overview=false`);
+            await upstream(`${p.url}/route/v1/${p.path}/${pair}?overview=false`, ROUTE_TIMEOUT_MS);
           } catch {
             // A router that is down is the watchdog's problem, not the warmer's.
           }
@@ -146,6 +146,13 @@ export function startRouteWarmer() {
 // risks being blocked. Overridable so a real contact can be set in prod.
 const USER_AGENT = process.env.GEO_USER_AGENT || 'DrivePro/1.0 (+https://drivepro-almaty.duckdns.org)';
 const TIMEOUT_MS = 8000;
+// Routing gets longer than geocoding does. A cold memory-mapped graph on this
+// VM answers in seconds, not milliseconds - bike was measured at 8.4 s, just
+// past the old ceiling, and a route that times out is exactly the failure the
+// app used to draw as a straight line across the city. Walking and cycling now
+// load behind the opening mode anyway, so a patient ceiling costs nobody
+// anything; being cut off half a second early costs a route.
+const ROUTE_TIMEOUT_MS = Number(process.env.OSRM_TIMEOUT_MS || 20000);
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const CACHE_MAX = 500;
 
@@ -169,9 +176,9 @@ function cacheSet(key, value) {
   cache.set(key, { at: Date.now(), value });
 }
 
-async function upstream(url) {
+async function upstream(url, timeoutMs = TIMEOUT_MS) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
@@ -268,7 +275,8 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car', withSt
     const json = await upstream(
       `${base}/route/v1/${path}/${a.lng},${a.lat};${b.lng},${b.lat}` +
         `?overview=full&geometries=geojson&steps=${withSteps ? 'true' : 'false'}` +
-        `&alternatives=${wantAlts > 0 ? wantAlts : 'false'}`
+        `&alternatives=${wantAlts > 0 ? wantAlts : 'false'}`,
+      ROUTE_TIMEOUT_MS
     );
     if (!json || json.code !== 'Ok' || !json.routes || !json.routes[0]) {
       throw httpError(502, 'no route found');
@@ -292,7 +300,7 @@ export async function route(fromLat, fromLng, toLat, toLng, mode = 'car', withSt
   // a line to somewhere unreachable.
   const repair = async (base, path, pt) => {
     try {
-      const json = await upstream(`${base}/nearest/v1/${path}/${pt.lng},${pt.lat}?number=1`);
+      const json = await upstream(`${base}/nearest/v1/${path}/${pt.lng},${pt.lat}?number=1`, ROUTE_TIMEOUT_MS);
       const w = json && json.waypoints && json.waypoints[0];
       if (!w || !Array.isArray(w.location) || !isFiniteNum(w.location[0])) return null;
       const moved = Math.round(w.distance || 0);
