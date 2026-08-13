@@ -10,9 +10,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const file = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.html');
+const here = path.dirname(fileURLToPath(import.meta.url));
+const file = path.join(here, '..', 'dist', 'index.html');
 let html = fs.readFileSync(file, 'utf8');
 const before = html;
+
+// Manrope, inlined from the one file that declares it. public/fonts/manrope.css
+// keeps its url()s relative so the design-sync converter can resolve them next
+// to the woff2s; here they become absolute, because this lands in /index.html.
+// Inlining rather than <link>ing saves a round trip on the critical path - the
+// font is the first thing a cold visitor notices missing.
+const fontCss = fs
+  .readFileSync(path.join(here, '..', 'public', 'fonts', 'manrope.css'), 'utf8')
+  .replace(/url\("manrope-/g, 'url("/fonts/manrope-')
+  .replace(/^\/\*[\s\S]*?\*\/\s*/, '')
+  .trim();
 
 html = html.replace('<html lang="en">', '<html lang="ru">');
 html = html.replace(
@@ -26,8 +38,8 @@ if (!html.includes(MARK)) {
     MARK,
     // Two theme-colors so the browser chrome matches before JS runs;
     // theme.js keeps the tag in step afterwards.
-    '<meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFEFF" />',
-    '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#222B36" />',
+    '<meta name="theme-color" media="(prefers-color-scheme: light)" content="#EEF2F7" />',
+    '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A1420" />',
     '<meta name="mobile-web-app-capable" content="yes" />',
     '<meta name="apple-mobile-web-app-capable" content="yes" />',
     '<meta name="apple-mobile-web-app-status-bar-style" content="default" />',
@@ -47,10 +59,15 @@ if (!html.includes(MARK)) {
     // height:auto is required - an explicit height would beat `bottom:0`.
     // Comes after #expo-reset in the head, so it wins on equal specificity.
     '<style>',
+    // The app font. react-native-web sets font-family on its own Text base
+    // style, so theme.js has to name Manrope there too - this block is what
+    // makes the family resolvable, plus the pre-JS shell match.
+    fontCss,
+    '      html,body{font-family:Manrope,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}',
     // Painted before the bundle loads, so the first frame is not a white
     // flash in dark mode or a black one in light.
-    '      html,body{background:#FFFEFF}',
-    '      @media (prefers-color-scheme: dark){html,body{background:#222B36}}',
+    '      html,body{background:#EEF2F7}',
+    '      @media (prefers-color-scheme: dark){html,body{background:#0A1420}}',
     // The notch and the home indicator, published as variables so the app can
     // decide per element who respects them. The map does not: it runs under
     // the status bar to the physical edge of the screen, the way a map app

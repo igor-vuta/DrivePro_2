@@ -64,8 +64,20 @@ check('index.html served', home.status === 200 && home.type.includes('text/html'
 check('document language is Russian', html.includes('<html lang="ru">'));
 check('manifest is linked', html.includes('rel="manifest"') && html.includes('/manifest.json'));
 // One theme-color per scheme now, so the browser chrome matches whichever
-// the device is in before any JS has run.
-check('a theme-color per scheme', html.includes('#FFFEFF') && html.includes('#222B36') && (html.match(/name="theme-color"/g) || []).length === 2);
+// the device is in before any JS has run. The values are read out of
+// theme.js rather than written down here: they were hardcoded until L61
+// changed the palette, and then this test failed for the one reason a test
+// never should - the thing it pins moved and it had no way to know.
+const themeSrc = fs.readFileSync(path.join(ROOT, 'app', 'src', 'theme.js'), 'utf8');
+const bgOf = (name) =>
+  /^ {2}bg: '(#[0-9A-Fa-f]{6})',$/m.exec(themeSrc.split(`const ${name} = {`)[1].split('\n};')[0])?.[1];
+const [lightBg, darkBg] = [bgOf('light'), bgOf('dark')];
+check('theme.js declares a ground per scheme', Boolean(lightBg && darkBg), `${lightBg} ${darkBg}`);
+check(
+  'a theme-color per scheme, matching the ground',
+  html.includes(lightBg) && html.includes(darkBg) && (html.match(/name="theme-color"/g) || []).length === 2,
+  `expected ${lightBg} and ${darkBg}`
+);
 // `default` rather than `black-translucent`: the status bar text has to be
 // legible against a white ground in light mode, which translucent breaks.
 check('iOS standalone meta present', html.includes('apple-mobile-web-app-capable') && html.includes('content="default"'));

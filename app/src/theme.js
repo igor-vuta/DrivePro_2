@@ -13,12 +13,13 @@ import { Appearance, Platform } from 'react-native';
 // live in makeStyles(scheme) functions instead - see ui.js.
 
 const PALETTE = {
-  blue: '#008FD2',
-  yellow: '#FFEF01',
-  crimson: '#E83379',
-  slate: '#44546C',
-  green: '#009744',
-  white: '#FFFEFF',
+  navy: '#072A4E',
+  blue: '#1361F0',
+  apple: '#C4402A',
+  signal: '#EE4B23',
+  green: '#13C06A',
+  gold: '#FFB300',
+  white: '#FFFFFF',
 };
 
 // ------------------------------------------------------------- the ramp ---
@@ -41,13 +42,20 @@ const PALETTE = {
 //
 // Every map app is two colours you can name from across the room: Uber is
 // white and black, 2GIS white and green, Yandex white and yellow. Ours is
-// **white and blue** - black and blue after dark. So the whole content ladder
-// carries only a trace of chroma (enough that grey does not look dead) and the
-// only saturated thing in the interface is the palette blue: the chrome pills,
-// anything selected, every primary button. The city's other colours are still
-// here, but they are *signals* rather than identity - crimson means the
-// destination, green means the pickup, yellow means points - and they appear
-// on the map, not as decoration on the furniture.
+// **navy and blue** - a deep navy brand surface with an electric blue on it.
+// The content ladder carries only a trace of chroma (enough that grey does not
+// look dead); the saturated colours are all doing a job:
+//
+//   blue    interactive - anything selected, tappable or linked
+//   apple   commit - the button that starts a ride, and the destination it
+//           is heading for. Almaty means "father of apples"; the red is the
+//           city's, not a generic alert red.
+//   green   live - your own position, the pickup, anything happening now
+//   gold    points and streaks
+//   navy    the brand surface: the sheet header, the ETA pills over the map
+//
+// Apple carries two weights: `go` is the fill you tap, `signal` is the
+// brighter twin used for a marker that has to be found on a busy map.
 //
 // Dark inverts light where inverting means something. The ground and the ink
 // swap ends of the ramp, and `surface` crosses over: a recessed control sits
@@ -66,41 +74,59 @@ const PALETTE = {
 
 const light = {
   scheme: 'light',
-  bg: '#F4F6F8',
-  surface: '#E4E7EC',
-  sheet: '#FAFBFC',
+  bg: '#EEF2F7',
+  surface: '#DDE4EE',
+  sheet: '#F7F9FC',
   card: '#FFFFFF',
-  chrome: '#DBF3FF',
-  chromeBorder: '#9ED3F2',
-  // A soft primary wash for anything selected - chips, days, mode tiles.
-  tint: '#BDE7FF',
-  onTint: '#006692',
-  // Near-black rather than the coat-of-arms slate: with the ground this close
-  // to white, ink that is itself blue-grey makes the whole screen hazy.
-  text: '#161A21',
-  sub: '#5A6270',
-  border: '#DCE0E6',
+  // The floating pills over the map. Blue-cast so they read as controls
+  // rather than as another panel; near-white so navy type sits on them.
+  chrome: '#F1F6FF',
+  chromeBorder: '#C8DAF5',
+  // A soft primary wash for anything selected - chips, days, mode tiles, the
+  // row you are about to travel to.
+  tint: '#E4EDFE',
+  onTint: '#0B47B4',
+  text: '#0A1F33',
+  // Darkened a touch from the mockup's #5A6E86: that value clears AA on card
+  // and on the tint, but not on `surface`, which is the deepest ground an ink
+  // can land on.
+  sub: '#55677E',
+  border: '#DCE3EC',
   // Where a hairline has to be seen rather than felt: grab handles, ghost
   // buttons, dividers inside a menu.
-  borderStrong: '#B4BAC4',
+  borderStrong: '#AEB9C7',
   primary: PALETTE.blue,
   primaryText: PALETTE.white,
-  primaryInk: '#006194',
-  accent: PALETTE.crimson,
-  // The palette yellow is unreadable as text on white, so light mode uses a
-  // darkened version for type and keeps the pure yellow for fills.
-  gold: '#6F5C00',
-  goldFill: PALETTE.yellow,
-  danger: PALETTE.crimson,
-  dangerInk: '#AC1B53',
+  // The electric blue is a fill; as type it needs darkening to clear AA on
+  // every region. Same fill/ink split as gold and apple below.
+  primaryInk: '#0F52CC',
+  accent: PALETTE.apple,
+  // The brand surface: navy, and the only region an ink other than `onBrand`
+  // never lands on. It is deliberately outside the light/dark elevation
+  // ladder - it is the same navy in both schemes, because it is the brand.
+  brand: PALETTE.navy,
+  onBrand: PALETTE.white,
+  brandSub: '#9DB6D2',
+  brandOk: PALETTE.green,
+  // Commit: the button that starts a ride, and the destination it heads for.
+  go: PALETTE.apple,
+  onGo: PALETTE.white,
+  // The brighter twin, for a marker that has to be found on a busy map.
+  signal: PALETTE.signal,
+  // The palette gold is unreadable as text, so light mode uses a darkened
+  // version for type and keeps the pure gold for fills.
+  gold: '#6B5200',
+  goldFill: PALETTE.gold,
+  danger: PALETTE.apple,
+  dangerInk: '#B03A22',
   ok: PALETTE.green,
-  okInk: '#006933',
-  // Scrims are slate rather than black, so a modal dims the app instead of
+  okInk: '#0B7340',
+  // Scrims are navy rather than black, so a modal dims the app instead of
   // greying it out.
-  overlay: 'rgba(22,26,33,0.42)',
+  overlay: 'rgba(7,42,78,0.42)',
   // Shadows carry depth in light; glow is reserved for dark, because glow on
   // a near-white ground reads as blur rather than light.
-  shadow: 'rgba(44,53,66,0.22)',
+  shadow: 'rgba(7,42,78,0.18)',
   glow: 'transparent',
   // Voyager draws shop, cafe and park names and colours parks and water -
   // denser and more map-like than the near-blank light_all, which was chosen
@@ -109,33 +135,49 @@ const light = {
   statusBar: 'dark-content',
 };
 
+// Dark is derived from light rather than designed: v2 is a daylight study, and
+// a navigation app is used at night. The rules are L54's - the ground and the
+// ink swap ends of the ramp, `surface` crosses the ground (a recessed control
+// sits below it in light and above it in dark, because on a dark ground an
+// inset darker still is a hole), elevation still climbs toward light, and the
+// semantic colours stay put. The navy brand surface is the one thing that does
+// not move at all: it is already dark, so night simply meets it.
 const dark = {
   scheme: 'dark',
-  bg: '#0D1014',
-  surface: '#1A1E24',
-  sheet: '#23272F',
-  card: '#2F343D',
-  chrome: '#20465A',
-  chromeBorder: '#2B6E8F',
-  tint: '#064059',
-  onTint: '#83D8FF',
-  text: PALETTE.white,
-  sub: '#AEB5C0',
-  border: '#3D434D',
-  borderStrong: '#5C636F',
-  primary: PALETTE.blue,
+  bg: '#0A1420',
+  surface: '#16212F',
+  sheet: '#1E2A38',
+  card: '#2B3949',
+  chrome: '#123044',
+  chromeBorder: '#2A5A7E',
+  tint: '#0C3566',
+  onTint: '#A9CDFF',
+  text: '#F4F7FA',
+  sub: '#A8B6C6',
+  border: '#2C3846',
+  borderStrong: '#4A5666',
+  // Lifted off the light blue: the pure #1361F0 is heavy on a near-black
+  // ground, where a fill reads darker than it measures.
+  primary: '#2F7BF5',
   primaryText: PALETTE.white,
-  primaryInk: '#6DC6F6',
-  accent: PALETTE.crimson,
-  gold: PALETTE.yellow,
-  goldFill: PALETTE.yellow,
-  danger: '#FF5C93',
-  dangerInk: '#FF94B1',
-  ok: '#12B45C',
-  okInk: '#6FD395',
-  overlay: 'rgba(5,9,15,0.62)',
+  primaryInk: '#6DA8FF',
+  accent: '#E2543A',
+  brand: '#0B2C4C',
+  onBrand: '#F4F7FA',
+  brandSub: '#9DB6D2',
+  brandOk: '#35C07A',
+  go: '#E2543A',
+  onGo: PALETTE.white,
+  signal: PALETTE.signal,
+  gold: PALETTE.gold,
+  goldFill: PALETTE.gold,
+  danger: '#E2543A',
+  dangerInk: '#FF9877',
+  ok: '#35C07A',
+  okInk: '#5FD79B',
+  overlay: 'rgba(3,8,14,0.62)',
   shadow: 'rgba(0,0,0,0.5)',
-  glow: 'rgba(0,143,210,0.45)',
+  glow: 'rgba(19,97,240,0.45)',
   // No dark Voyager exists; dark_all already carries street names, and a
   // light style under a dark UI would glare at night.
   mapTiles: 'dark_all',
@@ -189,6 +231,46 @@ export const RADIUS_LG = 20;
 // with <Bleed top> so the map runs under the chrome to the screen edge.
 export const CHROME_H = 52;
 export const LINE_HEIGHT = 1.45;
+
+// ---------------------------------------------------------------- type ---
+//
+// Manrope, self-hosted from app/public/fonts (see manrope.css there for why
+// it is not pulled from Google). One variable file per subset, weights
+// 500-800; cyrillic-ext is mandatory, because the Kazakh letters live there.
+//
+// On web a family stack is legal and gives us a fallback while the font
+// loads; on native fontFamily must name exactly one family.
+const webFont = Platform.OS === 'web';
+export const FONT = webFont
+  ? 'Manrope, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif'
+  : 'Manrope';
+
+// The ramp. Every step is a complete text style - spread it, do not pick at
+// it - so a screen never re-decides a size or a weight on its own:
+//
+//   display   the sheet's headline: "Куда едем?"
+//   title     a screen heading, one step under display
+//   row       a list row's own name: "Дом", "Работа"
+//   body      what someone types or reads at length
+//   sub       the secondary line under a title
+//   meta      the detail line: "Аль-Фараби 77 · 22 мин"
+//   overline  the small caps label above a block: "12 ВОДИТЕЛЕЙ РЯДОМ"
+//   button    a CTA label
+//   chip      a pill label
+//
+// The tight negative tracking on the big steps is Manrope's own: it is drawn
+// loose, and display sizes need pulling in to stop looking like a banner.
+export const TYPE = {
+  display: { fontFamily: FONT, fontSize: 29, fontWeight: '800', letterSpacing: -0.9, lineHeight: 32 },
+  title: { fontFamily: FONT, fontSize: 22, fontWeight: '800', letterSpacing: -0.4, lineHeight: 26 },
+  row: { fontFamily: FONT, fontSize: 15.5, fontWeight: '800', letterSpacing: -0.2, lineHeight: 19 },
+  body: { fontFamily: FONT, fontSize: 16, fontWeight: '600', letterSpacing: 0, lineHeight: 23 },
+  sub: { fontFamily: FONT, fontSize: 13.5, fontWeight: '600', letterSpacing: 0, lineHeight: 18 },
+  meta: { fontFamily: FONT, fontSize: 12.5, fontWeight: '600', letterSpacing: 0, lineHeight: 16 },
+  overline: { fontFamily: FONT, fontSize: 11, fontWeight: '800', letterSpacing: 1, lineHeight: 14, textTransform: 'uppercase' },
+  button: { fontFamily: FONT, fontSize: 17.5, fontWeight: '800', letterSpacing: -0.2, lineHeight: 22 },
+  chip: { fontFamily: FONT, fontSize: 12.5, fontWeight: '800', letterSpacing: -0.1, lineHeight: 16 },
+};
 
 // The notch and the home indicator.
 //

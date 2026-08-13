@@ -52,8 +52,15 @@ check('no viewport-height unit sizes the app', !/#root\{[^}]*100dvh/.test(html) 
 check('overscroll bounce is disabled', /html,body\{height:100%;overflow:hidden;overscroll-behavior:none\}/.test(html));
 // Painted before the bundle loads so the first frame is not a white flash in
 // dark mode, nor a black one in light.
-check('the ground colour is painted before JS runs', /html,body\{background:#FFFEFF\}/.test(html));
-check('and a dark one for dark mode', /@media \(prefers-color-scheme: dark\)\{html,body\{background:#222B36\}\}/.test(html));
+// Read out of theme.js rather than written down here: hardcoded values made
+// this fail the moment L61 changed the palette, which is the one thing a
+// pinned contract must not do - the ground moved and the test could not tell.
+const themeSrc = fs.readFileSync(path.join(REPO, 'app', 'src', 'theme.js'), 'utf8');
+const bgOf = (name) =>
+  /^ {2}bg: '(#[0-9A-Fa-f]{6})',$/m.exec(themeSrc.split(`const ${name} = {`)[1].split('\n};')[0])?.[1];
+const [lightBg, darkBg] = [bgOf('light'), bgOf('dark')];
+check('the ground colour is painted before JS runs', html.includes(`html,body{background:${lightBg}}`), `expected ${lightBg}`);
+check('and a dark one for dark mode', html.includes(`@media (prefers-color-scheme: dark){html,body{background:${darkBg}}}`), `expected ${darkBg}`);
 check('both theme-colors are declared', (html.match(/name="theme-color"/g) || []).length === 2, html.match(/theme-color[^>]*/g));
 
 // The override has to come after Expo's reset or it loses on equal specificity.
