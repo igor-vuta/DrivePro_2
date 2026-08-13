@@ -226,19 +226,37 @@ export function Segmented({ options, value, onChange }) {
 
 // Compact pill for controls that float over a full-screen map. It is chrome,
 // not a panel, so it takes the blue-cast chrome tokens rather than card.
-export function Chip({ children, onPress, tone = 'default', style }) {
-  const tint =
-    tone === 'active'
-      ? colors.onTint
-      : tone === 'danger'
-      ? colors.dangerInk
-      : tone === 'gold'
-      ? colors.gold
-      : colors.text;
+// `tone` is the chip's job, and two of them are filled rather than tinted:
+// `brand` is the navy pill the city's own number rides in, and `points` is
+// the solid gold of a streak. A reward should look like one, and on a map a
+// filled pill is the only kind that survives the ground behind it.
+//
+// `dot` prepends the live dot - green, because that is what it means.
+export function Chip({ children, onPress, tone = 'default', dot, style }) {
+  const skin = {
+    active: { ink: colors.onTint, fill: colors.tint, edge: colors.primary },
+    danger: { ink: colors.dangerInk },
+    gold: { ink: colors.gold },
+    brand: { ink: colors.onBrand, fill: colors.brand, edge: colors.brand },
+    points: { ink: colors.onGold, fill: colors.goldFill, edge: colors.goldFill },
+  }[tone] || { ink: colors.text };
   const body = (
-    <View style={[s.chip, tone === 'active' && { borderColor: colors.primary, backgroundColor: colors.tint }, style]}>
+    <View
+      style={[
+        s.chip,
+        skin.fill && { backgroundColor: skin.fill, borderColor: skin.edge },
+        style,
+      ]}
+    >
+      {dot ? (
+        <View style={[s.chipDot, { backgroundColor: tone === 'brand' ? colors.brandOk : colors.ok }]} />
+      ) : null}
       {typeof children === 'string' ? (
-        <Text style={[TYPE.chip, { color: tint }]}>{children}</Text>
+        // A chip is one line by construction - wrapped, it stops being a pill
+        // and starts being a paragraph with rounded corners.
+        <Text style={[TYPE.chip, { color: skin.ink }]} numberOfLines={1}>
+          {children}
+        </Text>
       ) : (
         children
       )}
@@ -304,7 +322,9 @@ export function MapPill({ children, tone = 'brand', dot, onPress, style }) {
   }[tone] || { bg: colors.brand, ink: colors.onBrand };
   const body = (
     <View style={[s.mapPill, { backgroundColor: skin.bg }, style]}>
-      {dot ? <View style={[s.mapPillDot, { backgroundColor: tone === 'plain' ? colors.ok : skin.ink }]} /> : null}
+      {/* The dot means live, so it is green whatever the pill is - brandOk is
+          the green that survives the navy ground. */}
+      {dot ? <View style={[s.mapPillDot, { backgroundColor: tone === 'brand' ? colors.brandOk : colors.ok }]} /> : null}
       {typeof children === 'string' ? (
         <Text style={[TYPE.meta, { color: skin.ink, fontWeight: '800' }]}>{children}</Text>
       ) : (
@@ -482,16 +502,21 @@ export function Row({ children, style, ...rest }) {
   );
 }
 
-// Round profile picture with an initial-letter fallback and a neon ring.
-export function Avatar({ user, size = 44, style }) {
+// Round profile picture with an initial-letter fallback.
+//
+// `tone` picks the fallback's skin: `surface` is the quiet one that belongs
+// in a list, `primary` is the solid blue the design gives your own avatar in
+// the floating chrome, where it has to hold its own over a map.
+export function Avatar({ user, size = 44, tone = 'surface', style }) {
   const initial = user && user.name ? user.name.trim().charAt(0).toUpperCase() : '?';
+  const solid = tone === 'primary';
   const base = {
     width: size,
     height: size,
     borderRadius: size / 2,
-    backgroundColor: colors.surface,
+    backgroundColor: solid ? colors.primary : colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: solid ? colors.primary : colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -541,6 +566,7 @@ const makeStyles = () =>
     elevation: 3,
   },
   mapPillDot: { width: 7, height: 7, borderRadius: 4, marginRight: 6 },
+  chipDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
   listRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 10, marginHorizontal: -10, borderRadius: 14 },
   listRowSelected: { backgroundColor: colors.tint },
   listTile: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginRight: 13 },

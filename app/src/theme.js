@@ -1,7 +1,8 @@
 import { Appearance, Platform } from 'react-native';
 
-// Design tokens, in Almaty's own colours - the palette is taken from the
-// city's coat of arms (blue, yellow, crimson, slate, green, white).
+// Design tokens. The palette used to be lifted from Almaty's coat of arms;
+// since L61 it is the app's own - navy, electric blue and the apple the city
+// is named after - with the roles set out under "the ramp" below.
 //
 // Light and dark both exist and follow the system: a navigation app is used
 // in daylight and at night, and neither is a recolour of the other. `colors`
@@ -117,6 +118,10 @@ const light = {
   // version for type and keeps the pure gold for fills.
   gold: '#6B5200',
   goldFill: PALETTE.gold,
+  // Type ON the gold fill. `gold` is the ink for gold-coloured text on a
+  // normal region; it is not readable on gold itself (4.13:1 in light, and
+  // in dark `gold` IS `goldFill`, so 1:1 - invisible).
+  onGold: '#3D2A00',
   danger: PALETTE.apple,
   dangerInk: '#B03A22',
   ok: PALETTE.green,
@@ -171,6 +176,7 @@ const dark = {
   signal: PALETTE.signal,
   gold: PALETTE.gold,
   goldFill: PALETTE.gold,
+  onGold: '#3D2A00',
   danger: '#E2543A',
   dangerInk: '#FF9877',
   ok: '#35C07A',

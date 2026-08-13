@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { Screen, Button, Segmented, Row, FadeIn, Avatar, colors, SCREEN_PAD, SAFE_TOP } from '../ui';
+import { Screen, Button, Segmented, Row, FadeIn, Avatar, Chip, ListRow, TYPE, colors, SCREEN_PAD, SAFE_TOP } from '../ui';
 import { RADIUS_LG, CHROME_TOP } from '../theme';
 import { useAuth } from '../state';
 import { t } from '../i18n';
@@ -11,36 +11,30 @@ import WeeklyRecap from '../WeeklyRecap';
 // Mirrors server/src/streaks.js tiers - display only.
 const flameMult = (days) => (days >= 30 ? 2 : days >= 14 ? 1.75 : days >= 7 ? 1.5 : days >= 3 ? 1.25 : 1);
 
-// The daily flame: consecutive days with at least one shared ride.
+// The daily flame: consecutive days with at least one shared ride. Gold is
+// the points colour, so the streak is the solid gold chip rather than a
+// chrome one with gold type in it - it is a reward and should look like one.
 function FlamePill({ days }) {
   if (!days) return null;
   const mult = flameMult(days);
   return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.chrome,
-        borderColor: colors.chromeBorder,
-        borderWidth: 1,
-        borderRadius: 999,
-        paddingHorizontal: 10,
-        height: 30,
-        marginRight: 8,
-      }}
-    >
-      <Text style={{ fontSize: 13 }}>🔥</Text>
-      <Text style={{ color: colors.gold, fontWeight: '800', marginLeft: 4, fontSize: 13 }}>{days}</Text>
-      {mult > 1 ? (
-        <Text style={{ color: colors.sub, marginLeft: 6, fontSize: 11, fontWeight: '700' }}>×{mult}</Text>
-      ) : null}
-    </View>
+    <Chip tone="points" style={{ marginRight: 8 }}>
+      {mult > 1 ? `🔥 ${days} ×${mult}` : `🔥 ${days}`}
+    </Chip>
   );
 }
 
-// Live city impact strip: today's shared rides + km and drivers at the wheel.
-// It floats over the map now, so it is a compact pill rather than a full-width
-// bar. The border blinks primary whenever fresh numbers arrive over the socket.
+// Live city impact: today's shared rides, km, and drivers at the wheel.
+//
+// It is the navy brand pill now - the design puts the city's own number on
+// the brand surface, which is also what tells it apart from the gold streak
+// beside it at a glance. The uppercase "CITY TODAY" label is gone with it:
+// on one line over a map the number is the message, and the label was
+// spending half the pill's width saying so.
+//
+// It still pulses when fresh numbers arrive over the socket, but as a nudge
+// of scale rather than a colour change, because there is no border left to
+// blink.
 function CityStrip({ impact, connected }) {
   const pulse = useRef(new Animated.Value(0)).current;
   const first = useRef(true);
@@ -54,49 +48,17 @@ function CityStrip({ impact, connected }) {
     pulse.setValue(1);
     Animated.timing(pulse, { toValue: 0, duration: 1100, useNativeDriver: false }).start();
   }, [stamp]);
-  // The socket state used to have its own line under the wordmark; with the
-  // chrome floating there is room for one pill, so it carries both - a dropped
-  // connection is why the numbers would be stale in the first place.
+  // A dropped connection is why the numbers would be stale in the first
+  // place, so the pill carries that too rather than earning a second one.
   if (!impact && connected) return null;
-  const border = pulse.interpolate({ inputRange: [0, 1], outputRange: [colors.chromeBorder, colors.primary] });
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] });
   return (
-    <Animated.View
-      style={{
-        borderWidth: 1,
-        borderColor: border,
-        backgroundColor: colors.chrome,
-        borderRadius: 999,
-        paddingVertical: 6,
-        paddingHorizontal: 11,
-        flexDirection: 'row',
-        alignItems: 'center',
-        flexShrink: 1,
-      }}
-    >
-      <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: connected ? colors.ok : colors.gold, marginRight: 8 }} />
-      {!connected ? (
-        <Text style={{ color: colors.sub, fontSize: 12, fontWeight: '700' }} numberOfLines={1}>
-          {t('home.reconnecting')}
-        </Text>
-      ) : (
-        <>
-          <Text
-            style={{
-              color: colors.sub,
-              fontSize: 11,
-              fontWeight: '700',
-              textTransform: 'uppercase',
-              letterSpacing: 0.5,
-              marginRight: 8,
-            }}
-          >
-            {t('home.cityToday')}
-          </Text>
-          <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', flexShrink: 1 }} numberOfLines={1}>
-            {t('home.cityLine', { rides: impact.rides, km: impact.km, drivers: impact.driversOnline })}
-          </Text>
-        </>
-      )}
+    <Animated.View style={{ transform: [{ scale }], flexShrink: 1 }}>
+      <Chip tone={connected ? 'brand' : 'default'} dot>
+        {connected
+          ? t('home.cityLine', { rides: impact.rides, km: impact.km, drivers: impact.driversOnline })
+          : t('home.reconnecting')}
+      </Chip>
     </Animated.View>
   );
 }
@@ -138,23 +100,28 @@ export default function HomeScreen({ openProfile, openHistory, openSchedules, op
             left: -SCREEN_PAD,
             right: -SCREEN_PAD,
             paddingHorizontal: SCREEN_PAD,
-            // The map runs under the status bar; these do not.
+            // The map runs under the status bar; these do not. The extra 8
+            // keeps them off the very edge on a phone with no notch, where
+            // SAFE_TOP resolves to 0 - still inside the band CHROME_TOP
+            // reserves, so nothing below moves.
             paddingTop: SAFE_TOP,
+            marginTop: 8,
           }}
         >
           {/* box-none has to be repeated here: react-native-web turns it into
               `pointer-events:none` on the element plus `& > * {auto}`, so a
               single full-width child would re-arm the whole strip and swallow
               map drags in the gaps between the pill and the avatar. */}
-          <Row pointerEvents="box-none" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Row pointerEvents="box-none" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <CityStrip impact={cityImpact} connected={wsConnected} />
             <Row style={{ marginLeft: 8 }}>
               <FlamePill days={me ? me.streakDays : 0} />
               <Pressable onPress={() => setMenu(true)} hitSlop={8} accessibilityLabel={t('home.profile')}>
                 <Avatar
                   user={me}
-                  size={40}
-                  style={{ borderWidth: 2, borderColor: colors.chrome, shadowColor: colors.shadow, shadowOpacity: 1, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}
+                  size={42}
+                  tone="primary"
+                  style={{ shadowColor: colors.shadow, shadowOpacity: 1, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 5 }}
                 />
               </Pressable>
             </Row>
@@ -184,30 +151,6 @@ export default function HomeScreen({ openProfile, openHistory, openSchedules, op
       />
       <WeeklyRecap />
     </Screen>
-  );
-}
-
-// One tappable line in the avatar sheet.
-function MenuRow({ icon, label, sub, onPress, danger }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => ({
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 13,
-        borderBottomWidth: 1,
-        borderColor: colors.borderStrong,
-        opacity: pressed ? 0.6 : 1,
-      })}
-    >
-      <Text style={{ fontSize: 18, width: 30 }}>{icon}</Text>
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: danger ? colors.dangerInk : colors.text, fontWeight: '700', fontSize: 15 }}>{label}</Text>
-        {sub ? <Text style={{ color: colors.sub, fontSize: 12, marginTop: 1 }}>{sub}</Text> : null}
-      </View>
-      <Text style={{ color: colors.sub, fontSize: 18 }}>›</Text>
-    </Pressable>
   );
 }
 
@@ -250,22 +193,22 @@ function MenuSheet({ visible, onClose, openProfile, openHistory, openSchedules, 
             >
               <Avatar user={me} size={52} style={{ marginRight: 12 }} />
               <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800' }} numberOfLines={1}>
+                <Text style={[TYPE.title, { color: colors.text }]} numberOfLines={1}>
                   {me ? me.name : ''}
                 </Text>
-                <Text style={{ color: colors.sub, fontSize: 13 }}>
+                <Text style={[TYPE.meta, { color: colors.sub }]}>
                   {me && me.rating != null ? `★ ${me.rating} (${me.ratingCount})` : t('common.noRatings')}
                 </Text>
               </View>
             </Row>
           </Pressable>
 
-          <MenuRow icon="👤" label={t('menu.profile')} onPress={openProfile} />
-          <MenuRow icon="⏰" label={t('menu.schedules')} onPress={openSchedules} />
-          <MenuRow icon="🏴" label={t('crew.title')} onPress={openCrew} />
-          <MenuRow icon="🕘" label={t('menu.history')} onPress={openHistory} />
+          <ListRow icon="👤" title={t('menu.profile')} trailing="›" onPress={openProfile} />
+          <ListRow icon="⏰" title={t('menu.schedules')} trailing="›" onPress={openSchedules} />
+          <ListRow icon="🏴" title={t('crew.title')} trailing="›" onPress={openCrew} />
+          <ListRow icon="🕘" title={t('menu.history')} trailing="›" onPress={openHistory} />
 
-          <Text style={{ color: colors.text, fontWeight: '700', marginTop: 16, marginBottom: 8 }}>{t('profile.language')}</Text>
+          <Text style={[TYPE.overline, { color: colors.sub, marginTop: 18, marginBottom: 8 }]}>{t('profile.language')}</Text>
           <Segmented
             value={langPref}
             onChange={(v) => setLanguage(v)}
