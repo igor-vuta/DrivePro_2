@@ -13,6 +13,12 @@
 
 <!-- project-presentation:end -->
 
+<!-- project-pattern:start -->
+
+![A winding route connects two map location pins.](.github/project-pattern.svg)
+
+<!-- project-pattern:end -->
+
 # DrivePro
 
 DrivePro is a navigation-first carpooling PWA, initially focused on Almaty.
