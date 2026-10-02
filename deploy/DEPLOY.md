@@ -300,20 +300,50 @@ sudo systemctl restart drivepro
 journalctl -u drivepro -n 30 | grep '^Map:'
 ```
 
-- **`Map: 2GIS MapGL (own browser key)`** — what you want. Create a *second*
-  key in the 2GIS console with only the MapGL JS API on it and restrict it to
-  this deployment's domain, so publishing it grants nothing anywhere else.
-- **`Map: 2GIS MapGL !! reusing TWOGIS_KEY in browsers …`** — with no
-  `TWOGIS_MAP_KEY`, the catalog key is reused so a one-key deployment still
-  gets a map. It works, but that key also spends the 1,000/month catalog quota
-  and is now readable by every signed-in user. Fine for a demo; split the keys
-  before it matters.
-- **`Map: OpenStreetMap raster (no TWOGIS_MAP_KEY)`** — no key at all. The app
-  falls back to CARTO raster tiles, which need no key and always work.
+The boot line names both halves of what will be on screen, because the key
+alone does not decide it — MapGL draws only inside the countries 2GIS maps, and
+only in the light scheme unless a dark style id is configured:
+
+- **`… (own browser key)`** — what you want. Create a *second* key in the 2GIS
+  console with only the MapGL JS API on it and restrict it to this deployment's
+  domain, so publishing it grants nothing anywhere else.
+- **`… (!! reusing TWOGIS_KEY in browsers …)`** — with no `TWOGIS_MAP_KEY`, the
+  catalog key is reused so a one-key deployment still gets a map. It works, but
+  that key also spends the 1,000/month catalog quota and is now readable by
+  every signed-in user. Fine for a demo; split the keys before it matters.
+- **`… light only !! no TWOGIS_MAP_STYLE_DARK …`** — see below. The key is fine;
+  the night map is still OpenStreetMap.
+- **`Map: OpenStreetMap raster everywhere (no TWOGIS_MAP_KEY)`** — no key at
+  all, and not a broken state: OSM needs no key, covers every country, and is
+  the map this app ships with.
 
 The key travels in `/api/me`, so it reaches signed-in clients only and is never
 baked into the static bundle. That is not secrecy — it just keeps it out of
 crawlers and off the public JS.
+
+### The dark style id is not optional
+
+This app is dark by default, and 2GIS publishes no dark style anyone can
+reference by id. Without one, `chooseEngine()` keeps the raster basemap at night
+rather than turning the screen white — so setting only `TWOGIS_MAP_KEY` looks
+exactly like the key did nothing. Author a dark style at
+<https://styles.2gis.com>, copy its id, and:
+
+```bash
+sudo sh -c 'echo "TWOGIS_MAP_STYLE_DARK=your_dark_style_id" >> /etc/drivepro.env'
+# optional; MapGL's built-in style is already a light one
+sudo sh -c 'echo "TWOGIS_MAP_STYLE=your_light_style_id" >> /etc/drivepro.env'
+sudo systemctl restart drivepro
+```
+
+### Everywhere 2GIS does not map
+
+`covers2gis()` in `app/src/mapconfig.js` holds the bounding boxes 2GIS actually
+covers. Outside them MapGL renders an empty world, so the app draws
+OpenStreetMap raster tiles through Leaflet instead — no key, no account, every
+country. At night those tiles are inverted in CSS (`colors.mapFilter` in
+`app/src/theme.js`), since OSM publishes no dark raster of its own. Nothing here
+needs configuring; it is the floor the map always stands on.
 
 `GEO_USER_AGENT` overrides the Nominatim User-Agent - set a real contact there
 before any serious geocoding volume, or Nominatim may block a generic one.

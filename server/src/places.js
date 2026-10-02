@@ -35,10 +35,20 @@ export const mapStyles = () => ({
   light: process.env.TWOGIS_MAP_STYLE || null,
   dark: process.env.TWOGIS_MAP_STYLE_DARK || null,
 });
+// The boot line has to name what will actually be on screen, and the key alone
+// does not decide that: MapGL draws only inside the countries 2GIS maps (see
+// covers2gis() in the app) and, without a dark style id, only in the light
+// scheme. Everywhere else - and every deployment with no key at all - gets
+// OpenStreetMap raster, which is a working map rather than a degraded one.
 export function describeMapKey() {
-  if (TWOGIS_MAP_KEY) return 'Map: 2GIS MapGL (own browser key)';
-  if (TWOGIS_KEY) return 'Map: 2GIS MapGL !! reusing TWOGIS_KEY in browsers - set TWOGIS_MAP_KEY to a domain-restricted key';
-  return 'Map: OpenStreetMap raster (no TWOGIS_MAP_KEY)';
+  if (!mapKey()) return 'Map: OpenStreetMap raster everywhere (no TWOGIS_MAP_KEY)';
+  const schemes = mapStyles().dark
+    ? 'light + dark'
+    : 'light only !! no TWOGIS_MAP_STYLE_DARK, so the night map stays raster';
+  const key = TWOGIS_MAP_KEY
+    ? 'own browser key'
+    : '!! reusing TWOGIS_KEY in browsers - set TWOGIS_MAP_KEY to a domain-restricted key';
+  return `Map: 2GIS MapGL where 2GIS has coverage, ${schemes} (${key}); OpenStreetMap raster elsewhere`;
 }
 
 const TIMEOUT_MS = 8000;

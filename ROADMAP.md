@@ -116,6 +116,12 @@ MapGL is the dense, labelled, 2GIS-feeling map; the raster one stays as the
 floor the app can always stand on, and `MapView.js` speaks one command
 protocol to both, so nothing outside that file knows which is drawing.
 
+L58 replaced CARTO with **OpenStreetMap's own tiles** — CARTO now watermarks
+keyless requests and serves the watermark as a 200, so the floor was quietly
+defaced. OSM has no dark raster, so night is the light one inverted in CSS.
+The floor is now genuinely keyless again, which is the property it was chosen
+for.
+
 What the port had to absorb:
 - The key was **not** Catalog-only after all. The earlier 404 from
   `keys.api.2gis.com` was weak evidence, and Igor's dashboard showed *MapGL JS

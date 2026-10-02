@@ -1332,6 +1332,11 @@ h1{font-size:16px;margin:0 0 4px;letter-spacing:1px}
 .sub{color:#8b96b8;font-size:13px;margin:2px 0}
 .status{color:#00e5ff;font-weight:700}
 .leaflet-control-attribution{background:rgba(6,7,13,.6)!important;color:#5a6684!important;font-size:9px}
+.leaflet-control-attribution a{color:#8b96b8!important}
+/* This page is dark whatever the viewer's system says, and OpenStreetMap
+   publishes no dark raster - so the tiles are inverted, the same way the app
+   does it. Tiles only: the pins and the car are drawn over them. */
+.leaflet-tile{filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9)}
 </style></head><body>
 <div id="map"></div>
 <div id="panel"><h1>DRIVEPRO <span class="sub">live ride</span></h1>
@@ -1340,7 +1345,7 @@ h1{font-size:16px;margin:0 0 4px;letter-spacing:1px}
 <script>
 const shareId = location.pathname.split('/').pop();
 const map = L.map('map', { zoomControl: false }).setView([43.2389, 76.8897], 13);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', attribution: '© OpenStreetMap © CARTO' }).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
 let car = null, pins = [], fitted = false;
 const dot = (color) => L.divIcon({ className: '', html: '<div style="width:15px;height:15px;border-radius:50%;background:'+color+';border:2px solid rgba(233,242,255,.9);box-shadow:0 0 10px 2px '+color+'"></div>', iconSize: [15,15], iconAnchor: [8,8] });
 const STATUS = { requested: 'Ищем водителя…', accepted: 'Водитель в пути', arrived: 'Водитель на месте', in_progress: 'В пути', finished: 'Поездка завершена ✓', cancelled: 'Поездка отменена' };

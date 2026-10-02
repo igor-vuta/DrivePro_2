@@ -133,10 +133,10 @@ const light = {
   // a near-white ground reads as blur rather than light.
   shadow: 'rgba(7,42,78,0.18)',
   glow: 'transparent',
-  // Voyager draws shop, cafe and park names and colours parks and water -
-  // denser and more map-like than the near-blank light_all, which was chosen
-  // when the map was only a backdrop for picking a point.
-  mapTiles: 'rastertiles/voyager',
+  // How the raster basemap is filtered. By day, not at all: OpenStreetMap's
+  // own tiles are the map everyone already recognises, and a light map under a
+  // light UI needs no help.
+  mapFilter: 'none',
   statusBar: 'dark-content',
 };
 
@@ -184,9 +184,11 @@ const dark = {
   overlay: 'rgba(3,8,14,0.62)',
   shadow: 'rgba(0,0,0,0.5)',
   glow: 'rgba(19,97,240,0.45)',
-  // No dark Voyager exists; dark_all already carries street names, and a
-  // light style under a dark UI would glare at night.
-  mapTiles: 'dark_all',
+  // OpenStreetMap publishes no dark raster, and a light map under a dark UI
+  // would glare at 2am - so night is the light map inverted. hue-rotate(180deg)
+  // returns water to blue and parks to green after the flip, and the last two
+  // steps take the glare off the label halos a raw inversion leaves behind.
+  mapFilter: 'invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9)',
   statusBar: 'light-content',
 };
 

@@ -128,10 +128,10 @@ only, `/api/places/{search,near,at,:id}` returning a provider-neutral shape;
 already uses for saved Home/Work).
 
 Layer numbering slipped once: the ride-flow commit is labelled **L32** but
-lands after L33. Next free number is **L58**.
+lands after L33. Next free number is **L59**.
 
 L51 basemap: two engines behind one command protocol in `app/src/MapView.js` -
-2GIS **MapGL** where a key allows, CARTO raster through Leaflet otherwise, and
+2GIS **MapGL** where a key allows, raster through Leaflet otherwise, and
 the raster one is the floor rather than a degraded mode. MapGL's key must reach
 the browser (the tiles authenticate from there), so it travels in `/api/me` as
 `mapKey` and lives in its own `TWOGIS_MAP_KEY`, ideally a second domain-restricted
@@ -189,5 +189,18 @@ CSS `env()` the layout never sees. `postexport.mjs` publishes them as `--sat`
 /`--sab`, `theme.js` exports `SAFE_TOP`/`SAFE_BOTTOM`/`CHROME_TOP`, and
 `<Screen full>` stops insetting at the root - the map runs to the physical edge
 while chrome and sheet controls pad themselves.
+
+L58 the raster basemap's identity: the fallback tiles came from CARTO, which
+began watermarking keyless requests with **API KEY REQUIRED** across the image
+and serving it as HTTP 200 - nothing threw, nothing logged, the map just
+rendered defaced. Both Leaflet maps (`MapView.js` and the public share page in
+`server/src/api.js`) now draw **OpenStreetMap's own tiles**: no `{s}` (the
+a/b/c subdomains are retired), no `{r}` (no @2x tiles exist), and the
+contributors attribution stays visible because the tile usage policy requires
+it. OSM publishes no dark raster, so night is the light map inverted -
+`colors.mapFilter` replaced `colors.mapTiles`, scoped to `.leaflet-tile` so the
+pins and the route are not turned with it. `smoke58.mjs` reads the tile URL as
+text, in the source *and* in the committed bundle, because no runtime test can
+see a 200 that is a picture of the wrong thing.
 
 Remaining work and its running order live in `ROADMAP.md`.

@@ -139,6 +139,30 @@ With milestone 5, the complete flow works: register → profile → request a
 ride on the map → match with a driver → pickup → trip → finish → mutual
 ratings.
 
+## The map
+
+Out of the box the app needs no keys and no account: the basemap is
+OpenStreetMap's own raster tiles through Leaflet, which work in every country.
+At night there is no dark OpenStreetMap raster to switch to, so the tiles are
+inverted in CSS (`colors.mapFilter` in `app/src/theme.js`) rather than glaring
+white inside a dark app.
+
+2GIS is better than that — but only where 2GIS has data. Configuring the
+variables below turns its MapGL vector basemap on **inside the countries 2GIS
+maps** (the `COVERED` boxes in `app/src/mapconfig.js`, Kazakhstan first);
+everywhere else stays on OpenStreetMap, automatically. The server prints which
+basemap is live on startup.
+
+| Variable | Needed for |
+|---|---|
+| `TWOGIS_MAP_KEY` | The MapGL basemap key. Without it, 2GIS never draws anywhere. MapGL authenticates from the browser, so this key reaches every client — make it a **second key, domain-restricted** in the 2GIS console, not the catalog key. |
+| `TWOGIS_MAP_STYLE_DARK` | A dark style id authored at <https://styles.2gis.com>. 2GIS publishes no dark style anyone can reference, and this app is dark by default — **without this the night map stays on OpenStreetMap raster even inside Kazakhstan**, which looks like the key did nothing. |
+| `TWOGIS_MAP_STYLE` | The light style id. Optional; MapGL's built-in style is already light. |
+| `TWOGIS_KEY` | The **catalog** key, a separate concern: POI search and address lookup (`/api/places/*`). It stays on the server and is never sent to a browser. Setting only this one makes the server reuse it as a map key and warn at boot — that fallback keeps a one-key deployment working, it is not the intended setup. |
+
+All four are read in `server/src/places.js`. In production they live in
+`/etc/drivepro.env`; see `deploy/DEPLOY.md`.
+
 ## Technical notes
 
 - The server persists to `server/data/` (SQLite when available, JSON otherwise).
@@ -147,5 +171,5 @@ ratings.
 - Realtime is a hand-rolled RFC 6455 websocket endpoint at `/ws` — no Socket.IO,
   so the mobile side uses the built-in `WebSocket` and the server stays
   dependency-free.
-- Maps (milestone 2) use OpenStreetMap tiles with Nominatim geocoding and OSRM
-  routing — no API keys required.
+- Maps use OpenStreetMap raster tiles with Nominatim geocoding and OSRM routing —
+  no API keys required. 2GIS is optional on top; see "The map" above.

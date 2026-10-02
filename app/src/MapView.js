@@ -12,8 +12,10 @@ import { getMapKey, getMapStyle, covers2gis } from './mapconfig';
 //   2GIS MapGL  - vector tiles, the real 2GIS basemap with its shops, transit
 //                 and building detail. Needs a key, which necessarily runs in
 //                 the browser (see mapconfig.js), and a style id per scheme.
-//   Leaflet     - CARTO raster tiles over OpenStreetMap. No key, works
-//                 anywhere, and is what a deployment with no key still gets.
+//   Leaflet     - OpenStreetMap's own raster tiles. No key, no account, the
+//                 same map in every country: what a deployment without a 2GIS
+//                 key gets, and what anywhere outside 2GIS's footprint gets
+//                 even with one.
 //
 // Both understand exactly the same commands and post exactly the same events,
 // so nothing outside this file knows or cares which one is drawing. Falling
@@ -278,6 +280,9 @@ const makeRasterHtml = () => `<!DOCTYPE html>
 <style>
   html, body, #map { margin: 0; padding: 0; height: 100%; width: 100%; background: ${colors.bg}; }
   ${markerCss()}
+  /* Tiles only. Markers and routes are separate DOM drawn over them, and
+     inverting those would turn the pickup pin blue and the route orange. */
+  .leaflet-tile { filter: ${colors.mapFilter}; }
   .leaflet-control-attribution { font-size: 9px; background: ${colors.card} !important; color: ${colors.sub} !important; }
   .leaflet-control-attribution a { color: ${colors.sub} !important; }
 </style>
@@ -287,10 +292,12 @@ const makeRasterHtml = () => `<!DOCTYPE html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
   var map = L.map('map', { zoomControl: false, attributionControl: true });
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/${colors.mapTiles}/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd',
+  // No {s}: OSM retired the a/b/c subdomains. No {r}: it serves no @2x tiles,
+  // and asking for them 404s. The attribution is a condition of the tile usage
+  // policy, not decoration - it stays visible.
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    attribution: '&copy; OpenStreetMap &copy; CARTO'
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
   map.setView([51.5074, -0.1278], 15);
 
