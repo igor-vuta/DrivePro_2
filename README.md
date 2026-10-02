@@ -1,9 +1,29 @@
+<!-- project-presentation:start -->
+
+![DrivePro — Navigation-first carpooling web app for Almaty](.github/readme-header.svg)
+
+**[Open project](https://drivepro-almaty.duckdns.org/)** · [Repository activity](https://github.com/igor-vuta/DrivePro_2/activity)
+
+[![Last commit](https://img.shields.io/github/last-commit/igor-vuta/DrivePro_2?style=flat-square&color=6366f1)](https://github.com/igor-vuta/DrivePro_2/commits)
+[![Repository size](https://img.shields.io/github/repo-size/igor-vuta/DrivePro_2?style=flat-square&color=6366f1)](https://github.com/igor-vuta/DrivePro_2)
+
+**3** Route modes · **45** Smoke scripts · **0** Server runtime dependencies
+
+*Project facts checked 2 October 2026. Activity badges update from GitHub.*
+
+<!-- project-presentation:end -->
+
 # DrivePro
 
 DrivePro is a navigation-first carpooling PWA, initially focused on Almaty.
 Plan a walking, cycling or driving route, then optionally share a lift along the
 way. Matching is based on the driver's route; both people confirm before precise
 location and contact details are exchanged. There are no fares.
+
+[Open the current web deployment](https://drivepro-almaty.duckdns.org/). The public
+page and health endpoint were reachable during this documentation review; the
+production OTP, provider delivery and rider/driver pilot gates in `TRACK.md`
+remain to be verified.
 
 Current requirements and release evidence live in [PROJECT.md](PROJECT.md) and
 [TRACK.md](TRACK.md). [ROADMAP.md](ROADMAP.md) preserves earlier feature decisions;

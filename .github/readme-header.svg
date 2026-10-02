@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="354" viewBox="0 0 1200 354" role="img" aria-labelledby="title description">
+  <title id="title">DrivePro</title>
+  <desc id="description">Navigation-first carpooling web app for Almaty. 3 Route modes; 45 Smoke scripts; 0 Server runtime dependencies. Project facts checked 2 October 2026.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#30305c"/><stop offset="1" stop-color="#111827"/></linearGradient>
+    <clipPath id="typing"><rect class="typing-clip" x="60" y="138" width="1080" height="42"><animate attributeName="width" values="0;1080;1080;0" keyTimes="0;.3;.94;1" dur="12s" repeatCount="indefinite"/></rect></clipPath>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
+      @media (prefers-reduced-motion: reduce) { .typing-clip { width: 1080px !important; } .motion { display: none; } }
+    </style>
+  </defs>
+  <rect width="1200" height="354" rx="18" fill="url(#background)"/>
+  <path d="M0 192 Q300 152 600 190 T1200 185 V354 H0Z" fill="#0b1220" opacity=".4"/>
+  <path class="motion" d="M0 205 Q300 165 600 200 T1200 190 V354 H0Z" fill="#6c6aa6" opacity=".09">
+    <animate attributeName="d" dur="10s" repeatCount="indefinite" values="M0 205 Q300 165 600 200 T1200 190 V354 H0Z;M0 185 Q300 225 600 180 T1200 210 V354 H0Z;M0 205 Q300 165 600 200 T1200 190 V354 H0Z"/>
+  </path>
+  <rect x="60" y="43" width="42" height="4" rx="2" fill="#f3a07c"/>
+  <text x="60" y="116" fill="#ffffff" font-size="60" font-weight="700" letter-spacing="-1">DrivePro</text>
+  <text x="60" y="166" fill="#f3a07c" font-size="24" clip-path="url(#typing)">Navigation-first carpooling web app for Almaty</text>
+  <g transform="translate(60 226)">
+          <rect width="345" height="80" rx="12" fill="#ffffff" fill-opacity=".055" stroke="#ffffff" stroke-opacity=".14"/>
+          <text x="20" y="34" fill="#f8fafc" font-size="26" font-weight="700">3</text>
+          <text x="20" y="60" fill="#cbd5e1" font-size="16">Route modes</text>
+        </g><g transform="translate(425 226)">
+          <rect width="345" height="80" rx="12" fill="#ffffff" fill-opacity=".055" stroke="#ffffff" stroke-opacity=".14"/>
+          <text x="20" y="34" fill="#f8fafc" font-size="26" font-weight="700">45</text>
+          <text x="20" y="60" fill="#cbd5e1" font-size="16">Smoke scripts</text>
+        </g><g transform="translate(790 226)">
+          <rect width="345" height="80" rx="12" fill="#ffffff" fill-opacity=".055" stroke="#ffffff" stroke-opacity=".14"/>
+          <text x="20" y="34" fill="#f8fafc" font-size="26" font-weight="700">0</text>
+          <text x="20" y="60" fill="#cbd5e1" font-size="16">Server runtime dependencies</text>
+        </g>
+  <text x="1140" y="335" text-anchor="end" fill="#94a3b8" font-size="11">PROJECT SNAPSHOT · 02 OCT 2026</text>
+</svg>
