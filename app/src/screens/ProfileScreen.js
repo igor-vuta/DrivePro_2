@@ -220,6 +220,7 @@ export default function ProfileScreen({ goBack, openHistory }) {
         <Card>
           <Text style={{ fontWeight: '700', marginBottom: 10, color: colors.text }}>{t('profile.language')}</Text>
           <Segmented
+            accessibilityLabel={t('profile.language')}
             value={langPref}
             onChange={(v) => setLanguage(v)}
             options={[

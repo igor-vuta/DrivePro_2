@@ -197,6 +197,7 @@ export default function AuthScreen() {
           <Sub style={{ textAlign: 'center', marginBottom: 24 }}>{t('auth.tagline')}</Sub>
 
           <Segmented
+            accessibilityLabel={t('auth.mode')}
             value={mode}
             onChange={(m) => {
               setMode(m);

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { Screen, Button, Segmented, Row, FadeIn, Avatar, Chip, ListRow, TYPE, colors, SCREEN_PAD, SAFE_TOP } from '../ui';
+import { Animated, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Screen, Button, Segmented, Row, FadeIn, Avatar, Chip, ListRow, TYPE, colors, SCREEN_PAD, SAFE_TOP, expandedAccessibility, focusRing, useReducedMotion } from '../ui';
 import { RADIUS_LG, CHROME_TOP } from '../theme';
 import { useAuth } from '../state';
 import { t } from '../i18n';
@@ -38,22 +38,30 @@ function FlamePill({ days }) {
 function CityStrip({ impact, connected }) {
   const pulse = useRef(new Animated.Value(0)).current;
   const first = useRef(true);
+  const reducedMotion = useReducedMotion();
   const stamp = impact ? `${impact.rides}|${impact.km}|${impact.driversOnline}` : '';
   useEffect(() => {
+    if (reducedMotion) {
+      pulse.stopAnimation();
+      pulse.setValue(0);
+      return undefined;
+    }
     if (!impact) return;
     if (first.current) {
       first.current = false;
       return;
     }
     pulse.setValue(1);
-    Animated.timing(pulse, { toValue: 0, duration: 1100, useNativeDriver: false }).start();
-  }, [stamp]);
+    const animation = Animated.timing(pulse, { toValue: 0, duration: 1100, useNativeDriver: false });
+    animation.start();
+    return () => animation.stop();
+  }, [stamp, reducedMotion]);
   // A dropped connection is why the numbers would be stale in the first
   // place, so the pill carries that too rather than earning a second one.
   if (!impact && connected) return null;
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] });
   return (
-    <Animated.View style={{ transform: [{ scale }], flexShrink: 1 }}>
+    <Animated.View style={{ transform: [{ scale }], flexShrink: 1 }} accessibilityLiveRegion={connected ? 'none' : 'polite'}>
       <Chip tone={connected ? 'brand' : 'default'} dot>
         {connected
           ? t('home.cityLine', { rides: impact.rides, km: impact.km, drivers: impact.driversOnline })
@@ -67,6 +75,19 @@ export default function HomeScreen({ openProfile, openHistory, openSchedules, op
   const { me, wsConnected, activeRide, cityImpact } = useAuth();
   const [tab, setTab] = useState('ride');
   const [menu, setMenu] = useState(false);
+  const menuTriggerRef = useRef(null);
+  const menuFirstRef = useRef(null);
+
+  useEffect(() => {
+    if (!menu) return undefined;
+    const timer = setTimeout(() => menuFirstRef.current?.focus?.(), 0);
+    return () => clearTimeout(timer);
+  }, [menu]);
+
+  const closeMenu = () => {
+    setMenu(false);
+    setTimeout(() => menuTriggerRef.current?.focus?.(), 0);
+  };
 
   // A driver carrying passengers gets the convoy view; everyone else, and
   // every driver once the last passenger is out, belongs in the one flow the
@@ -116,7 +137,15 @@ export default function HomeScreen({ openProfile, openHistory, openSchedules, op
             <CityStrip impact={cityImpact} connected={wsConnected} />
             <Row style={{ marginLeft: 8 }}>
               <FlamePill days={me ? me.streakDays : 0} />
-              <Pressable onPress={() => setMenu(true)} hitSlop={8} accessibilityLabel={t('home.profile')}>
+              <Pressable
+                ref={menuTriggerRef}
+                onPress={() => setMenu(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('home.profile')}
+                {...expandedAccessibility(menu, Platform.OS !== 'web')}
+                style={({ focused }) => focused && focusRing()}
+              >
                 <Avatar
                   user={me}
                   size={42}
@@ -131,7 +160,8 @@ export default function HomeScreen({ openProfile, openHistory, openSchedules, op
 
       <MenuSheet
         visible={menu}
-        onClose={() => setMenu(false)}
+        onClose={closeMenu}
+        firstActionRef={menuFirstRef}
         openProfile={() => {
           setMenu(false);
           openProfile();
@@ -157,11 +187,12 @@ export default function HomeScreen({ openProfile, openHistory, openSchedules, op
 // Everything that is not "get me somewhere" lives behind the avatar: which
 // side of the ride you are on, your crew and history, the language, the way
 // out. The map stays visible behind it.
-function MenuSheet({ visible, onClose, openProfile, openHistory, openSchedules, openCrew }) {
+function MenuSheet({ visible, onClose, firstActionRef, openProfile, openHistory, openSchedules, openCrew }) {
   const { me, logout, langPref, setLanguage } = useAuth();
+  const reducedMotion = useReducedMotion();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: colors.overlay }} />
+    <Modal visible={visible} transparent animationType={reducedMotion ? 'none' : 'slide'} onRequestClose={onClose} accessibilityLabel={t('home.profile')}>
+      <Pressable onPress={onClose} tabIndex={-1} accessible={false} style={{ flex: 1, backgroundColor: colors.overlay }} />
       {/* The menu is its own region: sheet under it, a card for the identity
           header, so "who you are" and "where you can go" do not read as one
           undifferentiated list. */}
@@ -180,7 +211,13 @@ function MenuSheet({ visible, onClose, openProfile, openHistory, openSchedules, 
       >
         <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, marginBottom: 14 }} />
         <ScrollView keyboardShouldPersistTaps="handled">
-          <Pressable onPress={openProfile} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+          <Pressable
+            ref={firstActionRef}
+            onPress={openProfile}
+            accessibilityRole="button"
+            accessibilityLabel={t('menu.profile')}
+            style={({ pressed, focused }) => [pressed && { opacity: 0.6 }, focused && focusRing()]}
+          >
             <Row
               style={{
                 marginBottom: 14,
@@ -210,6 +247,7 @@ function MenuSheet({ visible, onClose, openProfile, openHistory, openSchedules, 
 
           <Text style={[TYPE.overline, { color: colors.sub, marginTop: 18, marginBottom: 8 }]}>{t('profile.language')}</Text>
           <Segmented
+            accessibilityLabel={t('profile.language')}
             value={langPref}
             onChange={(v) => setLanguage(v)}
             options={[

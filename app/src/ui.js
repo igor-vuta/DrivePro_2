@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Animated,
   Easing,
@@ -16,8 +17,64 @@ import {
 } from 'react-native';
 
 import { colors, TYPE, FONT, SCREEN_PAD, CARD_PAD, GAP, INPUT_H, BUTTON_H, RADIUS, RADIUS_LG, CHROME_H, SAFE_TOP, SAFE_BOTTOM, CHROME_TOP_NEG } from './theme';
+import { t } from './i18n';
 
 const NATIVE = Platform.OS !== 'web';
+
+export function useReducedMotion() {
+  const [reduced, setReduced] = React.useState(() =>
+    !NATIVE && typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false
+  );
+  React.useEffect(() => {
+    if (!NATIVE) {
+      if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+      const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const update = () => setReduced(query.matches);
+      update();
+      if (query.addEventListener) query.addEventListener('change', update);
+      else query.addListener(update);
+      return () => {
+        if (query.removeEventListener) query.removeEventListener('change', update);
+        else query.removeListener(update);
+      };
+    }
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduced);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduced);
+    return () => subscription.remove();
+  }, []);
+  return reduced;
+}
+
+export function focusRing() {
+  return NATIVE
+    ? { borderWidth: 2, borderColor: colors.primary }
+    : { outlineStyle: 'solid', outlineWidth: 2, outlineColor: colors.primary, outlineOffset: 2 };
+}
+
+export function buttonAccessibility(title, disabled, loading, native) {
+  const unavailable = !!(disabled || loading);
+  return {
+    accessibilityRole: 'button',
+    accessibilityLabel: title,
+    ...(native
+      ? { accessibilityState: { disabled: unavailable, busy: !!loading } }
+      : { 'aria-disabled': unavailable, 'aria-busy': !!loading }),
+  };
+}
+
+export function expandedAccessibility(expanded, native) {
+  return native
+    ? { accessibilityState: { expanded: !!expanded } }
+    : { 'aria-expanded': !!expanded };
+}
+
+export function selectionAccessibility(selected, native, translate) {
+  return native
+    ? { accessibilityValue: { text: translate(selected ? 'a11y.selected' : 'a11y.notSelected') } }
+    : { 'aria-pressed': !!selected };
+}
 
 // Design system in Almaty's colours, light and dark - tokens live in
 // theme.js. SCREEN_PAD is re-exported so full-bleed children can cancel the
@@ -49,16 +106,23 @@ export function Screen({ children, style, full }) {
 // Fade + slide-up on mount; re-runs when keyId changes (screen/tab/step switches).
 export function FadeIn({ children, keyId, delay = 0, from = 14, style }) {
   const v = React.useRef(new Animated.Value(0)).current;
+  const reducedMotion = useReducedMotion();
   React.useEffect(() => {
+    if (reducedMotion) {
+      v.setValue(1);
+      return undefined;
+    }
     v.setValue(0);
-    Animated.timing(v, {
+    const animation = Animated.timing(v, {
       toValue: 1,
       duration: 240,
       delay,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: NATIVE,
-    }).start();
-  }, [keyId]);
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [keyId, reducedMotion]);
   return (
     <Animated.View
       style={[
@@ -76,15 +140,22 @@ export function FadeIn({ children, keyId, delay = 0, from = 14, style }) {
 // while fading in, so the new state announces itself without a jump.
 export function Pop({ children, keyId, style }) {
   const v = React.useRef(new Animated.Value(0)).current;
+  const reducedMotion = useReducedMotion();
   React.useEffect(() => {
+    if (reducedMotion) {
+      v.setValue(1);
+      return undefined;
+    }
     v.setValue(0);
-    Animated.timing(v, {
+    const animation = Animated.timing(v, {
       toValue: 1,
       duration: 200,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: NATIVE,
-    }).start();
-  }, [keyId]);
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [keyId, reducedMotion]);
   return (
     <Animated.View
       style={[
@@ -138,19 +209,23 @@ export function Bleed({ children, style, top }) {
 export function Button({ title, onPress, disabled, loading, kind = 'primary', style }) {
   const isPrimary = kind === 'primary';
   const scale = React.useRef(new Animated.Value(1)).current;
+  const reducedMotion = useReducedMotion();
   const pump = (to) =>
-    Animated.spring(scale, { toValue: to, useNativeDriver: NATIVE, speed: 40, bounciness: 6 }).start();
+    reducedMotion ? scale.setValue(1)
+      : Animated.spring(scale, { toValue: to, useNativeDriver: NATIVE, speed: 40, bounciness: 6 }).start();
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
+      {...buttonAccessibility(title, disabled, loading, NATIVE)}
       onPressIn={() => pump(0.93)}
       onPressOut={() => pump(1)}
-      style={({ pressed }) => [
+      style={({ pressed, focused }) => [
         s.btn,
         isPrimary ? s.btnPrimary : s.btnGhost,
         (disabled || loading) && { opacity: 0.4 },
         pressed && { opacity: 0.85 },
+        focused && focusRing(),
         style,
       ]}
     >
@@ -209,13 +284,20 @@ export function ErrorText({ children }) {
   return <Text style={s.error}>{String(children)}</Text>;
 }
 
-export function Segmented({ options, value, onChange }) {
+export function Segmented({ options, value, onChange, accessibilityLabel }) {
   return (
-    <View style={s.seg}>
+    <View style={s.seg} role={NATIVE ? undefined : 'group'} aria-label={NATIVE ? undefined : accessibilityLabel}>
       {options.map((opt) => {
         const active = value === opt.value;
         return (
-          <Pressable key={opt.value} onPress={() => onChange(opt.value)} style={[s.segItem, active && s.segItemActive]}>
+          <Pressable
+            key={opt.value}
+            onPress={() => onChange(opt.value)}
+            accessibilityRole="button"
+            accessibilityLabel={accessibilityLabel ? `${accessibilityLabel}: ${opt.label}` : opt.label}
+            {...selectionAccessibility(active, NATIVE, t)}
+            style={({ focused }) => [s.segItem, active && s.segItemActive, focused && focusRing()]}
+          >
             <Text style={[s.segText, active && s.segTextActive]}>{opt.label}</Text>
           </Pressable>
         );
@@ -232,7 +314,7 @@ export function Segmented({ options, value, onChange }) {
 // filled pill is the only kind that survives the ground behind it.
 //
 // `dot` prepends the live dot - green, because that is what it means.
-export function Chip({ children, onPress, tone = 'default', dot, style }) {
+export function Chip({ children, onPress, tone = 'default', dot, style, accessibilityLabel, disabled = false }) {
   const skin = {
     active: { ink: colors.onTint, fill: colors.tint, edge: colors.primary },
     danger: { ink: colors.dangerInk },
@@ -264,7 +346,15 @@ export function Chip({ children, onPress, tone = 'default', dot, style }) {
   );
   if (!onPress) return body;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)} hitSlop={6}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || (typeof children === 'string' ? children : undefined)}
+      accessibilityState={{ disabled }}
+      style={({ pressed, focused }) => [pressed && { opacity: 0.7 }, focused && focusRing()]}
+      hitSlop={6}
+    >
       {body}
     </Pressable>
   );
@@ -272,8 +362,9 @@ export function Chip({ children, onPress, tone = 'default', dot, style }) {
 
 export function StatusDot({ on, labelOn, labelOff }) {
   const pulse = React.useRef(new Animated.Value(1)).current;
+  const reducedMotion = useReducedMotion();
   React.useEffect(() => {
-    if (!on) {
+    if (!on || reducedMotion) {
       pulse.setValue(1);
       return undefined;
     }
@@ -285,7 +376,7 @@ export function StatusDot({ on, labelOn, labelOff }) {
     );
     loop.start();
     return () => loop.stop();
-  }, [on]);
+  }, [on, reducedMotion]);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
       <Animated.View
@@ -348,7 +439,7 @@ export function MapPill({ children, tone = 'brand', dot, onPress, style }) {
 // rounded tile, which is how the design renders Дом and Работа. `iconTone`
 // colours that tile. For a route endpoint pass `dot` instead: a bare coloured
 // dot, no tile.
-export function ListRow({ title, meta, icon, iconTone = 'primary', dot, trailing, selected, onPress, style }) {
+export function ListRow({ title, meta, icon, iconTone = 'primary', dot, trailing, selected, onPress, style, accessibilityLabel, accessibilityHint, disabled = false }) {
   const tileSkin = {
     primary: { bg: colors.tint, ink: colors.onTint },
     go: { bg: colors.go, ink: colors.onGo },
@@ -382,7 +473,16 @@ export function ListRow({ title, meta, icon, iconTone = 'primary', dot, trailing
   );
   if (!onPress) return body;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || title}
+      accessibilityHint={accessibilityHint || meta}
+      accessibilityState={{ disabled }}
+      {...(selected == null ? {} : selectionAccessibility(selected, NATIVE, t))}
+      style={({ pressed, focused }) => [pressed && { opacity: 0.7 }, focused && focusRing()]}
+    >
       {body}
     </Pressable>
   );
@@ -426,6 +526,7 @@ export function SelectRow({ selected, onSelect, ...props }) {
 export const SHEET_SNAPS = { peek: 0.2, half: 0.5, full: 0.9 };
 
 export function Sheet({ children, header, snap = 'half', onSnapChange, snaps = SHEET_SNAPS, style }) {
+  const reducedMotion = useReducedMotion();
   const [boxH, setBoxH] = React.useState(0);
   const at = (name) => Math.round((snaps[name] ?? snaps.half) * boxH);
   const h = React.useRef(new Animated.Value(0)).current;
@@ -438,14 +539,14 @@ export function Sheet({ children, header, snap = 'half', onSnapChange, snaps = S
     if (!boxH) return;
     const to = at(snap);
     settled.current = snap;
-    if (!from.current) {
+    if (!from.current || reducedMotion) {
       from.current = to;
       h.setValue(to);
       return;
     }
     from.current = to;
     Animated.spring(h, { toValue: to, useNativeDriver: false, speed: 14, bounciness: 4 }).start();
-  }, [snap, boxH]);
+  }, [snap, boxH, reducedMotion]);
 
   const pan = React.useMemo(
     () =>
@@ -469,14 +570,15 @@ export function Sheet({ children, header, snap = 'half', onSnapChange, snaps = S
           }
           const to = at(name);
           from.current = to;
-          Animated.spring(h, { toValue: to, useNativeDriver: false, speed: 14, bounciness: 4 }).start();
+          if (reducedMotion) h.setValue(to);
+          else Animated.spring(h, { toValue: to, useNativeDriver: false, speed: 14, bounciness: 4 }).start();
           if (name !== settled.current) {
             settled.current = name;
             if (onSnapChange) onSnapChange(name);
           }
         },
       }),
-    [boxH, onSnapChange]
+    [boxH, onSnapChange, reducedMotion]
   );
 
   return (

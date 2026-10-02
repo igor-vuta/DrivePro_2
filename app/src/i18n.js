@@ -23,6 +23,9 @@ const en = {
   'common.offlineSend': 'Not connected to the server.',
   'common.freeRide': 'Free ride',
   'common.noRatings': 'no ratings yet',
+  'a11y.selected': 'Selected',
+  'a11y.notSelected': 'Not selected',
+  'auth.mode': 'Account access',
 
   // auth
   'auth.tagline': 'Rides between people. No fares, no fuss.',
@@ -493,6 +496,9 @@ const ru = {
   'common.offlineSend': 'Нет соединения с сервером.',
   'common.freeRide': 'Бесплатная поездка',
   'common.noRatings': 'пока нет оценок',
+  'a11y.selected': 'Выбрано',
+  'a11y.notSelected': 'Не выбрано',
+  'auth.mode': 'Способ входа',
 
   'auth.tagline': 'Поездки между людьми. Без тарифов и лишнего.',
   'auth.login': 'Вход',
@@ -961,6 +967,9 @@ const kk = {
   'common.offlineSend': 'Сервермен байланыс жоқ.',
   'common.freeRide': 'Тегін сапар',
   'common.noRatings': 'әзірге баға жоқ',
+  'a11y.selected': 'Таңдалған',
+  'a11y.notSelected': 'Таңдалмаған',
+  'auth.mode': 'Кіру тәсілі',
 
   // auth
   'auth.tagline': 'Адамдар арасындағы сапарлар. Тарифсіз, артық әурешіліксіз.',

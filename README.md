@@ -1,143 +1,77 @@
 # DrivePro
 
-A peer-to-peer ride app in the spirit of Uber / Yandex Go, with one twist: all rides are free.
-Riders drop a pin, describe the pickup, and request a ride. Drivers go online, pick up orders,
-drive, and afterwards both sides rate each other.
+DrivePro is a navigation-first carpooling PWA, initially focused on Almaty.
+Plan a walking, cycling or driving route, then optionally share a lift along the
+way. Matching is based on the driver's route; both people confirm before precise
+location and contact details are exchanged. There are no fares.
+
+Current requirements and release evidence live in [PROJECT.md](PROJECT.md) and
+[TRACK.md](TRACK.md). [ROADMAP.md](ROADMAP.md) preserves earlier feature decisions;
+[DESIGN.md](DESIGN.md) describes the current interface.
 
 ## Project layout
 
-```
-server/   Backend: REST API + websocket realtime hub.
-          Zero npm dependencies - plain Node.js (http, crypto, sqlite).
-app/      Mobile app: Expo / React Native (SDK 56), tested through Expo Go.
-```
+- `server/`: REST API and websocket hub, with no runtime npm dependencies.
+- `app/`: Expo SDK 54 / React Native app and the committed web build in `app/dist`.
+- Root tooling: commit-message validation and the full smoke-test entry point.
 
-## Requirements
+## Local development
 
-- Node.js 18+ (22.5+ recommended — enables the SQLite storage backend;
-  older versions fall back to JSON-file storage automatically)
-- npm (for the app only; the server needs no install step)
-- Expo Go on your phone (App Store / Play Store)
-- Phone and computer on the same Wi-Fi network
-
-## Running it
-
-Terminal 1 — the server:
+Use Node 24.19.0 from `.nvmrc` for checks and web builds. With fnm installed:
 
 ```bash
-cd server
+fnm use
+npm ci --ignore-scripts
+cd app
+npm ci
+```
+
+Start the server in one terminal and Expo in another:
+
+```bash
+# From the repository root; development data is stored under server/data.
+NODE_ENV=development node server/src/index.js
+```
+
+```bash
+cd app
 npm start
 ```
 
-Terminal 2 — the app:
+Press `w` for web, or use a compatible Expo Go client on the same Wi-Fi. Configure
+`MANUAL_SERVER` in `app/src/config.js` only when using a different server origin.
+Native device and store releases need separate validation; this milestone targets
+web browsers.
+
+Local phone verification uses mock codes when delivery providers are absent.
+Production must explicitly use `OTP_ECHO=0` and controlled real SMS or Telegram
+delivery. An explicit `OTP_ECHO=1` overrides the provider default, so configuring a
+provider alone does not establish a safe deployment. See `deploy/DEPLOY.md` and the
+remaining pilot gates in `TRACK.md` before inviting testers.
+
+## Checks and releases
 
 ```bash
+npm run check
 cd app
-npm install        # first time only
-npx expo start
+npx expo export --platform web
+node tools/postexport.mjs
 ```
 
-Scan the QR code with your phone (iOS: Camera app, Android: Expo Go app),
-or press `w` to open the app in a desktop browser. The app auto-detects the
-server address from the Expo connection, so no configuration is needed as
-long as both run on the same computer.
+If the shell exports `NO_COLOR`, unset it for the Expo export; Metro sets
+`FORCE_COLOR` for its workers and Node reports the conflicting flags. Commit the
+rebuilt `app/dist` with its source changes. The backend serves it from port 4000.
 
-Signing up asks for a 4-digit phone verification code. Delivery is mocked
-for development: the code prints in the server console and is shown on the
-verification screen itself ("Dev code"). Set `OTP_ECHO=0` in the server
-environment to hide it; swap `sendCode()` in `server/src/otp.js` for a real
-SMS provider to go live.
+Commits use the existing `L<number> short subject` format and a meaningful body.
+Validate every outgoing message with `npm run commitlint -- --from <base> --to HEAD`,
+SSH-sign it with the owner's existing identity, and verify its signature. A local
+commit hook is available with `git config core.hooksPath .githooks` after installing
+root tooling. Do not add co-author, contributor or session trailers.
 
-### Troubleshooting
-
-- **"Can't reach the server"** — check the server terminal is running, and that
-  your phone is on the same Wi-Fi. If your network isolates clients, set
-  `MANUAL_SERVER_HOST` in `app/src/config.js` to your computer's LAN IP
-  (the server prints it on startup).
-- **Dependency version warnings** — run `npx expo install --fix` inside `app/`.
-
-## Trying the full flow
-
-Use two accounts (e.g. your phone + the iOS simulator, or two phones):
-
-1. Sign up as a rider on one device.
-2. Sign up as a driver on the other, open Profile, fill in car details.
-3. Switch the driver to the Drive tab and go online.
-4. Request a ride as the rider (from milestone 2 onwards).
-
-## Hosting / sharing with friends
-
-The server can serve the built web app, so one URL is the whole product -
-friends open it in any phone browser and can "Add to Home Screen".
-
-Build the web app once (repeat after app changes):
-
-```bash
-cd app
-npx expo export --platform web     # creates app/dist
-```
-
-Restart the server - it now serves the app at http://localhost:4000.
-
-**Share instantly (free, while your computer is on):**
-
-```bash
-brew install cloudflared
-cloudflared tunnel --url http://localhost:4000
-```
-
-Send the printed `https://….trycloudflare.com` link to friends. HTTPS means
-geolocation works, and the app automatically uses the same origin for the
-API and secure websockets - no configuration.
-
-**Host permanently (e.g. Railway, ~$5/mo):** push this repo to GitHub
-(commit `app/dist`), create a Railway service from it with start command
-`node server/src/index.js`, attach a volume and set `DATA_DIR` to its mount
-path. Any Node 18+ host works the same way - the server has no dependencies.
-
-**Point the phone (Expo Go) app at a hosted server:** set `MANUAL_SERVER`
-in `app/src/config.js` to the full URL, e.g. `'https://your-app.up.railway.app'`.
-
-## The movement (L1-L5)
-
-- Fair matching: driver order feed sorted by requester points + wait-time aging (nobody starves), riders earn slowly (+1/ride, +1/rating).
-- Route mode: a driver sets their destination, picks a corridor (200 m - 2 km) and only sees requests along their path, direction-aware.
-- Neon trails: finished rides glow on everyone's map for 24h and fade.
-- Weekly recap: once a week the app shows your stats, the city's totals and the drivers of the week.
-- Cyberpunk-luxury UI: dark night surfaces, neon cyan/magenta/gold, dark map tiles.
-
-Git rule: all commits are authored by the repo owner and SSH-signed (key in `_keys/`, never committed).
-
-## Milestones
-
-1. **Foundation** — accounts (phone + password), profiles, driver car details,
-   Drive mode with online/offline and live location streaming. *(done)*
-2. **Rider map** — center-pin pickup/destination picking, address search and
-   reverse geocoding, route + ETA, nearby drivers live on the map, ride
-   request with driver instructions, cancel. *(done)*
-3. **Driver order feed** — incoming order cards with rider rating, distances
-   and instructions; first-accept-wins matching; matched screens on both
-   sides with mutual phone reveal, call buttons and the driver approaching
-   live on the rider's map. *(done)*
-4. **Live ride** — driver-controlled arrived/start/finish flow, arrival alert
-   with vibration for the rider, per-leg routes (to pickup, then to
-   destination), live tracking through the whole trip, cancel allowed until
-   the trip starts. *(done)*
-5. **Ratings & profiles** — skippable post-ride rating (1–5 stars + optional
-   comment) for both sides, averages and recent comments on public profiles,
-   tappable profiles everywhere (order cards, matched screens, history),
-   full ride history with rate-later. *(done)*
-6. **Accounts & polish round** — phone verification (mock OTP), profile
-   photos, about/email, saved Home/Work places, English/Russian localisation
-   with auto-detect, address details (entrance/flat/floor/intercom/note) on
-   both ride points, validation on every field, open orders replayed to
-   late-connecting drivers, automatic reconnect + re-sync when the app or
-   browser tab regains focus. *(done)*
-7. Visual design pass (cyberpunk neon).
-
-With milestone 5, the complete flow works: register → profile → request a
-ride on the map → match with a driver → pickup → trip → finish → mutual
-ratings.
+The existing main-branch workflow checks commit messages, runs the complete smoke
+suite, then updates the configured deployment. Batch validated changes into one
+push; verify that exact revision's CI and the served build separately. New hosting,
+social publication and invitations require the owner's approval.
 
 ## The map
 

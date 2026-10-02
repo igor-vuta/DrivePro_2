@@ -2,7 +2,15 @@
 
 Work these as layers (L17, L18, …): one signed commit per item or coherent
 group, smoke test per layer where logic changes, push → CI tests & deploys.
-Conventions live in CLAUDE.md.
+Current acceptance criteria live in PROJECT.md; evidence lives in TRACK.md.
+
+## Current checkpoint — 2026-10-02
+
+L58 replaces CARTO raster tiles with OpenStreetMap. L61–L63 establish the current
+shared design components and map-first home chrome. L64 adds accessible shared
+controls, visible keyboard focus, home-menu focus handling and reduced motion.
+See TRACK.md for validation and release status; old “shipped” notes below are
+historical evidence, not a fresh production audit. The next free layer is L65.
 
 ## Running order
 
@@ -48,8 +56,7 @@ Conventions live in CLAUDE.md.
 | ~~L57~~ | ~~Two colours, white/blue and black/blue; and a genuinely full screen~~ | ✅ shipped |
 
 \* misnumbered — that commit lands *after* L33 and is really L34's
-predecessor. Left alone rather than rewriting pushed history; the next free
-number is **L35**.
+predecessor. Left alone rather than rewriting pushed history; numbering continued from L35 at that point.
 
 ## Agreed direction (decided with Igor, before the redesign)
 
@@ -221,9 +228,9 @@ was inert on web — so every screen padded the notch and the home indicator
 4. **Real OTP + second factor**
    - ~~**Real SMS**~~ — ✅ L25. `server/src/sms.js` posts to Twilio's REST
      API (zero dependencies: form-encoded POST + HTTP Basic). Configuring
-     `TWILIO_*` switches the provider from `mock` to `twilio` **and turns
-     the OTP echo off by itself** — the hole where anyone could verify a
-     number they do not own closes as soon as the credentials are set. A
+     `TWILIO_*` switches the provider from `mock` to `twilio` **defaults to disabling
+     OTP echo unless an explicit override is present** — the hole where anyone could verify a
+     number they do not own closes only when the effective echo setting is off. Verify `OTP_ECHO=0` in production. A
      provider refusal surfaces as `sms_failed` instead of pretending a code
      was sent, and does not start the resend cooldown. `TWILIO_API_URL` is
      a test seam; smoke26 never touches the real API.

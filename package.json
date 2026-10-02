@@ -1,0 +1,14 @@
+{
+  "name": "drivepro-tooling",
+  "private": true,
+  "scripts": {
+    "commitlint": "commitlint --strict",
+    "check": "bash server/tests/run-all.sh"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "21.2.3"
+  },
+  "engines": {
+    "node": ">=24.19.0"
+  }
+}
