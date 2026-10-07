@@ -147,7 +147,9 @@ export function createApi({ store, secret, hub, serveStatic }) {
     try {
       await sendCode(user, code);
     } catch (e) {
-      console.error(`[sms] delivery failed for ${user.phone}:`, e.message);
+      // Provider messages may repeat the SMS body, code, phone or credentials.
+      const status = Number.isInteger(e?.status) && e.status >= 100 && e.status <= 599 ? e.status : 0;
+      console.error(`[otp] delivery failed (${status || 'provider unavailable'})`);
       throw httpError(502, 'Could not send the code. Try again in a moment.', 'sms_failed');
     }
     store.updateUser(user.id, { otpSentAt: Date.now() });
@@ -193,8 +195,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
       // Lets the app offer "verify with Telegram" instead of waiting for an
       // SMS that may never arrive.
       telegram: telegramReady(),
-      // Only present with a mock provider in dev - see otp.js. Never set
-      // once real SMS is configured.
+      // The production runtime never enables this, even with OTP_ECHO=1.
       ...(OTP_ECHO ? { devCode: code } : {}),
     });
   };
@@ -238,10 +239,7 @@ export function createApi({ store, secret, hub, serveStatic }) {
     const user = phone ? store.findUserByPhone(phone) : null;
     if (!user) throw httpError(404, 'No account with this phone number.', 'no_account');
     if (user.banned) throw httpError(403, 'This account is suspended.', 'banned');
-    if (user.verified) {
-      sendJson(res, 200, sessionPayload(user));
-      return;
-    }
+    if (user.verified) throw httpError(400, 'This account is already verified.', 'already_verified');
     consumeOtp(user, code);
     store.updateUser(user.id, { verified: true, otpCode: null, otpExpires: null, otpAttempts: 0 });
     sendJson(res, 200, sessionPayload(store.getUser(user.id)));

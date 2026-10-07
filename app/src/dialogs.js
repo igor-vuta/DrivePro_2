@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Modal, Platform, Pressable, Text, View } from 'react-native';
-import { colors } from './ui';
+import { colors, focusRing } from './ui';
 
 // In-app, non-blocking notifications and confirmations. Browser dialogs
 // (window.alert / window.confirm) freeze rendering on web and behave
@@ -116,7 +116,12 @@ export function DialogHost() {
               <Text style={{ color: colors.text, fontWeight: '700', fontSize: 18, marginBottom: 6 }}>{confirm.title}</Text>
               {confirm.message ? <Text style={{ color: colors.sub, marginBottom: 16 }}>{confirm.message}</Text> : null}
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-                <Pressable onPress={() => setConfirm(null)} style={{ paddingVertical: 10, paddingHorizontal: 16 }}>
+                <Pressable
+                  onPress={() => setConfirm(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel={confirm.cancelLabel || 'Keep'}
+                  style={({ focused }) => [{ paddingVertical: 10, paddingHorizontal: 16 }, focused && focusRing()]}
+                >
                   <Text style={{ color: colors.sub, fontWeight: '600' }}>{confirm.cancelLabel || 'Keep'}</Text>
                 </Pressable>
                 <Pressable
@@ -125,7 +130,9 @@ export function DialogHost() {
                     setConfirm(null);
                     if (ok) ok();
                   }}
-                  style={{ paddingVertical: 10, paddingHorizontal: 16 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={confirm.okLabel}
+                  style={({ focused }) => [{ paddingVertical: 10, paddingHorizontal: 16 }, focused && focusRing()]}
                 >
                   <Text style={{ color: confirm.destructive === false ? colors.primaryInk : colors.dangerInk, fontWeight: '700' }}>
                     {confirm.okLabel}

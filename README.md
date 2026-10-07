@@ -70,10 +70,11 @@ Native device and store releases need separate validation; this milestone target
 web browsers.
 
 Local phone verification uses mock codes when delivery providers are absent.
-Production must explicitly use `OTP_ECHO=0` and controlled real SMS or Telegram
-delivery. An explicit `OTP_ECHO=1` overrides the provider default, so configuring a
-provider alone does not establish a safe deployment. See `deploy/DEPLOY.md` and the
-remaining pilot gates in `TRACK.md` before inviting testers.
+With `NODE_ENV=production`, verification codes are never returned to clients,
+even when an old `OTP_ECHO=1` override remains. Missing SMS configuration fails
+delivery; a connected Telegram bot can still offer its signup verification flow.
+Controlled real delivery and complete user journeys remain pilot gates. See
+`deploy/DEPLOY.md` and `TRACK.md` before inviting testers.
 
 ## Checks and releases
 

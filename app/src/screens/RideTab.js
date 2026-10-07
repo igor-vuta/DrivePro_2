@@ -13,6 +13,7 @@ import { API_URL } from '../config';
 import { buildNavModel, progress as navProgress, instructionKey, instructionArrow } from '../nav';
 import PlaceCard from '../PlaceCard';
 import { stopWatching } from '../location';
+import { resolveLiftPickup } from '../liftPickup';
 
 // Almaty, Kazakhstan - used until real geolocation arrives.
 // Thin a polyline before sending it over the socket.
@@ -169,6 +170,7 @@ export default function RideTab() {
   const wakeLockRef = useRef(null); // keeps the screen on while navigating (web)
   const driverOnRef = useRef(false); // online as a driver during this navigation
   const walkOnRef = useRef(false); // available for pickup during this navigation
+  const walkPositionRef = useRef(null); // last position actually sent while available
 
   // Scheduled rides (L14): list + refresh after planner/list mutations.
   const loadSchedules = async () => {
@@ -610,7 +612,8 @@ export default function RideTab() {
     fitSeq.current++;
     setStep('pickup');
     setCenter(c);
-    if (mapRef.current) mapRef.current.setCenter({ ...c, zoom: 16 });
+    // Stop the route pan before the pickup pin starts reading map movement.
+    if (mapRef.current) mapRef.current.setCenter({ ...c, zoom: 16, animate: false });
     reverseLookup(c);
   };
 
@@ -691,6 +694,7 @@ export default function RideTab() {
           destAddress: dest.address || '',
           mode,
         });
+        walkPositionRef.current = walkOnRef.current ? { lat: from.lat, lng: from.lng } : null;
       }
       beginNavWatch();
       // Navigation with the screen off is no navigation; best-effort only.
@@ -731,7 +735,9 @@ export default function RideTab() {
     myLocRef.current = c;
     setNavPos(c);
     if (driverOnRef.current) wsClient.send({ type: 'driver:location', lat: c.lat, lng: c.lng });
-    if (walkOnRef.current) wsClient.send({ type: 'walk:location', lat: c.lat, lng: c.lng });
+    if (walkOnRef.current && wsClient.send({ type: 'walk:location', lat: c.lat, lng: c.lng })) {
+      walkPositionRef.current = { lat: c.lat, lng: c.lng };
+    }
     const model = navModelRef.current;
     if (!model) return;
     const p = navProgress(model, c);
@@ -786,6 +792,7 @@ export default function RideTab() {
       wsClient.send({ type: 'walk:unavailable' });
       walkOnRef.current = false;
     }
+    walkPositionRef.current = null;
     setOffer(null);
     setLiftOffer(null);
     setNearWalkers([]);
@@ -866,6 +873,7 @@ export default function RideTab() {
         destAddress: dest.address || '',
         mode,
       });
+      walkPositionRef.current = walkOnRef.current ? { lat: c.lat, lng: c.lng } : null;
       setPickMeUp(true);
     }
     setLive(true);
@@ -876,19 +884,28 @@ export default function RideTab() {
     if (!liftOffer) return;
     const offerId = liftOffer.offerId;
     const meet = liftOffer.meet;
+    const walkerPosition = walkPositionRef.current;
+    if (!meet && !walkerPosition) {
+      setError(t('ride.notConnected'));
+      return;
+    }
     setLiftOffer(null);
     walkOnRef.current = false;
-    // A driver-proposed meeting point is only coordinates; name it, so the
-    // ride card says a street rather than nothing at all.
-    let pickupAddress = address || '';
-    if (meet) {
-      pickupAddress = `${meet.lat.toFixed(5)}, ${meet.lng.toFixed(5)}`;
-      try {
-        const r = await api('GET', `/api/geo/reverse?lat=${meet.lat}&lng=${meet.lng}&lang=${getLang()}`, null, token);
-        if (r && r.address) pickupAddress = r.address;
-      } catch (e) {}
+    // Resolve the point already advertised to the server, never the destination
+    // label or map centre. The frozen point stays fixed while lookup is pending.
+    const pickup = await resolveLiftPickup({
+      meet,
+      walkerPosition,
+      reverseLookup: async ({ lat, lng }) => {
+        const r = await api('GET', `/api/geo/reverse?lat=${lat}&lng=${lng}&lang=${getLang()}`, null, token);
+        return r && r.address;
+      },
+    });
+    if (!pickup) {
+      setError(t('ride.notConnected'));
+      return;
     }
-    wsClient.send({ type: 'walk:accept', offerId, pickupAddress });
+    wsClient.send({ type: 'walk:accept', offerId, pickupAddress: pickup.address });
   };
   const declineLift = () => {
     if (liftOffer) wsClient.send({ type: 'walk:decline', offerId: liftOffer.offerId });

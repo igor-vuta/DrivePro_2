@@ -18,6 +18,7 @@ import {
 
 import { colors, TYPE, FONT, SCREEN_PAD, CARD_PAD, GAP, INPUT_H, BUTTON_H, RADIUS, RADIUS_LG, CHROME_H, SAFE_TOP, SAFE_BOTTOM, CHROME_TOP_NEG } from './theme';
 import { t } from './i18n';
+import { inputAccessibility, webInputLabelStyle } from './inputAccessibility';
 
 const NATIVE = Platform.OS !== 'web';
 
@@ -241,10 +242,15 @@ export function Button({ title, onPress, disabled, loading, kind = 'primary', st
 }
 
 export function Input({ label, style, containerStyle, ...props }) {
+  const generatedId = React.useId();
+  const { labelFor, inputProps } = inputAccessibility(label, props, generatedId, NATIVE);
   return (
     <View style={[{ marginBottom: 12 }, containerStyle]}>
-      {label ? <Text style={s.label}>{label}</Text> : null}
-      <TextInput placeholderTextColor={colors.sub} style={[s.input, style]} autoCapitalize="none" {...props} />
+      {label ? (NATIVE
+        ? <Text style={s.label}>{label}</Text>
+        : <label htmlFor={labelFor} style={webInputLabelStyle(s.label)}>{label}</label>
+      ) : null}
+      <TextInput placeholderTextColor={colors.sub} style={[s.input, style]} autoCapitalize="none" {...inputProps} />
     </View>
   );
 }
@@ -279,9 +285,13 @@ export function PhoneInput({ value, onChangeText, ...props }) {
   );
 }
 
+export function errorAnnouncementAccessibility(native) {
+  return native ? { accessibilityLiveRegion: 'assertive' } : { role: 'alert' };
+}
+
 export function ErrorText({ children }) {
   if (!children) return null;
-  return <Text style={s.error}>{String(children)}</Text>;
+  return <Text style={s.error} {...errorAnnouncementAccessibility(NATIVE)}>{String(children)}</Text>;
 }
 
 export function Segmented({ options, value, onChange, accessibilityLabel }) {

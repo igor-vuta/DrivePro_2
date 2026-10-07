@@ -2,8 +2,8 @@
 //
 // The OTP echo (verification code returned to the caller) is a development
 // convenience that would let anyone verify a phone number they do not own, so
-// it must default to OFF under NODE_ENV=production and stay explicitly
-// overridable in both directions. Also covers the /admin login form wiring.
+// it must stay OFF under NODE_ENV=production even with an old override.
+// Also covers the /admin login form wiring.
 // Usage: node tests/smoke19.mjs   (spawns one server per environment)
 
 import { spawn } from 'node:child_process';
@@ -42,7 +42,11 @@ async function boot(tag, port, env) {
   const dataDir = path.join(__dirname, `.tmp-data19${tag}`);
   fs.rmSync(dataDir, { recursive: true, force: true });
   const server = spawn(process.execPath, [INDEX], {
-    env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, ...env },
+    env: {
+      ...process.env, TWILIO_ACCOUNT_SID: '', TWILIO_AUTH_TOKEN: '', TWILIO_FROM: '',
+      TWILIO_MESSAGING_SERVICE_SID: '', TELEGRAM_BOT_TOKEN: '',
+      PORT: String(port), DATA_DIR: dataDir, ...env,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   running.push({ server, dataDir });
@@ -85,20 +89,19 @@ check('dev registration succeeds', devReg.status === 201, JSON.stringify(devReg.
 check('dev echoes the code back', typeof devReg.json.devCode === 'string' && devReg.json.devCode.length === 4);
 check('dev banner reports echo ON', /echo to clients ON/.test(dev.banner), dev.banner);
 
-// ---- production default: echo OFF ----
+// ---- production without SMS: delivery fails, echo remains OFF ----
 const prod = await boot('b', 4131, { NODE_ENV: 'production' });
 const prodReg = await registerOn(prod, '+15559990002');
-check('prod registration still succeeds', prodReg.status === 201, JSON.stringify(prodReg.json));
-check('prod needs verification', prodReg.json.needsVerification === true);
+check('prod without SMS fails delivery', prodReg.status === 502 && prodReg.json.code === 'sms_failed');
 check('prod does NOT echo the code', prodReg.json.devCode === undefined, JSON.stringify(prodReg.json));
 check('prod banner reports echo OFF', /echo to clients OFF/.test(prod.banner), prod.banner);
-check('prod banner has no warning', !prod.banner.includes('!!'), prod.banner);
+check('prod banner reports unavailable SMS', /SMS:\s+unconfigured/.test(prod.banner), prod.banner);
 
-// ---- explicit override wins in both directions ----
+// ---- production ignores old echo override; dev can still disable it ----
 const prodEcho = await boot('c', 4132, { NODE_ENV: 'production', OTP_ECHO: '1' });
 const prodEchoReg = await registerOn(prodEcho, '+15559990003');
-check('OTP_ECHO=1 re-enables the echo in production', typeof prodEchoReg.json.devCode === 'string');
-check('prod echo prints a loud warning', /!! OTP_ECHO is ON and this is production/.test(prodEcho.banner), prodEcho.banner);
+check('OTP_ECHO=1 cannot enable production echo', prodEchoReg.status === 502 && prodEchoReg.json.devCode === undefined);
+check('prod override banner still reports echo OFF', /echo to clients OFF/.test(prodEcho.banner), prodEcho.banner);
 
 const devQuiet = await boot('d', 4133, { NODE_ENV: '', OTP_ECHO: '0' });
 const devQuietReg = await registerOn(devQuiet, '+15559990004');

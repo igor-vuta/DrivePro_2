@@ -127,17 +127,22 @@ reach real users:
 | -------- | --------------------------------- | ------------ | -------- |
 | **dev**  | `./start.sh` (server + tunnel)    | unset        | ON       |
 | **test** | `bash server/tests/run-all.sh`    | `test`       | ON       |
-| **prod** | systemd `drivepro` on the VM      | `production` | see below |
+| **prod** | systemd `drivepro` on the VM      | `production` | OFF, enforced |
 
 The OTP echo returns the verification code in the API response
 (`devCode`), which is what makes local testing possible without SMS — and
 which would also let anyone verify a phone number they do not own. It is
-therefore **off by default whenever `NODE_ENV=production`**. `OTP_ECHO`
-overrides the default in both directions (`1` on, `0` off).
+therefore **always off whenever `NODE_ENV=production`**, including if an
+older `/etc/drivepro.env` still contains `OTP_ECHO=1`. Outside production,
+`OTP_ECHO` can override the development default for local testing.
 
-Configuring a real SMS provider turns the echo off **by itself** — you do
-not need `NODE_ENV` or `OTP_ECHO` for that. An explicit `OTP_ECHO=1` still
-wins, but every boot then logs `!! OTP_ECHO is ON and …`.
+Without SMS credentials, production returns `sms_failed` rather than logging
+the code or claiming delivery. A configured, connected Telegram bot can still
+offer its separate registration verification path. SMS or Telegram delivery to
+real accounts has not been verified by the local tests. Keep `NODE_ENV=production`
+in the systemd environment; check the effective service configuration before
+a public pilot. Configuring SMS also turns local echo off by default; a local
+`OTP_ECHO=1` override with SMS emits a warning.
 
 ### Turning on real SMS (Twilio)
 
@@ -150,8 +155,6 @@ TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=your-auth-token
 TWILIO_FROM=+1XXXXXXXXXX
 EOF
-# and remove the temporary echo, which is no longer needed:
-sudo sed -i '/^OTP_ECHO=1$/d' /etc/drivepro.env
 sudo systemctl restart drivepro
 journalctl -u drivepro -n 20 | grep -E 'SMS|OTP'
 ```
@@ -203,9 +206,10 @@ Once linked, later codes (password reset) go to the Telegram chat instead of
 SMS. Nothing is required in the Caddyfile: the bot uses long polling, not a
 webhook.
 
-`deploy/update.sh` backfills `NODE_ENV` and `OTP_ECHO` into an existing
-`/etc/drivepro.env` (setup-oci.sh only writes that file when it is absent,
-so VMs provisioned earlier would otherwise never get the new keys).
+`deploy/update.sh` backfills `NODE_ENV=production` if the existing environment
+file lacks it. Neither setup nor update seeds `OTP_ECHO=1`, and neither
+overwrites existing environment values. An old echo override is ignored by
+the production runtime; remove it during an attended configuration review.
 
 ## Routing (OSRM)
 

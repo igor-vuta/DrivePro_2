@@ -7,9 +7,8 @@
 //   TWILIO_FROM          +1234567890            - a number you own, or
 //   TWILIO_MESSAGING_SERVICE_SID  MGxxxxxxxx…   - a Messaging Service
 //
-// With none of them set the provider is `mock`: the code is printed to the
-// server log and (in dev) echoed to the client, exactly as before. That keeps
-// local development and the whole test suite free of external calls.
+// Outside production, an unconfigured provider is `mock` for local testing.
+// Production fails delivery instead of logging or pretending to send a code.
 
 const API_BASE = process.env.TWILIO_API_URL || 'https://api.twilio.com';
 const SID = (process.env.TWILIO_ACCOUNT_SID || '').trim();
@@ -27,12 +26,19 @@ const SERVICE_SID = (process.env.TWILIO_MESSAGING_SERVICE_SID || '').trim();
 const TEMPLATE = process.env.SMS_TEMPLATE || 'DrivePro: код подтверждения {code}';
 
 export const smsConfigured = () => Boolean(SID && TOKEN && (FROM || SERVICE_SID));
-export const smsProvider = () => (smsConfigured() ? 'twilio' : 'mock');
+export const smsProvider = () => {
+  if (smsConfigured()) return 'twilio';
+  return process.env.NODE_ENV === 'production' ? 'unconfigured' : 'mock';
+};
 
 // Describes the provider without revealing anything secret - the account SID
 // is truncated because it identifies the account.
 export function smsBanner() {
-  if (!smsConfigured()) return '  SMS:     mock (codes go to this log only)';
+  if (!smsConfigured()) {
+    return process.env.NODE_ENV === 'production'
+      ? '  SMS:     unconfigured (delivery unavailable)'
+      : '  SMS:     mock (codes go to this log only)';
+  }
   const via = SERVICE_SID ? `service ${SERVICE_SID.slice(0, 6)}…` : `from ${FROM}`;
   return `  SMS:     twilio ${SID.slice(0, 6)}… ${via}`;
 }
@@ -49,6 +55,9 @@ export class SmsError extends Error {
 // SmsError otherwise - the caller decides whether that fails the request.
 export async function sendSms(to, body) {
   if (!smsConfigured()) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new SmsError('SMS provider is not configured', 0, null);
+    }
     console.log(`[sms] (mock) to ${to}: ${body}`);
     return { provider: 'mock', sid: null };
   }

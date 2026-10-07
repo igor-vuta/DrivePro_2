@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import { sendSms, verificationText, smsConfigured, smsProvider } from './sms.js';
 import { telegramConfigured, sendTelegramMessage } from './telegram.js';
 
-// Phone verification codes. Delivery lives in sms.js; with no provider
-// configured it degrades to a mock that prints the code to the server log.
+// Phone verification codes. Delivery lives in sms.js; the mock provider is
+// available only outside production.
 
 export const OTP_TTL_MS = 10 * 60 * 1000;
 // Overridable so tests can drive the resend/reset flow without waiting 30s,
@@ -14,21 +14,18 @@ export const IS_PROD = process.env.NODE_ENV === 'production';
 
 // Echoing the code back to the caller lets anyone verify a phone number they
 // do not own. It exists only because a mock provider has no other way to
-// deliver, so it defaults OFF both in production and wherever a real SMS
-// provider is configured. An explicit OTP_ECHO still wins - and says so
-// loudly at boot, because doing that on a live deployment is a hole.
-export const OTP_ECHO =
+// deliver locally. Production never echoes, including with a legacy override.
+export const OTP_ECHO = !IS_PROD && (
   process.env.OTP_ECHO != null && process.env.OTP_ECHO !== ''
     ? process.env.OTP_ECHO !== '0'
-    : !IS_PROD && !smsConfigured();
+    : !smsConfigured()
+);
 
-// One-line summary for the boot banner; loud when codes are being echoed
-// somewhere they should not be.
+// One-line summary for the boot banner; a dev override with real SMS warns.
 export function otpModeBanner() {
   const env = IS_PROD ? 'production' : process.env.NODE_ENV || 'development';
-  if (OTP_ECHO && (IS_PROD || smsConfigured())) {
-    const why = smsConfigured() ? 'a real SMS provider is configured' : `this is ${env}`;
-    return `  !! OTP_ECHO is ON and ${why} - codes are returned to clients. Not safe for real users.`;
+  if (OTP_ECHO && smsConfigured()) {
+    return '  !! OTP_ECHO is ON and a real SMS provider is configured - codes are returned to clients. Not safe for real users.';
   }
   return `  OTP:     delivery ${smsProvider()}, echo to clients ${OTP_ECHO ? 'ON' : 'OFF'} [${env}]`;
 }
@@ -42,8 +39,8 @@ export function generateCode() {
 // an international long code cannot.
 //
 // Throws if the chosen provider refuses, so the caller can tell the user
-// instead of leaving them waiting for a code that is never coming. The mock
-// provider never throws.
+// instead of leaving them waiting for a code that is never coming.
+// Unconfigured production SMS throws instead of using the local mock.
 export async function sendCode(user, code) {
   if (telegramConfigured() && user && user.telegramChatId) {
     await sendTelegramMessage(user.telegramChatId, verificationText(code));

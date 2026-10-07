@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
-import { Screen, Title, Sub, Card, Button, Row, colors } from '../ui';
+import { Screen, Title, Sub, Card, Button, Row, colors, focusRing } from '../ui';
 import { useAuth } from '../state';
 import { api } from '../api';
 import { t, errMsg } from '../i18n';
@@ -10,6 +10,17 @@ import { confirmAction } from '../dialogs';
 // the ride confirmation screen - that is where a pickup and destination
 // already exist - so this screen manages what has been saved: pause, resume,
 // delete.
+export function commuteActionAccessibility(schedule, action, translate = t) {
+  const key = action === 'remove' ? 'sched.removeNamed' : schedule.active ? 'sched.pauseNamed' : 'sched.resumeNamed';
+  return {
+    accessibilityRole: 'button',
+    accessibilityLabel: translate(key, {
+      destination: schedule.dest?.address || '—',
+      time: schedule.time,
+    }),
+  };
+}
+
 export default function SchedulesScreen({ goBack }) {
   const { token } = useAuth();
   const [schedules, setSchedules] = useState(null);
@@ -74,12 +85,20 @@ export default function SchedulesScreen({ goBack }) {
                 {s.pickup.address || ''} → {s.dest.address || ''}
               </Text>
               <Row style={{ justifyContent: 'flex-end', marginTop: 6 }}>
-                <Pressable onPress={() => toggle(s)} style={{ paddingHorizontal: 10, paddingVertical: 4 }}>
+                <Pressable
+                  onPress={() => toggle(s)}
+                  {...commuteActionAccessibility(s, 'toggle')}
+                  style={({ focused }) => [{ paddingHorizontal: 10, paddingVertical: 4 }, focused && focusRing()]}
+                >
                   <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>
                     {s.active ? '⏸' : '▶️'}
                   </Text>
                 </Pressable>
-                <Pressable onPress={() => del(s)} style={{ paddingHorizontal: 10, paddingVertical: 4 }}>
+                <Pressable
+                  onPress={() => del(s)}
+                  {...commuteActionAccessibility(s, 'remove')}
+                  style={({ focused }) => [{ paddingHorizontal: 10, paddingVertical: 4 }, focused && focusRing()]}
+                >
                   <Text style={{ color: colors.dangerInk, fontWeight: '700', fontSize: 13 }}>✕ {t('common.remove')}</Text>
                 </Pressable>
               </Row>

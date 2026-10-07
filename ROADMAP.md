@@ -4,13 +4,17 @@ Work these as layers (L17, L18, …): one signed commit per item or coherent
 group, smoke test per layer where logic changes, push → CI tests & deploys.
 Current acceptance criteria live in PROJECT.md; evidence lives in TRACK.md.
 
-## Current checkpoint — 2026-10-02
+## Current checkpoint — 2026-10-07
 
 L58 replaces CARTO raster tiles with OpenStreetMap. L61–L63 establish the current
 shared design components and map-first home chrome. L64 adds accessible shared
 controls, visible keyboard focus, home-menu focus handling and reduced motion.
 See TRACK.md for validation and release status; old “shipped” notes below are
-historical evidence, not a fresh production audit. The next free layer is L65.
+historical evidence, not a fresh production audit. L65 updated repository
+documentation; published L66 adds README artwork. The proposed L67 release includes
+production authentication hardening (saved task L66), UI fixes and the SDK upgrade.
+Its refreshed compatible lockfile clears the critical shell-quote advisory;
+remaining dependency findings and the exact release decision are tracked separately.
 
 ## Running order
 
@@ -228,9 +232,9 @@ was inert on web — so every screen padded the notch and the home indicator
 4. **Real OTP + second factor**
    - ~~**Real SMS**~~ — ✅ L25. `server/src/sms.js` posts to Twilio's REST
      API (zero dependencies: form-encoded POST + HTTP Basic). Configuring
-     `TWILIO_*` switches the provider from `mock` to `twilio` **defaults to disabling
-     OTP echo unless an explicit override is present** — the hole where anyone could verify a
-     number they do not own closes only when the effective echo setting is off. Verify `OTP_ECHO=0` in production. A
+     `TWILIO_*` switches the provider from `mock` to `twilio` and defaults to disabling
+     OTP echo. The L67 candidate makes production echo unconditionally off, even with the old
+     override, and fails delivery if SMS is unconfigured. A
      provider refusal surfaces as `sms_failed` instead of pretending a code
      was sent, and does not start the resend cooldown. `TWILIO_API_URL` is
      a test seam; smoke26 never touches the real API.
@@ -332,10 +336,10 @@ was inert on web — so every screen padded the notch and the home indicator
 
 ## E. Ops & bugs
 
-13. ~~**Dev / test / prod separation**~~ — ✅ L17. `OTP_ECHO` now defaults
-    off under `NODE_ENV=production` with an explicit override and a loud
-    boot warning; `run-all.sh` pins `NODE_ENV=test`; `update.sh` backfills
-    the new env keys; environments table in `deploy/DEPLOY.md`. Still open
+13. ~~**Dev / test / prod separation**~~ — ✅ L17; hardening prepared for L67. `OTP_ECHO`
+    is always off under `NODE_ENV=production`, including a legacy override;
+    `run-all.sh` pins `NODE_ENV=test`; `update.sh` backfills `NODE_ENV` only;
+    environments table in `deploy/DEPLOY.md`. Still open
     as an option: a `staging` branch deploying to a second port on the VM.
 14. ~~**Bug: admin token Enter does nothing**~~ — ✅ L17, and it was worse
     than reported: a `\'` inside the `ADMIN_HTML` **template literal**
